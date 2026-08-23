@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A six-three bone standing on the felt. Drawn here rather than shipped as bitmap art. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:pathData="M36,20 L72,20 A6,6 0 0 1 78,26 L78,82 A6,6 0 0 1 72,88 L36,88 A6,6 0 0 1 30,82 L30,26 A6,6 0 0 1 36,20 Z"
+        android:fillColor="#F6EFE2" />
+    <path
+        android:pathData="M32,54 L76,54"
+        android:strokeColor="#2F2A24"
+        android:strokeWidth="2.5" />
+
+    <!-- three -->
+    <group>
+        <path android:pathData="M39,29 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M54,39 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M69,49 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+    </group>
+
+    <!-- six -->
+    <group>
+        <path android:pathData="M41,63 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M41,74 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M41,85 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M67,63 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M67,74 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+        <path android:pathData="M67,85 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#2F2A24" />
+    </group>
+</vector>
