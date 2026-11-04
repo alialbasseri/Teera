@@ -1,22 +1,30 @@
 package com.teera.core
 
 /**
- * Where each tile sits on the table.
+ * Where every tile sits on the table.
  *
- * Kept out of the UI so it can be unit tested and so the phone, a tablet and a future
- * spectator view all fold the line of play the same way. Coordinates are in tile units:
- * one unit is the short side of a bone, so a bone is 2 x 1 lying down.
+ * Kept out of the UI so the geometry can be unit tested rather than eyeballed on a
+ * phone. Coordinates are in tile units: one unit is the short side of a bone, so a bone
+ * lying down is 2 by 1. The opening double stands in the middle and the four arms grow
+ * away from it, which is the shape Teera actually makes on a table.
  */
 object BoardLayout {
 
-    /** Position of one tile, as the centre of the bone plus how far it is turned. */
+    const val TILE_LENGTH = 2f
+    const val TILE_WIDTH = 1f
+
     data class Placement(
+        val arm: Arm?,
         val index: Int,
-        val tile: PlacedTile,
+        val domino: Domino,
+        /** The face nearer the middle of the table, and the one further out. */
+        val inner: Int,
+        val outer: Int,
         val centreX: Float,
         val centreY: Float,
-        /** 0 = lying along the row, 90 = crossways, as doubles are laid. */
+        /** 0 means lying left to right; 90 means standing on end. */
         val rotationDegrees: Float,
+        val isCentre: Boolean = false,
     )
 
     data class Layout(
@@ -30,45 +38,44 @@ object BoardLayout {
         val height: Float get() = maxY - minY
     }
 
-    const val TILE_LENGTH = 2f
-    const val TILE_WIDTH = 1f
-    private const val ROW_GAP = 0.45f
+    private val EMPTY = Layout(emptyList(), 0f, 0f, 0f, 0f)
 
-    /**
-     * Folds the line of play into rows that fit inside [maxRowUnits], the way a real
-     * table runs out of space and turns the line back on itself. Rows alternate
-     * direction, so the chain reads left to right, then right to left.
-     */
-    fun compute(tiles: List<PlacedTile>, maxRowUnits: Float = 14f): Layout {
-        if (tiles.isEmpty()) return Layout(emptyList(), 0f, 0f, 0f, 0f)
+    fun compute(board: Board): Layout {
+        val centre = board.centre ?: return EMPTY
 
-        val rowLimit = maxRowUnits.coerceAtLeast(TILE_LENGTH * 2)
-        val placements = ArrayList<Placement>(tiles.size)
+        val placements = mutableListOf<Placement>()
 
-        var direction = 1f
-        var cursor = 0f          // leading edge of the row, in units
-        var row = 0f
-        var rowStart = 0f
+        // The opening double stands upright in the middle, so the east and west arms run
+        // off its long sides and the north and south arms off its ends.
+        placements += Placement(
+            arm = null,
+            index = 0,
+            domino = centre,
+            inner = centre.low,
+            outer = centre.high,
+            centreX = 0f,
+            centreY = 0f,
+            rotationDegrees = 90f,
+            isCentre = true,
+        )
 
-        tiles.forEachIndexed { index, tile ->
-            val span = if (tile.isDouble) TILE_WIDTH else TILE_LENGTH
-
-            // Out of room in this row: drop down and run the other way.
-            if (kotlin.math.abs(cursor + direction * span - rowStart) > rowLimit) {
-                row += TILE_LENGTH + ROW_GAP
-                direction = -direction
-                rowStart = cursor
+        for (arm in Arm.ALL) {
+            var distance = startOffset(arm)
+            board.tilesOn(arm).forEachIndexed { index, laid ->
+                val span = if (laid.isDouble) TILE_WIDTH else TILE_LENGTH
+                val from = distance + span / 2f
+                placements += Placement(
+                    arm = arm,
+                    index = index,
+                    domino = laid.domino,
+                    inner = laid.inner,
+                    outer = laid.outer,
+                    centreX = if (arm.isHorizontal) from * arm.sign else 0f,
+                    centreY = if (arm.isHorizontal) 0f else from * arm.sign,
+                    rotationDegrees = rotationOf(arm, laid.isDouble),
+                )
+                distance += span
             }
-
-            val centre = cursor + direction * span / 2f
-            placements += Placement(
-                index = index,
-                tile = tile,
-                centreX = centre,
-                centreY = row,
-                rotationDegrees = if (tile.isDouble) 90f else 0f,
-            )
-            cursor += direction * span
         }
 
         var minX = Float.MAX_VALUE
@@ -76,8 +83,9 @@ object BoardLayout {
         var minY = Float.MAX_VALUE
         var maxY = -Float.MAX_VALUE
         for (placement in placements) {
-            val halfWide = if (placement.rotationDegrees == 0f) TILE_LENGTH / 2f else TILE_WIDTH / 2f
-            val halfTall = if (placement.rotationDegrees == 0f) TILE_WIDTH / 2f else TILE_LENGTH / 2f
+            val upright = placement.rotationDegrees != 0f
+            val halfWide = if (upright) TILE_WIDTH / 2f else TILE_LENGTH / 2f
+            val halfTall = if (upright) TILE_LENGTH / 2f else TILE_WIDTH / 2f
             minX = minOf(minX, placement.centreX - halfWide)
             maxX = maxOf(maxX, placement.centreX + halfWide)
             minY = minOf(minY, placement.centreY - halfTall)
@@ -85,4 +93,28 @@ object BoardLayout {
         }
         return Layout(placements, minX, minY, maxX, maxY)
     }
+
+    /** How far the first tile of an arm starts from the middle of the opening double. */
+    private fun startOffset(arm: Arm): Float =
+        if (arm.isHorizontal) TILE_WIDTH / 2f else TILE_LENGTH / 2f
+
+    /**
+     * Tiles lie along their arm, and doubles sit across it. East and west arms run
+     * horizontally, north and south vertically, so the two swap over.
+     */
+    private fun rotationOf(arm: Arm, isDouble: Boolean): Float = when {
+        arm.isHorizontal && isDouble -> 90f
+        arm.isHorizontal -> 0f
+        isDouble -> 0f
+        else -> 90f
+    }
 }
+
+private val Arm.isHorizontal: Boolean get() = this == Arm.EAST || this == Arm.WEST
+
+/** Which way along its axis an arm grows. */
+private val Arm.sign: Float
+    get() = when (this) {
+        Arm.EAST, Arm.SOUTH -> 1f
+        Arm.WEST, Arm.NORTH -> -1f
+    }

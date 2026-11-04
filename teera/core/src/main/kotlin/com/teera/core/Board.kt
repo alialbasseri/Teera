@@ -2,77 +2,105 @@ package com.teera.core
 
 import kotlinx.serialization.Serializable
 
-/** Which end of the line a tile is being laid on. */
-@Serializable
-enum class End { LEFT, RIGHT }
-
 /**
- * A tile as it sits on the table: [left] and [right] are the faces actually showing,
- * so a 6|3 laid with the 3 pointing left is PlacedTile(Domino(3,6), left = 3, right = 6).
+ * The four directions the line of play runs in.
+ *
+ * Teera opens on a double laid in the middle of the table, and that double is played
+ * on from all four sides. These are those sides; the names are only for the screen.
  */
 @Serializable
-data class PlacedTile(val domino: Domino, val left: Int, val right: Int) {
+enum class Arm { NORTH, EAST, SOUTH, WEST;
+
+    companion object {
+        val ALL = entries.toList()
+    }
+}
+
+/**
+ * A tile as it lies on an arm: [inner] faces back towards the middle of the table,
+ * [outer] is the face now open to be played on.
+ */
+@Serializable
+data class LaidTile(val domino: Domino, val inner: Int, val outer: Int) {
     val isDouble: Boolean get() = domino.isDouble
 }
 
 /**
- * The line of play. Kept as a flat list with two open ends; the client draws it as a
- * snake that folds at the screen edges, but that is presentation, not state.
+ * The table.
+ *
+ * [centre] is the double the game opened on. Each arm grows outwards from it, and the
+ * four arms must all be opened before play spreads — see rule 12 in RULES.md. A double
+ * played later sits crossways for looks but is still one open end, keeping its own
+ * number live (rule 14).
  */
 @Serializable
-data class Board(val tiles: List<PlacedTile> = emptyList()) {
+data class Board(
+    val centre: Domino? = null,
+    /** Indexed by [Arm.ordinal]. */
+    val arms: List<List<LaidTile>> = List(Arm.ALL.size) { emptyList() },
+) {
+    val isEmpty: Boolean get() = centre == null
 
-    val isEmpty: Boolean get() = tiles.isEmpty()
-    val size: Int get() = tiles.size
+    /** The number showing on all four sides of the opening double. */
+    val centreFace: Int? get() = centre?.high
 
-    val leftEnd: Int? get() = tiles.firstOrNull()?.left
-    val rightEnd: Int? get() = tiles.lastOrNull()?.right
+    fun tilesOn(arm: Arm): List<LaidTile> = arms[arm.ordinal]
 
-    fun endValue(end: End): Int? = if (end == End.LEFT) leftEnd else rightEnd
+    /** The number an arm currently accepts, or the centre's number if it is untouched. */
+    fun endOf(arm: Arm): Int? = tilesOn(arm).lastOrNull()?.outer ?: centreFace
 
-    /** Whether [domino] may be laid on [end] under [rules]. */
-    fun accepts(domino: Domino, end: End, rules: RuleSet): Boolean {
-        val face = endValue(end) ?: return true
-        if (rules.doubleBlankIsWild && domino == Domino(0, 0)) return true
+    fun isOpened(arm: Arm): Boolean = tilesOn(arm).isNotEmpty()
+
+    val openedArms: Int get() = arms.count { it.isNotEmpty() }
+
+    /** True while the opening double still has a bare side (rule 12). */
+    val inOpeningPhase: Boolean get() = centre != null && openedArms < Arm.ALL.size
+
+    /** Every tile on the table, the opening double included. */
+    fun tiles(): List<Domino> =
+        listOfNotNull(centre) + arms.flatten().map { it.domino }
+
+    val size: Int get() = (if (centre == null) 0 else 1) + arms.sumOf { it.size }
+
+    /**
+     * Whether [domino] may go on [arm].
+     *
+     * While the four sides are being closed, each turn has to open a side nobody has
+     * touched yet, so an arm already played on is not a legal target however well the
+     * tile matches.
+     */
+    fun accepts(domino: Domino, arm: Arm): Boolean {
+        val face = endOf(arm) ?: return false
+        if (inOpeningPhase && isOpened(arm)) return false
         return domino.matches(face)
     }
 
-    /**
-     * Lay [domino] on [end], orienting it so its matching face touches the line.
-     * Callers are expected to have checked [accepts] first.
-     */
-    fun place(domino: Domino, end: End, rules: RuleSet): Board {
-        val face = endValue(end)
-            ?: return Board(listOf(PlacedTile(domino, domino.low, domino.high)))
+    /** Whether this tile has anywhere to go at all. */
+    fun acceptsAnywhere(domino: Domino): Boolean = Arm.ALL.any { accepts(domino, it) }
 
-        val wild = rules.doubleBlankIsWild && domino == Domino(0, 0) && !domino.matches(face)
-        val outer = if (wild) face else domino.otherFace(face)
-            ?: error("$domino does not match end $face")
-
-        return when (end) {
-            // Touching face goes on the inside, the other face becomes the new open end.
-            End.LEFT -> Board(listOf(PlacedTile(domino, outer, face)) + tiles)
-            End.RIGHT -> Board(tiles + PlacedTile(domino, face, outer))
-        }
+    /** Lays the opening double in the middle. */
+    fun open(double: Domino): Board {
+        require(double.isDouble) { "a game can only be opened on a double" }
+        require(centre == null) { "the table is already open" }
+        return Board(centre = double)
     }
 
-    /**
-     * Sum of the exposed ends, used by All Fives style scoring. A lone opening tile
-     * shows both of its faces, and a double parked at an end shows both halves.
-     */
-    fun openEndTotal(rules: RuleSet): Int {
-        val first = tiles.firstOrNull() ?: return 0
-        val last = tiles.last()
-        if (tiles.size == 1) return first.left + first.right
-
-        var total = first.left + last.right
-        if (rules.doublesCountBothHalves) {
-            if (first.isDouble) total += first.left
-            if (last.isDouble) total += last.right
-        }
-        return total
+    /** Lays [domino] on [arm], turning it so its matching face points inwards. */
+    fun place(domino: Domino, arm: Arm): Board {
+        val face = endOf(arm) ?: error("the table has not been opened")
+        val outer = domino.otherFace(face) ?: error("$domino does not match the $face end")
+        val updated = arms.toMutableList()
+        updated[arm.ordinal] = tilesOn(arm) + LaidTile(domino, inner = face, outer = outer)
+        return copy(arms = updated)
     }
 
-    override fun toString(): String =
-        tiles.joinToString(" ") { "[${it.left}:${it.right}]" }
+    override fun toString(): String = buildString {
+        append(centre?.toString() ?: "-")
+        Arm.ALL.forEach { arm ->
+            if (isOpened(arm)) {
+                append(" ${arm.name.first()}:")
+                append(tilesOn(arm).joinToString("") { "[${it.inner}:${it.outer}]" })
+            }
+        }
+    }
 }

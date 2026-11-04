@@ -5,14 +5,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * The wire protocol between a phone and the room server.
+ * What a phone and the room server say to each other.
  *
- * The server is authoritative: a client asks to move, the server runs [Engine] and
- * broadcasts the result. Clients never see a full [GameState] — only [PlayerView],
- * which hides other people's hands and the order of the boneyard.
+ * The server is the referee: a client asks to move, the server runs [Engine] and sends
+ * back a [PlayerView]. Clients never see a [GameState], so a modified app cannot read
+ * another hand or play a tile it does not hold.
  */
 object Protocol {
-    const val VERSION = 1
+    const val VERSION = 2
 
     val json = Json {
         ignoreUnknownKeys = true
@@ -26,25 +26,25 @@ object Protocol {
     fun decodeServer(text: String): ServerMessage = json.decodeFromString(ServerMessage.serializer(), text)
 }
 
-/** A seat as the lobby shows it, before a match starts. */
+/** The room before the deal: who is sitting where, and what the table has agreed on. */
 @Serializable
 data class RoomInfo(
     val code: String,
     val hostId: String,
-    val rules: RuleSet,
+    val rules: Rules,
     val seats: List<Seat>,
     val ready: List<String> = emptyList(),
     val started: Boolean = false,
 )
 
 /**
- * One player's redacted view of the table. Everything needed to draw a frame and
- * nothing that would let a modified client cheat.
+ * One player's view of the table: their own hand, everyone's tile counts, and the moves
+ * the referee will actually accept from them right now.
  */
 @Serializable
 data class PlayerView(
     val roomCode: String,
-    val rules: RuleSet,
+    val rules: Rules,
     val seats: List<Seat>,
     val yourSeat: Int,
     val hand: List<Domino>,
@@ -52,40 +52,53 @@ data class PlayerView(
     val handCounts: List<Int>,
     val board: Board,
     val turn: Int,
-    val scores: List<Int>,
+    /** Who the table is waiting on, which is not always whose turn it is. */
+    val actingSeat: Int?,
     val phase: Phase,
-    val boneyardCount: Int,
-    val roundNumber: Int,
-    val forcedOpening: Domino? = null,
+    /** Indexed by team: seats 0 and 2 are team 0, seats 1 and 3 are team 1. */
+    val scores: List<Int>,
+    val alerts: List<Int>,
+    val gameNumber: Int,
+    val mustOpenWith: Domino? = null,
+    val stuckSeat: Int? = null,
+    val rescuer: Int? = null,
+    val teeraSeat: Int? = null,
     val legalMoves: List<Move> = emptyList(),
-    val lastRound: RoundResult? = null,
-    val matchWinner: Int? = null,
+    val lastGame: GameResult? = null,
+    val losingTeam: Int? = null,
     val events: List<GameEvent> = emptyList(),
-    /** Wall-clock deadline for the seat on turn, or null when untimed. */
     val turnDeadlineEpochMs: Long? = null,
 ) {
-    val isYourTurn: Boolean get() = turn == yourSeat && phase == Phase.IN_ROUND
+    val yourTeam: Int get() = teamOf(yourSeat)
+    val isYourMove: Boolean get() = actingSeat == yourSeat
     fun seatInfo(seat: Int): Seat? = seats.firstOrNull { it.seat == seat }
+
+    /** The spots in your hand, which is what a teera is judged on. */
+    val handPips: Int get() = hand.pipTotal()
 }
 
-/** Builds the redacted view a given seat is allowed to see. */
+/** Builds the redacted view a seat is allowed to see. */
 fun GameState.viewFor(seat: Int, roomCode: String, turnDeadlineEpochMs: Long? = null) = PlayerView(
     roomCode = roomCode,
     rules = rules,
     seats = seats,
     yourSeat = seat,
     hand = handOf(seat),
-    handCounts = (0 until rules.playerCount).map { handOf(it).size },
+    handCounts = (0 until Pack.PLAYERS).map { handOf(it).size },
     board = board,
     turn = turn,
-    scores = scores,
+    actingSeat = actingSeat,
     phase = phase,
-    boneyardCount = boneyard.size,
-    roundNumber = roundNumber,
-    forcedOpening = forcedOpening,
+    scores = scores,
+    alerts = alerts,
+    gameNumber = gameNumber,
+    mustOpenWith = mustOpenWith,
+    stuckSeat = stuckSeat,
+    rescuer = rescuer,
+    teeraSeat = teeraSeat,
     legalMoves = Engine.legalMoves(this, seat),
-    lastRound = lastRound,
-    matchWinner = matchWinner,
+    lastGame = lastGame,
+    losingTeam = losingTeam,
     events = events,
     turnDeadlineEpochMs = turnDeadlineEpochMs,
 )
@@ -96,7 +109,7 @@ sealed interface ClientMessage {
     data class Hello(val name: String, val playerId: String? = null, val version: Int = Protocol.VERSION) : ClientMessage
 
     @Serializable @SerialName("createRoom")
-    data class CreateRoom(val rules: RuleSet = RuleSet.CLASSIC_DRAW) : ClientMessage
+    data class CreateRoom(val rules: Rules = Rules.DEFAULT) : ClientMessage
 
     @Serializable @SerialName("joinRoom")
     data class JoinRoom(val code: String) : ClientMessage
@@ -104,27 +117,29 @@ sealed interface ClientMessage {
     @Serializable @SerialName("leaveRoom")
     data object LeaveRoom : ClientMessage
 
-    /** Host only. Rejected once the match is running. */
-    @Serializable @SerialName("setRules")
-    data class SetRules(val rules: RuleSet) : ClientMessage
+    /** Players arrange the teams themselves by choosing where to sit (rule 4). */
+    @Serializable @SerialName("takeSeat")
+    data class TakeSeat(val seat: Int) : ClientMessage
 
-    /** Host only: drop a bot into an empty seat, or clear one out. */
+    /** Host only, and only before the deal. */
+    @Serializable @SerialName("setRules")
+    data class SetRules(val rules: Rules) : ClientMessage
+
     @Serializable @SerialName("setBot")
     data class SetBot(val seat: Int, val enabled: Boolean, val difficulty: Difficulty = Difficulty.NORMAL) : ClientMessage
 
     @Serializable @SerialName("ready")
     data class Ready(val ready: Boolean) : ClientMessage
 
-    /** Host only. */
     @Serializable @SerialName("startMatch")
     data object StartMatch : ClientMessage
 
     @Serializable @SerialName("move")
     data class MakeMove(val move: Move) : ClientMessage
 
-    /** Deal the next round once everyone has seen the scores. */
-    @Serializable @SerialName("nextRound")
-    data object NextRound : ClientMessage
+    /** Deal the next game once everyone has seen the score. */
+    @Serializable @SerialName("nextGame")
+    data object NextGame : ClientMessage
 
     @Serializable @SerialName("chat")
     data class Chat(val text: String) : ClientMessage
@@ -136,7 +151,7 @@ sealed interface ClientMessage {
 @Serializable
 enum class ErrorCode {
     ROOM_NOT_FOUND, ROOM_FULL, ROOM_ALREADY_STARTED, NOT_HOST, NOT_IN_ROOM,
-    INVALID_RULES, NOT_ENOUGH_PLAYERS, VERSION_MISMATCH, BAD_MESSAGE, INTERNAL,
+    SEAT_TAKEN, INVALID_RULES, NOT_ENOUGH_PLAYERS, VERSION_MISMATCH, BAD_MESSAGE, INTERNAL,
 }
 
 @Serializable
@@ -150,7 +165,6 @@ sealed interface ServerMessage {
     @Serializable @SerialName("view")
     data class GameUpdate(val view: PlayerView) : ServerMessage
 
-    /** A move the server would not accept; the client should roll back its prediction. */
     @Serializable @SerialName("rejected")
     data class MoveRejected(val reason: Rejection, val view: PlayerView) : ServerMessage
 

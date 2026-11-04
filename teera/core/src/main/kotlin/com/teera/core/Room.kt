@@ -4,16 +4,16 @@ package com.teera.core
  * Everything a room does, with no transport attached.
  *
  * The websocket server owns one of these per room, and the app owns one when hosting an
- * offline table against bots, so a solo game and an online game run through byte-for-byte
- * the same rules.
+ * offline table against bots, so a solo game and an online game run through byte for
+ * byte the same rules.
  */
 class Room(
     val code: String,
     var hostId: String,
-    rules: RuleSet = RuleSet.CLASSIC_DRAW,
+    rules: Rules = Rules.DEFAULT,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    /** Messages the caller should put on the wire after handling an inbound one. */
+    /** What the caller should put on the wire after handling an inbound message. */
     data class Output(
         val direct: List<Pair<String, ServerMessage>> = emptyList(),
         val roomChanged: Boolean = false,
@@ -42,7 +42,7 @@ class Room(
         var ready: Boolean = false,
     )
 
-    var rules: RuleSet = rules
+    var rules: Rules = rules
         private set
 
     private val members = LinkedHashMap<String, Member>()
@@ -53,10 +53,9 @@ class Room(
     private var turnDeadline: Long? = null
 
     val isStarted: Boolean get() = game != null
-    val humanCount: Int get() = members.size
     val isEmpty: Boolean get() = members.values.none { it.connected }
 
-    // -- membership ---------------------------------------------------------
+    // -- the room ----------------------------------------------------------
 
     fun info(): RoomInfo = RoomInfo(
         code = code,
@@ -67,39 +66,58 @@ class Room(
         started = isStarted,
     )
 
-    private fun seatList(): List<Seat> = (0 until rules.playerCount).map { seat ->
+    private fun seatList(): List<Seat> = (0 until Pack.PLAYERS).map { seat ->
         val member = members.values.firstOrNull { it.seat == seat }
         when {
             member != null -> Seat(seat, member.playerId, member.name, isBot = false, connected = member.connected)
-            bots.containsKey(seat) -> Seat(seat, "bot-$seat", botName(seat), isBot = true)
-            else -> Seat(seat, "", "Empty", isBot = false, connected = false)
+            bots.containsKey(seat) -> Seat(seat, "bot-$seat", "Bot ${seat + 1}", isBot = true)
+            else -> Seat(seat, "", "", isBot = false, connected = false)
         }
     }
 
-    private fun botName(seat: Int) = "Bot ${seat + 1}"
-
-    /** All seats filled by a human or a bot. */
-    fun isFull(): Boolean = (0 until rules.playerCount).all { seat ->
+    /** Teera needs all four seats filled, by people or bots (rule 1). */
+    fun isFull(): Boolean = (0 until Pack.PLAYERS).all { seat ->
         members.values.any { it.seat == seat } || bots.containsKey(seat)
     }
 
+    fun seatOf(playerId: String): Int? = members[playerId]?.seat
+
+    fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId }
+
     fun join(playerId: String, name: String): Output {
-        members[playerId]?.let { existing ->        // reconnect
+        members[playerId]?.let { existing ->
             existing.connected = true
             existing.name = name
             return Output(roomChanged = true, viewChanged = isStarted)
         }
         if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "That match has already started")
 
-        val seat = (0 until rules.playerCount).firstOrNull { free ->
-            members.values.none { it.seat == free } && !bots.containsKey(free)
-        } ?: return Output.error(playerId, ErrorCode.ROOM_FULL, "That room is full")
-
+        val seat = freeSeat() ?: return Output.error(playerId, ErrorCode.ROOM_FULL, "That room is full")
         members[playerId] = Member(playerId, name, seat)
         return Output.ROOM
     }
 
-    /** A player closing the app: their seat stays, and a bot covers it mid-match. */
+    private fun freeSeat(): Int? = (0 until Pack.PLAYERS).firstOrNull { seat ->
+        members.values.none { it.seat == seat } && !bots.containsKey(seat)
+    }
+
+    /**
+     * Rule 4: the players arrange the teams between themselves by choosing seats, and
+     * may only rearrange once a match is over.
+     */
+    fun takeSeat(playerId: String, seat: Int): Output {
+        val member = members[playerId] ?: return Output.error(playerId, ErrorCode.NOT_IN_ROOM, "You are not in this room")
+        if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "Seats are fixed until the match ends")
+        if (seat !in 0 until Pack.PLAYERS) return Output.NOTHING
+        if (member.seat == seat) return Output.NOTHING
+        if (members.values.any { it.seat == seat }) {
+            return Output.error(playerId, ErrorCode.SEAT_TAKEN, "Somebody is already sitting there")
+        }
+        bots.remove(seat)
+        member.seat = seat
+        return Output.ROOM
+    }
+
     fun disconnect(playerId: String): Output {
         val member = members[playerId] ?: return Output.NOTHING
         member.connected = false
@@ -117,13 +135,9 @@ class Room(
         return Output.ROOM
     }
 
-    fun seatOf(playerId: String): Int? = members[playerId]?.seat
+    // -- before the deal ---------------------------------------------------
 
-    fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId }
-
-    // -- lobby --------------------------------------------------------------
-
-    fun setRules(playerId: String, next: RuleSet): Output {
+    fun setRules(playerId: String, next: Rules): Output {
         if (playerId != hostId) return Output.error(playerId, ErrorCode.NOT_HOST, "Only the host can change the rules")
         if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "The match has already started")
         val problems = next.validate()
@@ -131,23 +145,15 @@ class Room(
             return Output.error(playerId, ErrorCode.INVALID_RULES, problems.joinToString("; "))
         }
         rules = next
-        // A smaller table can strand people in seats that no longer exist.
-        members.values.filter { it.seat >= rules.playerCount }.forEach { stranded ->
-            val free = (0 until rules.playerCount).firstOrNull { seat ->
-                members.values.none { it.seat == seat } && !bots.containsKey(seat)
-            }
-            if (free != null) stranded.seat = free else members.remove(stranded.playerId)
-        }
-        bots.keys.filter { it >= rules.playerCount }.forEach { bots.remove(it) }
         return Output.ROOM
     }
 
     fun setBot(playerId: String, seat: Int, enabled: Boolean, difficulty: Difficulty): Output {
         if (playerId != hostId) return Output.error(playerId, ErrorCode.NOT_HOST, "Only the host can add bots")
         if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "The match has already started")
-        if (seat !in 0 until rules.playerCount) return Output.NOTHING
+        if (seat !in 0 until Pack.PLAYERS) return Output.NOTHING
         if (members.values.any { it.seat == seat }) {
-            return Output.error(playerId, ErrorCode.ROOM_FULL, "Somebody is already sitting there")
+            return Output.error(playerId, ErrorCode.SEAT_TAKEN, "Somebody is already sitting there")
         }
         if (enabled) bots[seat] = difficulty else bots.remove(seat)
         return Output.ROOM
@@ -162,14 +168,14 @@ class Room(
         if (playerId != hostId) return Output.error(playerId, ErrorCode.NOT_HOST, "Only the host can start")
         if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "Already playing")
         if (!isFull()) {
-            return Output.error(playerId, ErrorCode.NOT_ENOUGH_PLAYERS, "Fill the empty seats first")
+            return Output.error(playerId, ErrorCode.NOT_ENOUGH_PLAYERS, "Teera needs four players")
         }
         game = Engine.newMatch(rules, seatList(), seed)
         armTurnTimer()
         return Output(roomChanged = true, viewChanged = true)
     }
 
-    // -- play ---------------------------------------------------------------
+    // -- play --------------------------------------------------------------
 
     fun move(playerId: String, move: Move): Output {
         val state = game ?: return Output.error(playerId, ErrorCode.NOT_IN_ROOM, "No match is running")
@@ -187,19 +193,18 @@ class Room(
         }
     }
 
-    fun nextRound(playerId: String): Output {
+    fun nextGame(playerId: String): Output {
         val state = game ?: return Output.NOTHING
-        if (state.phase != Phase.ROUND_OVER) return Output.NOTHING
-        game = Engine.startRound(state)
+        if (state.phase != Phase.GAME_OVER) return Output.NOTHING
+        game = Engine.startGame(state)
         armTurnTimer()
         return Output.VIEW
     }
 
-    /** True when the seat on turn is a bot, or a human who has walked away. */
+    /** True when the seat the table is waiting on is a bot, or somebody who has gone. */
     fun awaitingBot(): Boolean {
         val state = game ?: return false
-        if (state.phase != Phase.IN_ROUND) return false
-        val seat = state.turn
+        val seat = state.actingSeat ?: return false
         val member = members.values.firstOrNull { it.seat == seat }
         return member == null || !member.connected
     }
@@ -208,22 +213,24 @@ class Room(
     fun stepBot(): Output {
         val state = game ?: return Output.NOTHING
         if (!awaitingBot()) return Output.NOTHING
-        val difficulty = bots[state.turn] ?: Difficulty.NORMAL
-        val move = Bot.chooseMove(state, state.turn, difficulty) ?: return Output.NOTHING
-        val outcome = Engine.apply(state, state.turn, move)
+        val seat = state.actingSeat ?: return Output.NOTHING
+        val difficulty = bots[seat] ?: Difficulty.NORMAL
+        val move = Bot.chooseMove(state, seat, difficulty) ?: return Output.NOTHING
+        val outcome = Engine.apply(state, seat, move)
         if (outcome !is MoveOutcome.Ok) return Output.NOTHING
         game = outcome.state
         armTurnTimer()
         return Output.VIEW
     }
 
-    /** A seat that runs out of clock has a bot move played for it. */
+    /** A seat that runs out of clock has a move played for it. */
     fun expireTurnIfDue(): Output {
         val deadline = turnDeadline ?: return Output.NOTHING
         val state = game ?: return Output.NOTHING
-        if (state.phase != Phase.IN_ROUND || clock() < deadline) return Output.NOTHING
-        val move = Bot.chooseMove(state, state.turn, Difficulty.EASY) ?: return Output.NOTHING
-        val outcome = Engine.apply(state, state.turn, move)
+        val seat = state.actingSeat ?: return Output.NOTHING
+        if (clock() < deadline) return Output.NOTHING
+        val move = Bot.chooseMove(state, seat, Difficulty.EASY) ?: return Output.NOTHING
+        val outcome = Engine.apply(state, seat, move)
         if (outcome !is MoveOutcome.Ok) return Output.NOTHING
         game = outcome.state
         armTurnTimer()
@@ -232,7 +239,7 @@ class Room(
 
     private fun armTurnTimer() {
         val state = game
-        turnDeadline = if (state?.phase == Phase.IN_ROUND && rules.turnSeconds > 0) {
+        turnDeadline = if (state != null && !state.isOver && rules.turnSeconds > 0) {
             clock() + rules.turnSeconds * 1000L
         } else {
             null

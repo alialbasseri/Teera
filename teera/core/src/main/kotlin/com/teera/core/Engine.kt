@@ -2,18 +2,20 @@ package com.teera.core
 
 import kotlin.random.Random
 
-/** Why a move was refused. Surfaced to the client so it can explain itself. */
+/** Why a move was turned down. The client shows these, so they name the rule. */
 @kotlinx.serialization.Serializable
 enum class Rejection {
     NOT_YOUR_TURN,
-    ROUND_NOT_RUNNING,
+    WRONG_PHASE,
     TILE_NOT_IN_HAND,
+    MUST_OPEN_WITH_A_DOUBLE,
+    MUST_OPEN_WITH_THE_SIX,
+    MUST_OPEN_A_FRESH_SIDE,
     TILE_DOES_NOT_MATCH,
-    MUST_PLAY_OPENING_TILE,
+    NO_ARM_GIVEN,
     MUST_PLAY_IF_ABLE,
-    MUST_DRAW_FIRST,
-    BONEYARD_EMPTY,
-    DRAW_LIMIT_REACHED,
+    CANNOT_PLAY_FOR_THEM,
+    TOO_HEAVY_FOR_A_TEERA,
 }
 
 sealed interface MoveOutcome {
@@ -22,367 +24,496 @@ sealed interface MoveOutcome {
 }
 
 /**
- * The referee. Pure functions over [GameState]: same state plus same move always gives
- * the same result, which is what lets the server stay authoritative and the client
- * predict moves locally without the two drifting apart.
+ * The referee for Teera.
+ *
+ * Pure functions over [GameState]: the same state and the same move always give the
+ * same result, which is what lets the server hold the truth while a phone predicts
+ * moves locally without the two drifting apart.
+ *
+ * Rule numbers in the comments refer to RULES.md.
  */
 object Engine {
 
-    fun newMatch(rules: RuleSet, seats: List<Seat>, seed: Long = Random.nextLong()): GameState {
+    private const val MAX_DEAL_ATTEMPTS = 200
+
+    // -- starting ----------------------------------------------------------
+
+    fun newMatch(rules: Rules, seats: List<Seat>, seed: Long = Random.nextLong()): GameState {
         val problems = rules.validate()
         require(problems.isEmpty()) { "invalid rules: ${problems.joinToString("; ")}" }
-        require(seats.size == rules.playerCount) {
-            "expected ${rules.playerCount} seats, got ${seats.size}"
-        }
+        require(seats.size == Pack.PLAYERS) { "Teera needs exactly ${Pack.PLAYERS} players" }
+
         val state = GameState(
             rules = rules,
             seats = seats.sortedBy { it.seat },
-            scores = List(rules.teamCount) { 0 },
-            phase = Phase.WAITING,
+            scores = listOf(0, 0),
+            alerts = listOf(0, 0),
             seed = seed,
-            dealer = 0,
         )
-        return startRound(state)
+        return startGame(state)
     }
 
-    /** Shuffle, deal, and work out who leads. */
-    fun startRound(state: GameState): GameState {
-        val rules = state.rules
-        val roundNumber = state.roundNumber + 1
-        val rng = Random(state.seed * 31 + roundNumber)
-        val pack = rules.set.tiles().shuffled(rng)
+    /** Deals the next game. The opener carries over from how the last one ended. */
+    fun startGame(state: GameState): GameState = deal(state, state.gameNumber + 1, attempt = 1)
 
-        val hands = (0 until rules.playerCount).map { seat ->
-            pack.subList(seat * rules.handSize, (seat + 1) * rules.handSize).sortedDescending()
+    /**
+     * Shuffles and deals until the hands are ones the rules will allow (rules 23 and 24),
+     * then works out who opens and with what (rules 10 and 11).
+     */
+    private fun deal(state: GameState, gameNumber: Int, attempt: Int): GameState {
+        var tries = attempt
+        var hands: List<List<Domino>>
+        var forced: RedealReason? = null
+
+        while (true) {
+            val rng = Random(state.seed * 31 + gameNumber * 7919L + tries)
+            val pack = Pack.tiles.shuffled(rng)
+            hands = (0 until Pack.PLAYERS).map { seat ->
+                pack.subList(seat * Pack.HAND_SIZE, (seat + 1) * Pack.HAND_SIZE).sortedDescending()
+            }
+
+            forced = mandatoryRedeal(hands)
+            if (forced == null || tries - attempt >= MAX_DEAL_ATTEMPTS) break
+            tries++
         }
-        val boneyard = pack.drop(rules.playerCount * rules.handSize)
 
-        val (starter, forced) = decideOpening(state, hands, roundNumber)
+        val (opener, mustOpenWith) = decideOpener(state, hands, gameNumber)
+
+        // A hand of four doubles may ask for a fresh deal before anything is played.
+        val offers = (0 until Pack.PLAYERS)
+            .map { (opener + it) % Pack.PLAYERS }
+            .filter { hands[it].count { tile -> tile.isDouble } == FOUR_DOUBLES }
+
+        val events = buildList<GameEvent> {
+            if (tries > attempt) add(GameEvent.Redealt(forced ?: RedealReason.FIVE_DOUBLES, null))
+            add(GameEvent.Dealt(gameNumber, opener, mustOpenWith))
+        }
 
         return state.copy(
             hands = hands,
-            boneyard = boneyard,
             board = Board(),
-            turn = starter,
-            phase = Phase.IN_ROUND,
-            roundNumber = roundNumber,
-            consecutivePasses = 0,
-            drawsThisTurn = 0,
-            forcedOpening = forced,
-            events = listOf(GameEvent.Dealt(roundNumber, starter, forced)),
+            turn = opener,
+            phase = if (offers.isEmpty()) Phase.IN_PLAY else Phase.REDEAL_OFFER,
+            gameNumber = gameNumber,
+            dealAttempt = tries,
+            opener = opener,
+            mustOpenWith = mustOpenWith,
+            lastToPlay = null,
+            stuckSeat = null,
+            rescuer = null,
+            teeraSeat = null,
+            turnAfterTeera = null,
+            redealOffers = offers,
+            events = events,
         )
     }
 
-    /** Returns the seat that leads and, when the rules force it, the tile they must lead. */
-    private fun decideOpening(
-        state: GameState,
-        hands: List<List<Domino>>,
-        roundNumber: Int,
-    ): Pair<Int, Domino?> {
-        val rules = state.rules
-        val previous = state.lastRound
-
-        if (roundNumber > 1) {
-            when (rules.subsequentOpening) {
-                SubsequentOpening.PREVIOUS_WINNER ->
-                    previous?.winnerSeat?.let { return it to null }
-                SubsequentOpening.PREVIOUS_LOSER ->
-                    previous?.winnerSeat?.let { winner ->
-                        val loser = previous.handPips.withIndex()
-                            .filter { it.index != winner }
-                            .maxByOrNull { it.value }?.index
-                        if (loser != null) return loser to null
-                    }
-                SubsequentOpening.ROTATE_LEFT ->
-                    return (state.dealer + roundNumber) % rules.playerCount to null
-                SubsequentOpening.SAME_AS_FIRST -> Unit // fall through and recompute
-            }
-        }
-
-        fun holderOf(tile: Domino): Int? = hands.indexOfFirst { tile in it }.takeIf { it >= 0 }
-        fun heaviest(): Pair<Int, Domino> {
-            var best = 0 to hands[0].max()
-            hands.forEachIndexed { seat, hand ->
-                val top = hand.max()
-                if (top > best.second) best = seat to top
-            }
-            return best
-        }
-        fun highestDouble(): Pair<Int, Domino>? {
-            var best: Pair<Int, Domino>? = null
-            hands.forEachIndexed { seat, hand ->
-                hand.filter { it.isDouble }.maxOrNull()?.let { top ->
-                    if (best == null || top > best!!.second) best = seat to top
+    /** Rules 23 and 24: hands nobody has to play with. */
+    private fun mandatoryRedeal(hands: List<List<Domino>>): RedealReason? {
+        for (hand in hands) {
+            if (hand.count { it.isDouble } >= FIVE_DOUBLES) return RedealReason.FIVE_DOUBLES
+            for (face in 0..Pack.MAX_FACE) {
+                if (hand.count { it.matches(face) } >= SIX_OF_A_NUMBER) {
+                    return RedealReason.SIX_OF_A_NUMBER
                 }
             }
-            return best
         }
-
-        return when (rules.opening) {
-            OpeningRule.HIGHEST_DOUBLE -> highestDouble() ?: heaviest()
-            OpeningRule.HEAVIEST_TILE -> heaviest()
-            OpeningRule.FIXED_TILE ->
-                holderOf(rules.openingTile)?.let { it to rules.openingTile }
-                    ?: (highestDouble() ?: heaviest())
-            OpeningRule.DEALER_LEFT_ANY ->
-                (state.dealer + 1) % rules.playerCount to null
-        }
+        return null
     }
 
-    // -- move generation ----------------------------------------------------
+    /**
+     * Rule 10: the first game of a match is opened with the six, by whoever holds it.
+     * Rule 11: afterwards the winner opens, with a double of their choosing, and if they
+     * hold no double at all the right passes to the player behind them.
+     */
+    private fun decideOpener(
+        state: GameState,
+        hands: List<List<Domino>>,
+        gameNumber: Int,
+    ): Pair<Int, Domino?> {
+        if (gameNumber == 1) {
+            val seat = hands.indexOfFirst { Pack.OPENING_DOUBLE in it }
+            return seat to Pack.OPENING_DOUBLE
+        }
+        val from = state.lastGame?.nextOpener ?: state.opener
+        for (step in 0 until Pack.PLAYERS) {
+            val seat = (from + step) % Pack.PLAYERS
+            if (hands[seat].any { it.isDouble }) return seat to null
+        }
+        // Impossible with seven doubles across four hands, but never deal an unplayable game.
+        return from to null
+    }
+
+    // -- what a seat may do ------------------------------------------------
 
     fun legalMoves(state: GameState, seat: Int): List<Move> {
-        if (state.phase != Phase.IN_ROUND || state.turn != seat) return emptyList()
+        if (state.actingSeat != seat) return emptyList()
+        return when (state.phase) {
+            Phase.REDEAL_OFFER -> listOf(Move.Redeal, Move.KeepHand)
+            Phase.TEERA_OFFER -> listOf(Move.Teera, Move.CarryOn)
+            Phase.IN_PLAY -> playsFor(state, seat)
+            Phase.RESCUE -> rescueMoves(state, seat)
+            Phase.GAME_OVER, Phase.MATCH_OVER -> emptyList()
+        }
+    }
+
+    /** The tiles [seat] could lay, and where. */
+    private fun playsFor(state: GameState, seat: Int): List<Move.Play> {
         val hand = state.handOf(seat)
+        val board = state.board
 
-        val plays = if (state.board.isEmpty) {
-            val openers = state.forcedOpening?.let { forced -> hand.filter { it == forced } } ?: hand
-            openers.map { Move.Play(it, End.RIGHT) }
-        } else {
-            hand.flatMap { tile ->
-                End.entries.filter { state.board.accepts(tile, it, state.rules) }
-                    .map { Move.Play(tile, it) }
-            }
+        if (board.isEmpty) {
+            // Opening the game: a double, and the first game's is fixed at 6|6.
+            val openers = state.mustOpenWith
+                ?.let { forced -> hand.filter { it == forced } }
+                ?: hand.filter { it.isDouble }
+            return openers.map { Move.Play(it, null) }
         }
-        if (plays.isNotEmpty()) return plays
 
-        return buildList {
-            if (canDraw(state)) add(Move.Draw)
-            if (canPass(state)) add(Move.Pass)
+        if (board.inOpeningPhase) {
+            // Rule 12: the next bare side gets closed; which one is bookkeeping, not a choice.
+            val face = board.centreFace ?: return emptyList()
+            return hand.filter { it.matches(face) }.map { Move.Play(it, null) }
+        }
+
+        return hand.flatMap { tile ->
+            Arm.ALL.filter { board.accepts(tile, it) }.map { Move.Play(tile, it) }
         }
     }
 
-    private fun canDraw(state: GameState): Boolean {
-        val rules = state.rules
-        if (!rules.boneyardEnabled || state.boneyardDrawable <= 0) return false
-        if (rules.mustDrawUntilPlayable) return true
-        return rules.maxDrawsPerTurn == 0 || state.drawsThisTurn < rules.maxDrawsPerTurn
+    /** Rule 15: give one of your own tiles, or play one in their place. */
+    private fun rescueMoves(state: GameState, rescuer: Int): List<Move> {
+        val giving = state.handOf(rescuer).map { Move.Give(it) }
+        val playing = playsFor(state, rescuer).mapNotNull { play ->
+            play.arm?.let { Move.PlayFor(play.domino, it) }
+                ?: firstFreeArm(state.board)?.let { Move.PlayFor(play.domino, it) }
+        }
+        return playing + giving
     }
 
-    /** A seat may only give up once the rules stop insisting they draw. */
-    private fun canPass(state: GameState): Boolean =
-        !(state.rules.mustDrawUntilPlayable && canDraw(state))
+    /** Whether a seat holds anything it could legally lay right now. */
+    fun hasPlayable(state: GameState, seat: Int): Boolean {
+        val board = state.board
+        if (board.isEmpty) return false
+        val hand = state.handOf(seat)
+        if (board.inOpeningPhase) {
+            val face = board.centreFace ?: return false
+            return hand.any { it.matches(face) }
+        }
+        return hand.any { board.acceptsAnywhere(it) }
+    }
 
-    // -- move application ---------------------------------------------------
+    private fun firstFreeArm(board: Board): Arm? = Arm.ALL.firstOrNull { !board.isOpened(it) }
+
+    // -- applying a move ---------------------------------------------------
 
     fun apply(state: GameState, seat: Int, move: Move): MoveOutcome {
-        if (state.phase != Phase.IN_ROUND) return MoveOutcome.Rejected(Rejection.ROUND_NOT_RUNNING)
-        if (state.turn != seat) return MoveOutcome.Rejected(Rejection.NOT_YOUR_TURN)
+        if (state.isOver) return MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+        if (state.actingSeat != seat) return MoveOutcome.Rejected(Rejection.NOT_YOUR_TURN)
 
         return when (move) {
-            is Move.Play -> applyPlay(state, seat, move)
-            Move.Draw -> applyDraw(state, seat)
-            Move.Pass -> applyPass(state, seat)
+            is Move.Play -> if (state.phase == Phase.IN_PLAY) applyPlay(state, seat, move)
+            else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+
+            is Move.Give -> if (state.phase == Phase.RESCUE) applyGive(state, seat, move)
+            else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+
+            is Move.PlayFor -> if (state.phase == Phase.RESCUE) applyPlayFor(state, seat, move)
+            else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+
+            Move.Teera -> if (state.phase == Phase.TEERA_OFFER) applyTeera(state, seat)
+            else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+
+            Move.CarryOn -> if (state.phase == Phase.TEERA_OFFER) {
+                MoveOutcome.Ok(advanceTo(state.copy(teeraSeat = null), state.turnAfterTeera ?: nextSeat(seat)))
+            } else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+
+            Move.Redeal -> if (state.phase == Phase.REDEAL_OFFER) {
+                MoveOutcome.Ok(
+                    deal(state, state.gameNumber, state.dealAttempt + 1).let {
+                        it.copy(events = listOf(GameEvent.Redealt(RedealReason.FOUR_DOUBLES_BY_CHOICE, seat)) + it.events)
+                    }
+                )
+            } else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+
+            Move.KeepHand -> if (state.phase == Phase.REDEAL_OFFER) {
+                val remaining = state.redealOffers.drop(1)
+                MoveOutcome.Ok(
+                    state.copy(
+                        redealOffers = remaining,
+                        phase = if (remaining.isEmpty()) Phase.IN_PLAY else Phase.REDEAL_OFFER,
+                        turn = state.opener,
+                        events = emptyList(),
+                    )
+                )
+            } else MoveOutcome.Rejected(Rejection.WRONG_PHASE)
         }
     }
 
     private fun applyPlay(state: GameState, seat: Int, move: Move.Play): MoveOutcome {
         val hand = state.handOf(seat)
         if (move.domino !in hand) return MoveOutcome.Rejected(Rejection.TILE_NOT_IN_HAND)
+
+        // Opening the table.
         if (state.board.isEmpty) {
-            val forced = state.forcedOpening
-            if (forced != null && move.domino != forced) {
-                return MoveOutcome.Rejected(Rejection.MUST_PLAY_OPENING_TILE)
+            state.mustOpenWith?.let { forced ->
+                if (move.domino != forced) return MoveOutcome.Rejected(Rejection.MUST_OPEN_WITH_THE_SIX)
             }
-        } else if (!state.board.accepts(move.domino, move.end, state.rules)) {
+            if (!move.domino.isDouble) return MoveOutcome.Rejected(Rejection.MUST_OPEN_WITH_A_DOUBLE)
+            val opened = state.copy(
+                board = state.board.open(move.domino),
+                hands = state.hands.replacing(seat, hand - move.domino),
+                lastToPlay = seat,
+                mustOpenWith = null,
+                events = listOf(GameEvent.Opened(seat, move.domino)),
+            )
+            // Rule 25: if neither opponent can answer the opening double, deal again.
+            if (opponentsCannotAnswer(opened, seat, move.domino)) {
+                val fresh = deal(state, state.gameNumber, state.dealAttempt + 1)
+                return MoveOutcome.Ok(
+                    fresh.copy(
+                        events = listOf(
+                            GameEvent.Opened(seat, move.domino),
+                            GameEvent.Redealt(RedealReason.OPPONENTS_CANNOT_ANSWER, seat),
+                        ) + fresh.events,
+                    )
+                )
+            }
+            return MoveOutcome.Ok(afterLaying(opened, seat, nextSeat(seat)))
+        }
+
+        // Rule 12: while the four sides are being closed, the tile goes on the next bare one.
+        val arm = if (state.board.inOpeningPhase) {
+            firstFreeArm(state.board) ?: return MoveOutcome.Rejected(Rejection.MUST_OPEN_A_FRESH_SIDE)
+        } else {
+            move.arm ?: return MoveOutcome.Rejected(Rejection.NO_ARM_GIVEN)
+        }
+        if (!state.board.accepts(move.domino, arm)) {
             return MoveOutcome.Rejected(Rejection.TILE_DOES_NOT_MATCH)
         }
 
-        val board = state.board.place(move.domino, move.end, state.rules)
-        val hands = state.hands.replacing(seat, hand.minusOne(move.domino))
-        val events = mutableListOf<GameEvent>(GameEvent.Played(seat, move.domino, move.end))
-
-        var scores = state.scores
-        if (state.rules.scoring == ScoringMode.PEG_ON_ENDS) {
-            val total = board.openEndTotal(state.rules)
-            if (total > 0 && total % state.rules.pegStep == 0) {
-                val points = if (state.rules.pegDividedByStep) total / state.rules.pegStep else total
-                val key = state.rules.scoreKeyOf(seat)
-                scores = scores.adding(key, points)
-                events += GameEvent.Pegged(seat, key, points, total)
-            }
-        }
-
-        val next = state.copy(
-            board = board,
-            hands = hands,
-            scores = scores,
-            consecutivePasses = 0,
-            drawsThisTurn = 0,
-            forcedOpening = null,
-            events = events,
+        val played = state.copy(
+            board = state.board.place(move.domino, arm),
+            hands = state.hands.replacing(seat, hand - move.domino),
+            lastToPlay = seat,
+            events = listOf(GameEvent.Played(seat, move.domino, arm)),
         )
-
-        if (hands[seat].isEmpty()) {
-            return MoveOutcome.Ok(endRound(next, RoundEndReason.DOMINO, seat, move.domino))
-        }
-        return MoveOutcome.Ok(next.copy(turn = nextSeat(next, seat)))
+        return MoveOutcome.Ok(afterLaying(played, seat, nextSeat(seat)))
     }
 
-    private fun applyDraw(state: GameState, seat: Int): MoveOutcome {
-        if (legalMoves(state, seat).any { it is Move.Play }) {
-            return MoveOutcome.Rejected(Rejection.MUST_PLAY_IF_ABLE)
-        }
-        if (state.boneyardDrawable <= 0 || !state.rules.boneyardEnabled) {
-            return MoveOutcome.Rejected(Rejection.BONEYARD_EMPTY)
-        }
-        if (!canDraw(state)) return MoveOutcome.Rejected(Rejection.DRAW_LIMIT_REACHED)
+    private fun applyGive(state: GameState, rescuer: Int, move: Move.Give): MoveOutcome {
+        val stuck = state.stuckSeat ?: return MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+        val hand = state.handOf(rescuer)
+        if (move.domino !in hand) return MoveOutcome.Rejected(Rejection.TILE_NOT_IN_HAND)
 
-        val tile = state.boneyard.first()
-        val hands = state.hands.replacing(seat, (state.handOf(seat) + tile).sortedDescending())
-        val boneyard = state.boneyard.drop(1)
+        val hands = state.hands
+            .replacing(rescuer, hand - move.domino)
+            .replacing(stuck, (state.handOf(stuck) + move.domino).sortedDescending())
+
+        val given = state.copy(
+            hands = hands,
+            stuckSeat = null,
+            rescuer = null,
+            events = listOf(GameEvent.Gave(rescuer, stuck)),
+        )
+
+        // Rule 18: handing over your last tile empties your hand, which wins the game.
+        if (hands[rescuer].isEmpty()) {
+            return MoveOutcome.Ok(endGame(given, GameEnd.X, rescuer))
+        }
+        // Rule 16: the stuck seat loses its turn entirely.
+        return MoveOutcome.Ok(advanceTo(given, nextSeat(stuck)))
+    }
+
+    private fun applyPlayFor(state: GameState, rescuer: Int, move: Move.PlayFor): MoveOutcome {
+        val stuck = state.stuckSeat ?: return MoveOutcome.Rejected(Rejection.WRONG_PHASE)
+        val hand = state.handOf(rescuer)
+        if (move.domino !in hand) return MoveOutcome.Rejected(Rejection.TILE_NOT_IN_HAND)
+
+        val arm = if (state.board.inOpeningPhase) {
+            firstFreeArm(state.board) ?: return MoveOutcome.Rejected(Rejection.MUST_OPEN_A_FRESH_SIDE)
+        } else {
+            move.arm
+        }
+        if (!state.board.accepts(move.domino, arm)) {
+            return MoveOutcome.Rejected(Rejection.CANNOT_PLAY_FOR_THEM)
+        }
+
+        val played = state.copy(
+            board = state.board.place(move.domino, arm),
+            hands = state.hands.replacing(rescuer, hand - move.domino),
+            lastToPlay = rescuer,
+            stuckSeat = null,
+            rescuer = null,
+            events = listOf(GameEvent.PlayedFor(rescuer, stuck, move.domino, arm)),
+        )
+        return MoveOutcome.Ok(afterLaying(played, rescuer, nextSeat(stuck)))
+    }
+
+    private fun applyTeera(state: GameState, seat: Int): MoveOutcome {
+        val pips = state.handOf(seat).pipTotal()
+        if (pips > TEERA_LIMIT) return MoveOutcome.Rejected(Rejection.TOO_HEAVY_FOR_A_TEERA)
         return MoveOutcome.Ok(
-            state.copy(
-                hands = hands,
-                boneyard = boneyard,
-                drawsThisTurn = state.drawsThisTurn + 1,
-                events = listOf(GameEvent.Drew(seat, boneyard.size)),
+            endGame(
+                state.copy(events = state.events + GameEvent.TeeraCalled(seat, pips)),
+                GameEnd.TEERA,
+                seat,
             )
         )
     }
 
-    private fun applyPass(state: GameState, seat: Int): MoveOutcome {
-        if (legalMoves(state, seat).any { it is Move.Play }) {
-            return MoveOutcome.Rejected(Rejection.MUST_PLAY_IF_ABLE)
-        }
-        if (!canPass(state)) return MoveOutcome.Rejected(Rejection.MUST_DRAW_FIRST)
+    /**
+     * What happens after a tile goes down: an empty hand wins, a hand down to a single
+     * spot may call teera (rule 20), and otherwise play moves on.
+     */
+    private fun afterLaying(state: GameState, layer: Int, nextTurn: Int): GameState {
+        val hand = state.handOf(layer)
+        if (hand.isEmpty()) return endGame(state, GameEnd.X, layer)
 
-        val passes = state.consecutivePasses + 1
-        val next = state.copy(
-            consecutivePasses = passes,
-            drawsThisTurn = 0,
-            events = listOf(GameEvent.Passed(seat)),
-        )
-        if (passes >= state.rules.playerCount) {
-            return MoveOutcome.Ok(endRound(next, RoundEndReason.BLOCKED, null, null))
+        if (hand.pipTotal() <= TEERA_LIMIT) {
+            return state.copy(
+                phase = Phase.TEERA_OFFER,
+                teeraSeat = layer,
+                turnAfterTeera = nextTurn,
+            )
         }
-        return MoveOutcome.Ok(next.copy(turn = nextSeat(next, seat)))
+        return advanceTo(state, nextTurn)
     }
 
-    private fun nextSeat(state: GameState, from: Int): Int =
-        (from + 1) % state.rules.playerCount
+    /**
+     * Hands the turn on, covering the two things that can happen instead: the table
+     * locking up entirely (rule 22), or the next seat being stuck (rule 15).
+     */
+    private fun advanceTo(state: GameState, seat: Int): GameState {
+        if ((0 until Pack.PLAYERS).none { hasPlayable(state, it) }) {
+            return endGame(state, GameEnd.BLOCKED, null)
+        }
+        if (hasPlayable(state, seat)) {
+            return state.copy(phase = Phase.IN_PLAY, turn = seat, stuckSeat = null, rescuer = null)
+        }
+        val rescuer = previousSeat(seat)
+        return state.copy(
+            phase = Phase.RESCUE,
+            turn = seat,
+            stuckSeat = seat,
+            rescuer = rescuer,
+            events = state.events + GameEvent.Stuck(seat, rescuer),
+        )
+    }
 
-    // -- round and match scoring -------------------------------------------
+    private fun nextSeat(from: Int): Int = (from + 1) % Pack.PLAYERS
 
-    private fun endRound(
-        state: GameState,
-        reason: RoundEndReason,
-        winner: Int?,
-        goingOutTile: Domino?,
-    ): GameState {
-        val rules = state.rules
-        val pips = (0 until rules.playerCount).map { state.handOf(it).pipTotal() }
+    private fun previousSeat(of: Int): Int = (of + Pack.PLAYERS - 1) % Pack.PLAYERS
 
-        val takerSeat: Int? = winner ?: lightestSeat(state, pips)
-        var points = 0
-        if (takerSeat != null) {
-            val opponents = opposingSeats(rules, takerSeat)
-            val opponentPips = opponents.sumOf { pips[it] }
-            points = when {
-                reason == RoundEndReason.DOMINO -> opponentPips
-                rules.blocked == BlockedResolution.LOWEST_PIPS_TAKES_ALL -> opponentPips
-                rules.blocked == BlockedResolution.LOWEST_PIPS_TAKES_DIFFERENCE ->
-                    (opponentPips - teamPips(rules, takerSeat, pips)).coerceAtLeast(0)
-                else -> 0
-            }
-            if (rules.roundPipCountToStep) points = roundToStep(points, rules.pegStep)
-            if (reason == RoundEndReason.DOMINO && goingOutTile?.isDouble == true) {
-                points += rules.bonusForGoingOutOnDouble
+    /** Rule 25, checked once the opening double is on the table. */
+    private fun opponentsCannotAnswer(state: GameState, opener: Int, double: Domino): Boolean {
+        val opponents = seatsOfTeam(otherTeam(teamOf(opener)))
+        return opponents.none { seat -> state.handOf(seat).any { it.matches(double.high) } }
+    }
+
+    // -- scoring -----------------------------------------------------------
+
+    /**
+     * Settles the game and the match.
+     *
+     * Scoring runs backwards in Teera: what a team takes is added to it, and reaching
+     * the target loses. The X is simply a negative take.
+     */
+    private fun endGame(state: GameState, end: GameEnd, winnerSeat: Int?): GameState {
+        val pips = (0 until Pack.PLAYERS).map { state.handOf(it).pipTotal() }
+        val scored = intArrayOf(0, 0)
+
+        if (winnerSeat != null) {
+            val mine = teamOf(winnerSeat)
+            val theirs = otherTeam(mine)
+            // The losing team always pays for what it is still holding; a partner's
+            // tiles never count against the team that finished.
+            scored[theirs] += seatsOfTeam(theirs).sumOf { pips[it] }
+            when (end) {
+                GameEnd.X -> scored[mine] += state.rules.xBonus
+                GameEnd.TEERA -> scored[mine] += pips[winnerSeat]
+                GameEnd.BLOCKED -> Unit
             }
         }
 
-        val scoreKey = takerSeat?.let { rules.scoreKeyOf(it) }
-        var scores = state.scores
-        if (scoreKey != null && points > 0) {
-            val updated = scores[scoreKey] + points
-            val overshoots = rules.winMustBeExact &&
-                rules.matchFormat == MatchFormat.FIRST_TO_TARGET &&
-                updated > rules.targetScore
-            if (!overshoots) scores = scores.adding(scoreKey, points)
-        }
+        val scores = listOf(state.scores[0] + scored[0], state.scores[1] + scored[1])
+        val nextOpener = winnerSeat ?: state.lastToPlay ?: state.opener
 
-        val result = RoundResult(
-            roundNumber = state.roundNumber,
-            reason = reason,
-            winnerSeat = takerSeat,
-            scoreKey = scoreKey,
-            points = points,
+        val result = GameResult(
+            gameNumber = state.gameNumber,
+            end = end,
+            winnerSeat = winnerSeat,
             handPips = pips,
+            scored = scored.toList(),
+            nextOpener = nextOpener,
         )
 
-        val matchWinner = matchWinner(rules, scores, state.roundNumber)
-        val events = state.events + GameEvent.RoundEnded(result) +
-            listOfNotNull(matchWinner?.let { GameEvent.MatchEnded(it, scores) })
+        val loser = losingTeam(scores, state.rules.target)
+        val events = state.events + GameEvent.GameEnded(result) +
+            listOfNotNull(loser?.let { GameEvent.MatchEnded(it, scores) })
 
         return state.copy(
             scores = scores,
-            phase = if (matchWinner != null) Phase.MATCH_OVER else Phase.ROUND_OVER,
-            lastRound = result,
-            matchWinner = matchWinner,
-            dealer = (state.dealer + 1) % rules.playerCount,
+            phase = if (loser != null) Phase.MATCH_OVER else Phase.GAME_OVER,
+            lastGame = result,
+            losingTeam = loser,
+            stuckSeat = null,
+            rescuer = null,
+            teeraSeat = null,
+            turnAfterTeera = null,
             events = events,
         )
     }
 
-    /** Lightest hand takes a blocked round; a dead heat scores nothing. */
-    private fun lightestSeat(state: GameState, pips: List<Int>): Int? {
-        val rules = state.rules
-        if (rules.blocked == BlockedResolution.NO_SCORE) return null
-
-        val byKey = (0 until rules.teamCount).associateWith { key ->
-            rules.seatsFor(key).sumOf { pips[it] }
-        }
-        val best = byKey.minOf { it.value }
-        val winners = byKey.filterValues { it == best }.keys
-        if (winners.size > 1) return null
-        // Credit the lightest hand within the winning team, so "who went out" reads sensibly.
-        return rules.seatsFor(winners.first()).minByOrNull { pips[it] }
-    }
-
-    private fun opposingSeats(rules: RuleSet, seat: Int): List<Int> {
-        val key = rules.scoreKeyOf(seat)
-        return (0 until rules.playerCount).filter {
-            if (rules.partners && rules.opposingTeamPipsOnly) rules.scoreKeyOf(it) != key
-            else it != seat
+    /**
+     * A team that reaches the target loses. Both can cross it in the same game, since a
+     * teera scores on both sides, and then the heavier score is the losing one; dead
+     * level means another game settles it.
+     */
+    private fun losingTeam(scores: List<Int>, target: Int): Int? {
+        val crossed = scores.indices.filter { scores[it] >= target }
+        return when (crossed.size) {
+            0 -> null
+            1 -> crossed.first()
+            else -> if (scores[0] == scores[1]) null else scores.indices.maxByOrNull { scores[it] }
         }
     }
 
-    private fun teamPips(rules: RuleSet, seat: Int, pips: List<Int>): Int =
-        rules.seatsFor(rules.scoreKeyOf(seat)).sumOf { pips[it] }
+    /**
+     * Records an alert the table has voted through (rules 27 to 30). Every third one
+     * costs the offending team fifty.
+     */
+    fun upholdAlert(state: GameState, againstTeam: Int): GameState {
+        val alerts = state.alerts.toMutableList()
+        alerts[againstTeam] = alerts[againstTeam] + 1
+        val count = alerts[againstTeam]
 
-    private fun matchWinner(rules: RuleSet, scores: List<Int>, roundNumber: Int): Int? = when (rules.matchFormat) {
-        MatchFormat.FIRST_TO_TARGET -> {
-            val leader = scores.withIndex().maxByOrNull { it.value }
-            val hit = if (rules.winMustBeExact) leader?.value == rules.targetScore
-            else (leader?.value ?: 0) >= rules.targetScore
-            if (hit && scores.count { it == leader!!.value } == 1) leader!!.index else null
+        var scores = state.scores
+        val events = mutableListOf<GameEvent>()
+        var penalty = 0
+        if (count % state.rules.alertsPerPenalty == 0) {
+            penalty = state.rules.alertPenalty
+            scores = scores.toMutableList().also { it[againstTeam] = it[againstTeam] + penalty }
         }
-        MatchFormat.FIXED_ROUNDS -> {
-            if (roundNumber < rules.rounds) null
-            else {
-                val leader = scores.withIndex().maxByOrNull { it.value }
-                if (leader != null && scores.count { it == leader.value } == 1) leader.index else null
-            }
-        }
+        events += GameEvent.AlertUpheld(againstTeam, count, penalty)
+
+        val loser = losingTeam(scores, state.rules.target)
+        if (loser != null) events += GameEvent.MatchEnded(loser, scores)
+
+        return state.copy(
+            alerts = alerts,
+            scores = scores,
+            losingTeam = loser,
+            phase = if (loser != null) Phase.MATCH_OVER else state.phase,
+            events = state.events + events,
+        )
     }
 
-    private fun roundToStep(value: Int, step: Int): Int {
-        if (step <= 1) return value
-        val remainder = value % step
-        return if (remainder * 2 >= step) value + (step - remainder) else value - remainder
-    }
+    private const val TEERA_LIMIT = 1
+    private const val FIVE_DOUBLES = 5
+    private const val FOUR_DOUBLES = 4
+    private const val SIX_OF_A_NUMBER = 6
 }
-
-// -- small list helpers, kept private to the engine's own use ---------------
 
 private fun <T> List<List<T>>.replacing(index: Int, value: List<T>): List<List<T>> =
     mapIndexed { i, existing -> if (i == index) value else existing }
-
-private fun List<Int>.adding(index: Int, delta: Int): List<Int> =
-    mapIndexed { i, value -> if (i == index) value + delta else value }
-
-/** Removes a single copy; a hand never holds duplicates, but this keeps intent obvious. */
-private fun List<Domino>.minusOne(tile: Domino): List<Domino> {
-    val at = indexOf(tile)
-    return if (at < 0) this else filterIndexed { i, _ -> i != at }
-}

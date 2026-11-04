@@ -4,23 +4,22 @@ import kotlinx.serialization.Serializable
 
 /**
  * A single bone. Stored canonically with [low] <= [high] so that 6|3 and 3|6 are the
- * same tile; which way round it is actually laid on the table is a property of the
- * board, not of the tile.
+ * same tile; which way round it lies on the table belongs to the board, not the tile.
  */
 @Serializable
 data class Domino(val low: Int, val high: Int) : Comparable<Domino> {
 
     init {
-        require(low in 0..MAX_FACE && high in 0..MAX_FACE) { "face out of range: $low|$high" }
+        require(low in 0..Pack.MAX_FACE && high in 0..Pack.MAX_FACE) { "face out of range: $low|$high" }
         require(low <= high) { "use Domino.of() to build a canonical tile" }
     }
 
     val isDouble: Boolean get() = low == high
 
-    /** Total spots, used for hand counting and "heaviest tile" comparisons. */
+    /** Spots on the tile. This is what the losing team pays at the end of a game. */
     val pips: Int get() = low + high
 
-    /** The face on the other side of [face], or null if this tile does not show [face]. */
+    /** The face opposite [face], or null when this tile does not show [face]. */
     fun otherFace(face: Int): Int? = when (face) {
         low -> high
         high -> low
@@ -35,8 +34,6 @@ data class Domino(val low: Int, val high: Int) : Comparable<Domino> {
     override fun toString(): String = "$low|$high"
 
     companion object {
-        const val MAX_FACE = 12
-
         fun of(a: Int, b: Int): Domino = if (a <= b) Domino(a, b) else Domino(b, a)
 
         fun parse(text: String): Domino {
@@ -47,20 +44,35 @@ data class Domino(val low: Int, val high: Int) : Comparable<Domino> {
     }
 }
 
-/** Which pack the round is dealt from. */
-@Serializable
-enum class DominoSet(val maxFace: Int) {
-    DOUBLE_SIX(6),
-    DOUBLE_NINE(9),
-    DOUBLE_TWELVE(12);
+/**
+ * Teera is played with one pack and one pack only: double six, dealt out entirely.
+ * There is no boneyard, which is why [Engine] has no draw move.
+ */
+object Pack {
+    const val MAX_FACE = 6
+    const val SIZE = 28
+    const val HAND_SIZE = 7
+    const val PLAYERS = 4
 
-    /** Every distinct tile in the pack, in ascending order. */
-    fun tiles(): List<Domino> = buildList {
-        for (high in 0..maxFace) for (low in 0..high) add(Domino(low, high))
+    /** The opening bone of the very first game of a match. */
+    val OPENING_DOUBLE = Domino(6, 6)
+
+    /** The only two tiles light enough to declare a teera with. */
+    val TEERA_TILES = listOf(Domino(0, 0), Domino(0, 1))
+
+    val tiles: List<Domino> = buildList {
+        for (high in 0..MAX_FACE) for (low in 0..high) add(Domino(low, high))
     }
 
-    val size: Int get() = (maxFace + 1) * (maxFace + 2) / 2
+    val doubles: List<Domino> = tiles.filter { it.isDouble }
 }
 
 /** Total spots in a collection of tiles. */
 fun Iterable<Domino>.pipTotal(): Int = sumOf { it.pips }
+
+/** Seats 0 and 2 are one team, 1 and 3 the other. Partners sit across the table. */
+fun teamOf(seat: Int): Int = seat % 2
+
+fun seatsOfTeam(team: Int): List<Int> = (0 until Pack.PLAYERS).filter { teamOf(it) == team }
+
+fun otherTeam(team: Int): Int = 1 - team
