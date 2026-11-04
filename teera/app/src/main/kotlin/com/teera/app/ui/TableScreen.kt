@@ -31,7 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -167,74 +171,111 @@ private fun ScoreRail(view: PlayerView, onLeave: () -> Unit) {
     val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
 
     Row(
-        modifier = Modifier.fillMaxWidth().background(Felt.Rail).padding(horizontal = 14.dp, vertical = 8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Felt.RailTop, Felt.RailFoot)))
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
-            // Scores count against you here, so the lower number is the one in front.
-            Text("نحن  $us", color = if (us > them) Felt.Danger else Felt.Playable,
-                style = MaterialTheme.typography.titleMedium)
-            Text("هم  $them", color = Felt.IvoryShade, style = MaterialTheme.typography.bodyMedium)
+        // Points are a burden here, so whoever has fewer is the one in front.
+        ScorePlate("نحن", us, leading = us <= them)
+        Spacer(Modifier.width(8.dp))
+        ScorePlate("هم", them, leading = them < us)
+
+        Spacer(Modifier.weight(1f))
+
+        Column(horizontalAlignment = Alignment.End) {
+            Text("جيم ${view.gameNumber}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+            Text(
+                "المباراة لـ ${view.rules.target}",
+                color = Felt.Brass,
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text("اللي يوصل يخسر", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("جيم ${view.gameNumber}", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
-            Text("لـ ${view.rules.target}", color = Felt.Brass, style = MaterialTheme.typography.labelSmall)
-        }
-        if (view.alerts.any { it > 0 }) {
-            Spacer(Modifier.width(10.dp))
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("ألرت", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
-                Text(
-                    "${view.alerts.getOrElse(view.yourTeam) { 0 }}-${view.alerts.getOrElse(1 - view.yourTeam) { 0 }}",
-                    color = Felt.Danger,
-                    style = MaterialTheme.typography.labelSmall,
-                )
-            }
-        }
-        TextButton(onClick = onLeave) { Text("خروج", color = Felt.IvoryShade) }
+        TextButton(onClick = onLeave) { Text("خروج", color = Felt.Muted) }
     }
 }
 
 @Composable
+private fun ScorePlate(who: String, score: Int, leading: Boolean) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.Black.copy(alpha = 0.28f))
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+    ) {
+        Text(who, color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(
+            "$score",
+            color = if (leading) Felt.Playable else Felt.Behind,
+            style = MaterialTheme.typography.titleLarge,
+        )
+    }
+}
+
+/** The other three seats: who is on, how many bones they hold, and who your partner is. */
+@Composable
 private fun OpponentRow(view: PlayerView) {
-    // Seated in turn order starting from your left, so the table reads the way it sits.
     val others = (1..3).map { (view.yourSeat + it) % 4 }
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         others.forEach { seat ->
+            val name = view.seatInfo(seat)?.name.orEmpty().ifEmpty { "لاعب" }
             val acting = seat == view.actingSeat
             val partner = teamOf(seat) == view.yourTeam
             val stuck = seat == view.stuckSeat
+            val tint = when {
+                acting -> Felt.Brass
+                partner -> Felt.Playable
+                else -> Felt.Muted
+            }
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row {
-                    repeat(view.handCounts.getOrElse(seat) { 0 }.coerceAtMost(8)) { index ->
-                        DominoTile(
-                            null,
-                            Modifier.size(12.dp, 22.dp).offset(x = (-3 * index).dp),
-                            faceUp = false,
+                Box(contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Felt.Deep)
+                            .border(if (acting) 2.dp else 1.dp, tint.copy(alpha = if (acting) 1f else 0.5f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            name.take(1),
+                            color = tint,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    // Tile counts are public in Teera, so they sit on the seat itself.
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomEnd)
+                            .offset(x = 10.dp, y = 4.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Felt.Rail)
+                            .border(1.dp, Felt.Brass.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    ) {
+                        Text(
+                            "${view.handCounts.getOrElse(seat) { 0 }}",
+                            color = Felt.Parchment,
+                            style = MaterialTheme.typography.labelSmall,
                         )
                     }
                 }
-                Text(
-                    view.seatInfo(seat)?.name.orEmpty().ifEmpty { "لاعب" },
-                    color = when {
-                        acting -> Felt.Brass
-                        partner -> Felt.Playable
-                        else -> Felt.IvoryShade
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                )
+                Spacer(Modifier.height(4.dp))
+                Text(name, color = tint, style = MaterialTheme.typography.labelSmall)
                 Text(
                     when {
                         stuck -> "مسكّر عليه"
-                        partner -> "شريكك · ${view.handCounts.getOrElse(seat) { 0 }}"
-                        else -> "${view.handCounts.getOrElse(seat) { 0 }}"
+                        partner -> "شريكك"
+                        else -> " "
                     },
-                    color = if (stuck) Felt.Danger else Felt.IvoryShade.copy(alpha = 0.7f),
+                    color = if (stuck) Felt.Danger else Felt.Muted,
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -342,40 +383,55 @@ private fun Hand(
     playable: Set<Domino>,
     onTap: (Domino) -> Unit,
 ) {
-    Column(Modifier.fillMaxWidth().background(Felt.Rail).padding(vertical = 8.dp)) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Felt.RailTop, Felt.RailFoot)))
+            .padding(top = 8.dp, bottom = 10.dp),
+    ) {
         Text(
             text = when {
                 view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
                 view.isYourMove && view.board.isEmpty -> "افتح الجيم بدبل"
                 view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
-                view.isYourMove -> "دورك"
+                view.isYourMove && selected != null -> "دوس على الجهة اللي تريدها"
+                view.isYourMove && playable.isEmpty() -> "ما عندك بول يلعب"
+                view.isYourMove -> "دورك — اختر بول"
                 else -> "${view.actingSeat?.let { view.seatInfo(it)?.name }.orEmpty()} يفكّر…"
             },
-            color = if (view.isYourMove) Felt.Brass else Felt.IvoryShade,
+            color = if (view.isYourMove) Felt.Brass else Felt.Muted,
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
 
         LazyRow(
-            modifier = Modifier.fillMaxWidth().height(100.dp),
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-            contentPadding = PaddingValues(horizontal = 14.dp),
+            modifier = Modifier.fillMaxWidth().height(112.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             items(view.hand.size) { index ->
                 val tile = view.hand[index]
                 val live = tile in playable
+                val picked = selected == tile
+                // You push a bone forward before you lay it, so a playable one stands a
+                // little proud of the rest and the chosen one stands further still.
+                val lift by animateDpAsState(
+                    targetValue = if (picked) 16.dp else if (live) 8.dp else 0.dp,
+                    label = "lift",
+                )
                 DominoTile(
                     domino = tile,
                     modifier = Modifier
-                        .size(44.dp, if (selected == tile) 94.dp else 86.dp)
+                        .padding(bottom = lift)
+                        .size(46.dp, 92.dp)
                         .clickable { onTap(tile) },
                     highlight = when {
-                        selected == tile -> Felt.Brass
+                        picked -> Felt.Brass
                         live -> Felt.Playable.copy(alpha = 0.85f)
                         else -> null
                     },
-                    dimmed = view.isYourMove && !live,
+                    faded = view.isYourMove && !live,
                 )
             }
         }

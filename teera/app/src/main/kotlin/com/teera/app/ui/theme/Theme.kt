@@ -16,23 +16,31 @@ import androidx.compose.ui.unit.sp
  * Everything on the table is drawn from these, so a change here restyles the game.
  */
 object Felt {
-    val Deep = Color(0xFF0E3B22)
+    val Deep = Color(0xFF0B3119)
     val Table = Color(0xFF14532D)
-    val TableLight = Color(0xFF1B6B3A)
-    val Rail = Color(0xFF3E2A18)
-    val Brass = Color(0xFFD9A441)
+    val TableLight = Color(0xFF1E7340)
+    val Rail = Color(0xFF2A1C10)
+    val RailTop = Color(0xFF3A2715)
+    val RailFoot = Color(0xFF211509)
+    val Muted = Color(0xFF9DB0A2)
+    val Brass = Color(0xFFE0AE4E)
     val BrassDim = Color(0xFF8A6A2A)
 
-    val Ivory = Color(0xFFF6EFE2)
+    val Ivory = Color(0xFFFBF6EC)
+    val IvoryLit = Color(0xFFFFFCF5)
+    val IvoryEdge = Color(0xFFD8CCB6)
     val IvoryShade = Color(0xFFE2D8C6)
     val Pip = Color(0xFF2F2A24)
-    val TileBack = Color(0xFF7A1F1F)
-    val TileBackEdge = Color(0xFF531212)
+    val PipShadow = Color(0x4D4A3B22)
+    val BoneEdge = Color(0xFF6B5B44)
+    val TileBack = Color(0xFF8E2727)
+    val TileBackEdge = Color(0xFF5A1414)
 
     val Ink = Color(0xFF14110C)
     val Parchment = Color(0xFFFBF7EF)
     val Danger = Color(0xFFC0392B)
-    val Playable = Color(0xFF7BE495)
+    val Playable = Color(0xFF8DE8A8)
+    val Behind = Color(0xFFE8907F)
 }
 
 private val DarkScheme = darkColorScheme(

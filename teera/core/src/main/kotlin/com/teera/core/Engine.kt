@@ -279,7 +279,7 @@ object Engine {
                     )
                 )
             }
-            return MoveOutcome.Ok(afterLaying(opened, seat, nextSeat(seat)))
+            return MoveOutcome.Ok(afterShedding(opened, seat, nextSeat(seat)))
         }
 
         // Rule 12: while the four sides are being closed, the tile goes on the next bare one.
@@ -298,7 +298,7 @@ object Engine {
             lastToPlay = seat,
             events = listOf(GameEvent.Played(seat, move.domino, arm)),
         )
-        return MoveOutcome.Ok(afterLaying(played, seat, nextSeat(seat)))
+        return MoveOutcome.Ok(afterShedding(played, seat, nextSeat(seat)))
     }
 
     private fun applyGive(state: GameState, rescuer: Int, move: Move.Give): MoveOutcome {
@@ -318,11 +318,9 @@ object Engine {
         )
 
         // Rule 18: handing over your last tile empties your hand, which wins the game.
-        if (hands[rescuer].isEmpty()) {
-            return MoveOutcome.Ok(endGame(given, GameEnd.X, rescuer))
-        }
-        // Rule 16: the stuck seat loses its turn entirely.
-        return MoveOutcome.Ok(advanceTo(given, nextSeat(stuck)))
+        // Rule 20: and if what is left weighs a spot or nothing, the teera is on offer,
+        // so a player can hand over the heavy tile and fly on the light one.
+        return MoveOutcome.Ok(afterShedding(given, rescuer, nextSeat(stuck)))
     }
 
     private fun applyPlayFor(state: GameState, rescuer: Int, move: Move.PlayFor): MoveOutcome {
@@ -347,7 +345,7 @@ object Engine {
             rescuer = null,
             events = listOf(GameEvent.PlayedFor(rescuer, stuck, move.domino, arm)),
         )
-        return MoveOutcome.Ok(afterLaying(played, rescuer, nextSeat(stuck)))
+        return MoveOutcome.Ok(afterShedding(played, rescuer, nextSeat(stuck)))
     }
 
     private fun applyTeera(state: GameState, seat: Int): MoveOutcome {
@@ -363,17 +361,18 @@ object Engine {
     }
 
     /**
-     * What happens after a tile goes down: an empty hand wins, a hand down to a single
-     * spot may call teera (rule 20), and otherwise play moves on.
+     * What happens after a player parts with a tile, whether they laid it or handed it
+     * over: an empty hand wins, a hand down to a single spot may call teera (rule 20),
+     * and otherwise play moves on.
      */
-    private fun afterLaying(state: GameState, layer: Int, nextTurn: Int): GameState {
-        val hand = state.handOf(layer)
-        if (hand.isEmpty()) return endGame(state, GameEnd.X, layer)
+    private fun afterShedding(state: GameState, seat: Int, nextTurn: Int): GameState {
+        val hand = state.handOf(seat)
+        if (hand.isEmpty()) return endGame(state, GameEnd.X, seat)
 
         if (hand.pipTotal() <= TEERA_LIMIT) {
             return state.copy(
                 phase = Phase.TEERA_OFFER,
-                teeraSeat = layer,
+                teeraSeat = seat,
                 turnAfterTeera = nextTurn,
             )
         }

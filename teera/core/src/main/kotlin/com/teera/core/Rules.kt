@@ -13,7 +13,8 @@ import kotlinx.serialization.Serializable
 data class Rules(
     /** Reaching this **loses** the match. The table picks 201 or 251 before dealing. */
     val target: Int = 201,
-    val turnSeconds: Int = 30,
+    /** 0 leaves a seat as long as it likes. Only an online table sets a clock. */
+    val turnSeconds: Int = 0,
     val alertVoteSeconds: Int = 30,
     /** Alerts needed before the penalty lands. They run for the whole match. */
     val alertsPerPenalty: Int = 3,

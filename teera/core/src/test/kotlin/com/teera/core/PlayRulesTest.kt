@@ -281,3 +281,54 @@ class EndingTest {
         assertEquals(Phase.GAME_OVER, after.phase)
     }
 }
+
+/** Rule 20 reaches the rescue too: you may hand the heavy tile over and fly on the light one. */
+class TeeraAfterGivingTest {
+
+    @Test
+    fun `handing over the heavy tile can leave you flying`() {
+        val state = rig(
+            hands = listOf(
+                listOf(d(3, 5)),
+                listOf(d(1, 4)),
+                listOf(d(4, 6), d(0, 1)),         // one ordinary tile and one spot
+                listOf(d(4, 4), d(5, 5)),         // stuck on ends of 3, 2, 1 and 0
+            ),
+            board = openedBoard(d(6, 6), d(6, 3), d(6, 2), d(6, 1), d(6, 0)),
+            turn = 2,
+            phase = Phase.RESCUE,
+            stuckSeat = 3,
+            rescuer = 2,
+        )
+        val after = assertIs<MoveOutcome.Ok>(Engine.apply(state, 2, Move.Give(d(4, 6)))).state
+
+        assertEquals(Phase.TEERA_OFFER, after.phase, "giving leaves a single spot, so the teera is on offer")
+        assertEquals(2, after.teeraSeat)
+
+        val flown = assertIs<MoveOutcome.Ok>(Engine.apply(after, 2, Move.Teera)).state
+        val result = assertNotNull(flown.lastGame)
+        assertEquals(GameEnd.TEERA, result.end)
+        assertEquals(2, result.winnerSeat)
+        assertEquals(1, result.scored[teamOf(2)], "the spot still in hand counts against them")
+    }
+
+    @Test
+    fun `a heavy hand after giving simply plays on`() {
+        val state = rig(
+            hands = listOf(
+                listOf(d(3, 5)),
+                listOf(d(1, 4)),
+                listOf(d(4, 6), d(5, 5)),
+                listOf(d(4, 4), d(2, 6)),
+            ),
+            board = openedBoard(d(6, 6), d(6, 3), d(6, 2), d(6, 1), d(6, 0)),
+            turn = 2,
+            phase = Phase.RESCUE,
+            stuckSeat = 3,
+            rescuer = 2,
+        )
+        val after = assertIs<MoveOutcome.Ok>(Engine.apply(state, 2, Move.Give(d(4, 6)))).state
+        assertEquals(Phase.IN_PLAY, after.phase)
+        assertEquals(0, after.turn)
+    }
+}
