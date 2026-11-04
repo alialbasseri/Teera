@@ -119,5 +119,13 @@ fun MenuScreen(
         OutlinedButton(onClick = onSolo, modifier = Modifier.fillMaxWidth()) {
             Text("العب ضد البوتات")
         }
+
+        Spacer(Modifier.weight(1f))
+        // Printed so a build can be told apart from an older one on the same phone.
+        Text(
+            "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Felt.Muted,
+        )
     }
 }

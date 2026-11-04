@@ -21,14 +21,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.teera.app.ui.LobbyScreen
 import com.teera.app.ui.MenuScreen
 import com.teera.app.ui.TableScreen
-import com.teera.app.ui.theme.DominoesTheme
+import com.teera.app.ui.theme.TeeraTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            DominoesTheme(dark = true) {
+            TeeraTheme(dark = true) {
                 DominoesApp()
             }
         }

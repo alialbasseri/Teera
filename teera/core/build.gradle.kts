@@ -25,5 +25,10 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    // The preview renders with the same typeface the app ships.
+    systemProperty(
+        "teera.font",
+        rootProject.file("app/src/main/res/font/amiri_regular.ttf").absolutePath,
+    )
     testLogging { events("passed", "failed", "skipped") }
 }

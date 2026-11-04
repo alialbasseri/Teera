@@ -43,17 +43,21 @@ class TablePreview {
 
 /** The look of the table, written once here and matched in the Compose screen. */
 object Preview {
-    const val FELT_DARK = "#0B3119"
-    const val FELT_MID = "#14532D"
-    const val FELT_LIGHT = "#1E7340"
-    const val RAIL = "#2A1C10"
-    const val RAIL_EDGE = "#4A3B22"
+    const val FELT_DARK = "#07301C"
+    const val FELT_MID = "#0F4A2A"
+    const val FELT_LIGHT = "#1A6B3C"
+    const val WALNUT_TOP = "#55371F"
+    const val WALNUT = "#3A2616"
+    const val WALNUT_FOOT = "#1E1309"
+    const val LAPIS = "#16355F"
     const val IVORY = "#FBF6EC"
     const val IVORY_EDGE = "#D8CCB6"
-    const val BRASS = "#E0AE4E"
+    const val GOLD = "#D9B166"
+    const val GOLD_DEEP = "#A67C2E"
     const val PARCHMENT = "#F3EDE1"
-    const val MUTED = "#9DB0A2"
+    const val MUTED = "#A79274"
     const val PLAYABLE = "#8DE8A8"
+    const val BRASS = GOLD
 
     private const val W = 400
     private const val H = 860
@@ -73,11 +77,15 @@ object Preview {
 
         append("""<svg xmlns="http://www.w3.org/2000/svg" width="$W" height="$H" viewBox="0 0 $W $H">""")
         append(defs())
-        append("""<rect width="$W" height="$H" fill="$FELT_MID"/>""")
+        append("""<rect width="$W" height="$H" fill="$WALNUT_FOOT"/>""")
 
-        // The table: felt with the light falling in the middle and the corners dropping away.
-        append("""<rect y="$boardTop" width="$W" height="$boardH" fill="url(#felt)"/>""")
-        append("""<rect y="$boardTop" width="$W" height="$boardH" fill="url(#vignette)"/>""")
+        // The table: felt laid inside a gilt frame, the way a good board is finished.
+        append("""<rect y="$boardTop" width="$W" height="$boardH" fill="url(#walnut)"/>""")
+        val inset = 11
+        append("""<rect x="$inset" y="${boardTop + inset}" width="${W - inset * 2}" height="${boardH - inset * 2}" rx="8" fill="url(#felt)"/>""")
+        append("""<rect x="$inset" y="${boardTop + inset}" width="${W - inset * 2}" height="${boardH - inset * 2}" rx="8" fill="url(#weave)"/>""")
+        append("""<rect x="$inset" y="${boardTop + inset}" width="${W - inset * 2}" height="${boardH - inset * 2}" rx="8" fill="url(#vignette)"/>""")
+        append(frame(inset.toFloat(), boardTop + inset.toFloat(), (W - inset * 2).toFloat(), (boardH - inset * 2).toFloat()))
 
         append(rail())
         append(seats())
@@ -86,8 +94,31 @@ object Preview {
         append("</svg>")
     }
 
+    /** Amiri: a classical naskh, and the single biggest change to how the game reads. */
+    private val FONT = """<style>@font-face{font-family:'Amiri';src:url('file://%s') format('truetype');}
+        text{font-family:'Amiri',serif;}</style>""".format(
+        System.getProperty("teera.font") ?: "",
+    )
+
     private fun defs() = buildString {
         append("<defs>")
+        append(FONT)
+        // A rosette from the glazed brick of the Ishtar gate, used along the frame.
+        append("""<g id="rosette">""")
+        (0 until 8).forEach { i ->
+            append("""<ellipse cx="0" cy="-5.2" rx="2.0" ry="5.2" fill="$GOLD" transform="rotate(${i * 45})"/>""")
+        }
+        append("""<circle r="2.1" fill="$GOLD_DEEP"/></g>""")
+        append("""<pattern id="weave" width="7" height="7" patternUnits="userSpaceOnUse">""")
+        append("""<rect width="7" height="7" fill="none"/>""")
+        append("""<path d="M0 7 L7 0" stroke="#000" stroke-opacity="0.07" stroke-width="1.4"/>""")
+        append("""<path d="M0 0 L7 7" stroke="#FFF" stroke-opacity="0.035" stroke-width="1.4"/></pattern>""")
+        append("""<linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">""")
+        append("""<stop offset="0%" stop-color="#F0D79A"/><stop offset="45%" stop-color="$GOLD"/>""")
+        append("""<stop offset="100%" stop-color="$GOLD_DEEP"/></linearGradient>""")
+        append("""<linearGradient id="walnut" x1="0" y1="0" x2="0" y2="1">""")
+        append("""<stop offset="0%" stop-color="$WALNUT_TOP"/><stop offset="55%" stop-color="$WALNUT"/>""")
+        append("""<stop offset="100%" stop-color="$WALNUT_FOOT"/></linearGradient>""")
         append("""<radialGradient id="felt" cx="50%" cy="42%" r="72%">""")
         append("""<stop offset="0%" stop-color="$FELT_LIGHT"/>""")
         append("""<stop offset="60%" stop-color="$FELT_MID"/>""")
@@ -103,9 +134,7 @@ object Preview {
         append("""<linearGradient id="back" x1="0" y1="0" x2="0.3" y2="1">""")
         append("""<stop offset="0%" stop-color="#8E2727"/><stop offset="100%" stop-color="#5A1414"/>""")
         append("""</linearGradient>""")
-        append("""<linearGradient id="rail" x1="0" y1="0" x2="0" y2="1">""")
-        append("""<stop offset="0%" stop-color="#3A2715"/><stop offset="100%" stop-color="#211509"/>""")
-        append("""</linearGradient>""")
+
         append("""<filter id="glow" x="-60%" y="-60%" width="220%" height="220%">""")
         append("""<feGaussianBlur stdDeviation="6" result="b"/><feMerge><feMergeNode in="b"/>""")
         append("""<feMergeNode in="SourceGraphic"/></feMerge></filter>""")
@@ -113,9 +142,24 @@ object Preview {
     }
 
     /** Scores read as a race you want to lose, so the lower number is the one in front. */
+    /** A hairline of gold inside the frame, with a rosette at each corner. */
+    private fun frame(x: Float, y: Float, w: Float, h: Float) = buildString {
+        append("""<rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="${h - 6}" rx="6" fill="none" stroke="url(#gold)" stroke-width="1.6" opacity="0.9"/>""")
+        append("""<rect x="${x + 7}" y="${y + 7}" width="${w - 14}" height="${h - 14}" rx="4" fill="none" stroke="$GOLD_DEEP" stroke-width="0.8" opacity="0.6"/>""")
+        listOf(x + 16 to y + 16, x + w - 16 to y + 16, x + 16 to y + h - 16, x + w - 16 to y + h - 16)
+            .forEach { (cx, cy) -> append("""<use href="#rosette" transform="translate($cx,$cy) scale(1.15)"/>""") }
+        // A row of smaller rosettes along the top and bottom rails of the frame.
+        var rx = x + 58
+        while (rx < x + w - 50) {
+            append("""<use href="#rosette" transform="translate($rx,${y + 9}) scale(0.55)" opacity="0.75"/>""")
+            append("""<use href="#rosette" transform="translate($rx,${y + h - 9}) scale(0.55)" opacity="0.75"/>""")
+            rx += 42
+        }
+    }
+
     private fun rail() = buildString {
-        append("""<rect width="$W" height="$RAIL_H" fill="url(#rail)"/>""")
-        append("""<rect y="${RAIL_H - 2}" width="$W" height="2" fill="$BRASS" opacity="0.35"/>""")
+        append("""<rect width="$W" height="$RAIL_H" fill="url(#walnut)"/>""")
+        append("""<rect y="${RAIL_H - 3}" width="$W" height="1.5" fill="url(#gold)" opacity="0.85"/>""")
 
         append(scorePlate(14f, 16f, "نحن", 24, leading = true))
         append(scorePlate(120f, 16f, "هم", 61, leading = false))
@@ -125,11 +169,13 @@ object Preview {
         append(label(W - 16f, 78f, "اللي يوصل يخسر", MUTED, 10, "end"))
     }
 
+    /** An engraved brass plaque, the way a score is kept on a good table. */
     private fun scorePlate(x: Float, y: Float, who: String, score: Int, leading: Boolean) = buildString {
         val colour = if (leading) PLAYABLE else "#E8907F"
-        append("""<rect x="$x" y="$y" width="96" height="58" rx="12" fill="#000" opacity="0.28"/>""")
-        append(label(x + 14, y + 24, who, MUTED, 12))
-        append(label(x + 14, y + 48, "$score", colour, 24))
+        append("""<rect x="$x" y="$y" width="98" height="60" rx="8" fill="#120B05" opacity="0.55"/>""")
+        append("""<rect x="${x + 1.5f}" y="${y + 1.5f}" width="95" height="57" rx="7" fill="none" stroke="url(#gold)" stroke-width="1.2" opacity="0.8"/>""")
+        append(label(x + 14, y + 25, who, MUTED, 15))
+        append(label(x + 14, y + 50, "$score", colour, 26))
     }
 
     private fun seats() = buildString {
@@ -140,10 +186,11 @@ object Preview {
             if (acting) {
                 append("""<circle cx="$cx" cy="$cy" r="25" fill="none" stroke="$BRASS" stroke-width="2" filter="url(#glow)"/>""")
             }
-            append("""<circle cx="$cx" cy="$cy" r="20" fill="#0B3119" stroke="${if (acting) BRASS else "#2E5B3F"}" stroke-width="1.5"/>""")
+            append("""<circle cx="$cx" cy="$cy" r="21" fill="$LAPIS"/>""")
+            append("""<circle cx="$cx" cy="$cy" r="21" fill="none" stroke="url(#gold)" stroke-width="${if (acting) 2.2 else 1.2}" opacity="${if (acting) 1 else 0.65}"/>""")
             append(label(cx, cy + 6, name.take(1), if (acting) BRASS else PARCHMENT, 17, "middle"))
             // How many bones they are holding, which is public in Teera.
-            append("""<rect x="${cx + 11}" y="${cy + 8}" width="24" height="18" rx="9" fill="$RAIL" stroke="$BRASS" stroke-opacity="0.5"/>""")
+            append("""<rect x="${cx + 11}" y="${cy + 8}" width="24" height="18" rx="9" fill="$WALNUT" stroke="$GOLD" stroke-opacity="0.6"/>""")
             append(label(cx + 23, cy + 21, "$tiles", PARCHMENT, 11, "middle"))
             append(label(cx, cy + 40, name, if (acting) BRASS else MUTED, 12, "middle"))
         }
@@ -199,8 +246,8 @@ object Preview {
 
     private fun hand(hand: List<Domino>, playable: Set<Domino>, chosen: Domino?) = buildString {
         val top = H - HAND_H
-        append("""<rect y="$top" width="$W" height="$HAND_H" fill="url(#rail)"/>""")
-        append("""<rect y="$top" width="$W" height="2" fill="$BRASS" opacity="0.35"/>""")
+        append("""<rect y="$top" width="$W" height="$HAND_H" fill="url(#walnut)"/>""")
+        append("""<rect y="$top" width="$W" height="1.5" fill="url(#gold)" opacity="0.85"/>""")
         append(label(16f, top + 26f, "دورك — اختر بول", BRASS, 14))
 
         val tileW = 46f

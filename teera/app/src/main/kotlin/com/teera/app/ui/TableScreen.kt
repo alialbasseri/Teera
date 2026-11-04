@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -35,6 +36,7 @@ import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
@@ -170,30 +172,31 @@ private fun ScoreRail(view: PlayerView, onLeave: () -> Unit) {
     val us = view.scores.getOrElse(view.yourTeam) { 0 }
     val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Felt.RailTop, Felt.RailFoot)))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        // Points are a burden here, so whoever has fewer is the one in front.
-        ScorePlate("نحن", us, leading = us <= them)
-        Spacer(Modifier.width(8.dp))
-        ScorePlate("هم", them, leading = them < us)
+    Box {
+        WalnutSurface(Modifier.matchParentSize())
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Points are a burden here, so whoever has fewer is the one in front.
+            ScorePlate("نحن", us, leading = us <= them)
+            Spacer(Modifier.width(8.dp))
+            ScorePlate("هم", them, leading = them < us)
 
-        Spacer(Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
 
-        Column(horizontalAlignment = Alignment.End) {
-            Text("جيم ${view.gameNumber}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
-            Text(
-                "المباراة لـ ${view.rules.target}",
-                color = Felt.Brass,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text("اللي يوصل يخسر", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+            Column(horizontalAlignment = Alignment.End) {
+                Text("جيم ${view.gameNumber}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "المباراة لـ ${view.rules.target}",
+                    color = Felt.Brass,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text("اللي يوصل يخسر", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(onClick = onLeave) { Text("خروج", color = Felt.Muted) }
         }
-        TextButton(onClick = onLeave) { Text("خروج", color = Felt.Muted) }
+        HorizontalDivider(color = Felt.Brass.copy(alpha = 0.85f), thickness = 1.dp, modifier = Modifier.align(Alignment.BottomStart))
     }
 }
 
@@ -201,8 +204,9 @@ private fun ScoreRail(view: PlayerView, onLeave: () -> Unit) {
 private fun ScorePlate(who: String, score: Int, leading: Boolean) {
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color.Black.copy(alpha = 0.28f))
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFF120B05).copy(alpha = 0.55f))
+            .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
             .padding(horizontal = 14.dp, vertical = 6.dp),
     ) {
         Text(who, color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
@@ -240,8 +244,12 @@ private fun OpponentRow(view: PlayerView) {
                         Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .background(Felt.Deep)
-                            .border(if (acting) 2.dp else 1.dp, tint.copy(alpha = if (acting) 1f else 0.5f), CircleShape),
+                            .background(Felt.Lapis)
+                            .border(
+                                width = if (acting) 2.dp else 1.dp,
+                                color = Felt.Brass.copy(alpha = if (acting) 1f else 0.6f),
+                                shape = CircleShape,
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
@@ -383,12 +391,10 @@ private fun Hand(
     playable: Set<Domino>,
     onTap: (Domino) -> Unit,
 ) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Felt.RailTop, Felt.RailFoot)))
-            .padding(top = 8.dp, bottom = 10.dp),
-    ) {
+    Box {
+        WalnutSurface(Modifier.matchParentSize())
+        HorizontalDivider(color = Felt.Brass.copy(alpha = 0.85f), thickness = 1.dp)
+        Column(Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp)) {
         Text(
             text = when {
                 view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
@@ -425,7 +431,8 @@ private fun Hand(
                     modifier = Modifier
                         .padding(bottom = lift)
                         .size(46.dp, 92.dp)
-                        .clickable { onTap(tile) },
+                        .clickable { onTap(tile) }
+                        .testTag("hand-tile-$tile"),
                     highlight = when {
                         picked -> Felt.Brass
                         live -> Felt.Playable.copy(alpha = 0.85f)
@@ -434,6 +441,7 @@ private fun Hand(
                     faded = view.isYourMove && !live,
                 )
             }
+        }
         }
     }
 }

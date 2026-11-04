@@ -6,14 +6,14 @@ plugins {
 
 android {
     namespace = "com.teera.app"
-    compileSdk = 35
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.teera.app"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        targetSdk = 34
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildTypes {
@@ -34,7 +34,19 @@ android {
 
     kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    // Lets the Compose screens be rendered and tapped in a plain JVM test, so an
+    // interaction bug is caught here rather than on somebody's phone.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 
     sourceSets["main"].java.srcDirs("src/main/kotlin")
     sourceSets["test"].java.srcDirs("src/test/kotlin")
@@ -44,23 +56,38 @@ android {
     }
 }
 
+// Robolectric fetches its Android runtime itself, which a sandboxed build cannot always
+// reach. Point it at a jar that is already on disk when one has been put there.
+tasks.withType<Test>().configureEach {
+    val offline = File(System.getProperty("user.home"), "robolectric-deps")
+    if (offline.isDirectory) {
+        systemProperty("robolectric.offline", "true")
+        systemProperty("robolectric.dependency.dir", offline.absolutePath)
+    }
+}
+
 dependencies {
     implementation(project(":core"))
 
-    implementation(platform("androidx.compose:compose-bom:2024.10.01"))
+    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.activity:activity-compose:1.9.3")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
+    implementation("androidx.core:core-ktx:1.13.1")
 
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+
     testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
 }

@@ -8,6 +8,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
@@ -15,15 +17,29 @@ import androidx.compose.ui.unit.sp
  * A card room, not a toy shop: deep felt, warm ivory bones, one brass accent.
  * Everything on the table is drawn from these, so a change here restyles the game.
  */
+/**
+ * Amiri, a classical naskh. A proper Arabic face is the single thing that most changes
+ * how the game reads, and it ships with the app under the Open Font Licence.
+ */
+val Amiri = FontFamily(
+    Font(com.teera.app.R.font.amiri_regular),
+    Font(com.teera.app.R.font.amiri_bold, androidx.compose.ui.text.font.FontWeight.Bold),
+)
+
 object Felt {
-    val Deep = Color(0xFF0B3119)
-    val Table = Color(0xFF14532D)
-    val TableLight = Color(0xFF1E7340)
-    val Rail = Color(0xFF2A1C10)
-    val RailTop = Color(0xFF3A2715)
-    val RailFoot = Color(0xFF211509)
-    val Muted = Color(0xFF9DB0A2)
-    val Brass = Color(0xFFE0AE4E)
+    val Deep = Color(0xFF07301C)
+    val Table = Color(0xFF0F4A2A)
+    val TableLight = Color(0xFF1A6B3C)
+
+    // The cabinet the felt is set into: walnut, with gold laid along its edges.
+    val Rail = Color(0xFF3A2616)
+    val RailTop = Color(0xFF55371F)
+    val RailFoot = Color(0xFF1E1309)
+    val GoldDeep = Color(0xFFA67C2E)
+    val GoldLit = Color(0xFFF0D79A)
+    val Lapis = Color(0xFF16355F)
+    val Muted = Color(0xFFA79274)
+    val Brass = Color(0xFFD9B166)
     val BrassDim = Color(0xFF8A6A2A)
 
     val Ivory = Color(0xFFFBF6EC)
@@ -69,21 +85,22 @@ private val LightScheme = lightColorScheme(
     error = Felt.Danger,
 )
 
-private val DominoesTypography = Typography(
-    displaySmall = TextStyle(fontSize = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp),
-    titleLarge = TextStyle(fontSize = 22.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 16.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp),
-    labelLarge = TextStyle(fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp),
-    labelSmall = TextStyle(fontSize = 11.sp, letterSpacing = 1.5.sp),
+private val TeeraTypography = Typography(
+    displayLarge = TextStyle(fontFamily = Amiri, fontSize = 52.sp, fontWeight = FontWeight.Bold),
+    displaySmall = TextStyle(fontFamily = Amiri, fontSize = 38.sp, fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontFamily = Amiri, fontSize = 25.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontFamily = Amiri, fontSize = 20.sp, fontWeight = FontWeight.Bold),
+    bodyLarge = TextStyle(fontFamily = Amiri, fontSize = 18.sp),
+    bodyMedium = TextStyle(fontFamily = Amiri, fontSize = 16.sp),
+    labelLarge = TextStyle(fontFamily = Amiri, fontSize = 17.sp, fontWeight = FontWeight.Bold),
+    labelSmall = TextStyle(fontFamily = Amiri, fontSize = 13.sp),
 )
 
 @Composable
-fun DominoesTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+fun TeeraTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = if (dark) DarkScheme else LightScheme,
-        typography = DominoesTypography,
+        typography = TeeraTypography,
         content = content,
     )
 }
