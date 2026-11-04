@@ -1,7 +1,7 @@
 package com.teera.server
 
 import com.teera.core.Room
-import com.teera.core.RuleSet
+import com.teera.core.Rules
 import io.ktor.websocket.WebSocketSession
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
@@ -29,7 +29,7 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
 
     private val rooms = ConcurrentHashMap<String, Holder>()
 
-    fun create(hostId: String, rules: RuleSet): Holder {
+    fun create(hostId: String, rules: Rules): Holder {
         var code = newCode()
         while (rooms.containsKey(code)) code = newCode()
         val holder = Holder(Room(code, hostId, rules, clock))

@@ -180,12 +180,13 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.SetRules -> room.setRules(playerId, message.rules)
         is ClientMessage.SetBot -> room.setBot(playerId, message.seat, message.enabled, message.difficulty)
         is ClientMessage.Ready -> room.setReady(playerId, message.ready)
+        is ClientMessage.TakeSeat -> room.takeSeat(playerId, message.seat)
         ClientMessage.StartMatch -> {
             holder.nextBotMoveAt = System.currentTimeMillis() + BOT_THINK_MS
             room.start(playerId)
         }
         is ClientMessage.MakeMove -> room.move(playerId, message.move)
-        ClientMessage.NextRound -> room.nextRound(playerId)
+        ClientMessage.NextGame -> room.nextGame(playerId)
         ClientMessage.LeaveRoom -> room.leave(playerId)
         is ClientMessage.Chat -> room.chat(playerId, message.text)?.let { chat ->
             Room.Output(direct = room.humanIds().map { it to chat })

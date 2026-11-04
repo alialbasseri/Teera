@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,7 +40,6 @@ fun MenuScreen(
     onHost: () -> Unit,
     onJoin: (String) -> Unit,
     onSolo: () -> Unit,
-    onRules: () -> Unit,
     connecting: Boolean,
 ) {
     var code by remember { mutableStateOf("") }
@@ -50,37 +48,37 @@ fun MenuScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(Felt.TableLight, Felt.Deep)))
-            .padding(28.dp),
+            .padding(26.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            DominoTile(Domino(6, 6), Modifier.size(46.dp, 88.dp))
-            DominoTile(Domino(3, 5), Modifier.size(46.dp, 88.dp))
-            DominoTile(null, Modifier.size(46.dp, 88.dp), faceUp = false)
+        Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+            DominoTile(Domino(6, 6), Modifier.size(44.dp, 84.dp))
+            DominoTile(Domino(0, 1), Modifier.size(44.dp, 84.dp))
+            DominoTile(null, Modifier.size(44.dp, 84.dp), faceUp = false)
         }
 
-        Spacer(Modifier.height(20.dp))
-        Text("DOMINOES", style = MaterialTheme.typography.displaySmall, color = Felt.Brass)
+        Spacer(Modifier.height(18.dp))
+        Text("طيرة", style = MaterialTheme.typography.displaySmall, color = Felt.Brass)
         Text(
-            "Play with your friends, by your own rules",
+            "دومينا بأربعة، فريقين، وبقوانينكم",
             style = MaterialTheme.typography.bodyMedium,
             color = Felt.IvoryShade,
             textAlign = TextAlign.Center,
         )
 
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(26.dp))
 
         OutlinedTextField(
             value = playerName,
             onValueChange = { onNameChange(it.take(16)) },
-            label = { Text("Your name") },
+            label = { Text("اسمك") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(18.dp))
 
         Button(
             onClick = onHost,
@@ -88,16 +86,19 @@ fun MenuScreen(
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
         ) {
-            Text(if (connecting) "Connecting…" else "Create a room", style = MaterialTheme.typography.labelLarge)
+            Text(
+                if (connecting) "يحاول يتصل…" else "افتح غرفة",
+                style = MaterialTheme.typography.labelLarge,
+            )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
 
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = code,
                 onValueChange = { code = it.uppercase().filter(Char::isLetterOrDigit).take(4) },
-                label = { Text("Room code") },
+                label = { Text("كود الغرفة") },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
@@ -105,26 +106,18 @@ fun MenuScreen(
                 ),
                 modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(10.dp))
             Button(
                 onClick = { onJoin(code) },
                 enabled = code.length == 4 && !connecting,
                 modifier = Modifier.height(56.dp),
-            ) {
-                Text("Join")
-            }
+            ) { Text("ادخل") }
         }
 
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(22.dp))
 
         OutlinedButton(onClick = onSolo, modifier = Modifier.fillMaxWidth()) {
-            Text("Play offline against bots")
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        TextButton(onClick = onRules) {
-            Text("House rules", color = Felt.Brass)
+            Text("العب ضد البوتات")
         }
     }
 }

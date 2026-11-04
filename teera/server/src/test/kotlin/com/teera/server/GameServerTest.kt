@@ -3,8 +3,9 @@ package com.teera.server
 import com.teera.core.ClientMessage
 import com.teera.core.Difficulty
 import com.teera.core.Move
+import com.teera.core.Pack
 import com.teera.core.Protocol
-import com.teera.core.RuleSet
+import com.teera.core.Rules
 import com.teera.core.ServerMessage
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
@@ -52,7 +53,7 @@ class GameServerTest {
         val host = ws.webSocketSession("/ws")
         host.say(ClientMessage.Hello("Ali"))
         host.await<ServerMessage.Welcome>()
-        host.say(ClientMessage.CreateRoom(RuleSet.CLASSIC_DRAW))
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = host.await<ServerMessage.RoomUpdate>().room.code
         assertEquals(RoomRegistry.CODE_LENGTH, code.length)
 
@@ -89,7 +90,7 @@ class GameServerTest {
         val host = ws.webSocketSession("/ws")
         host.say(ClientMessage.Hello("Ali"))
         host.await<ServerMessage.Welcome>()
-        host.say(ClientMessage.CreateRoom(RuleSet.CLASSIC_DRAW))
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = host.await<ServerMessage.RoomUpdate>().room.code
 
         val guest = ws.webSocketSession("/ws")
@@ -108,10 +109,10 @@ class GameServerTest {
 
         assertEquals(0, hostView.yourSeat)
         assertEquals(1, guestView.yourSeat)
-        assertEquals(7, hostView.hand.size)
-        assertEquals(7, guestView.hand.size)
+        assertEquals(Pack.HAND_SIZE, hostView.hand.size)
+        assertEquals(Pack.HAND_SIZE, guestView.hand.size)
         assertTrue(hostView.hand.intersect(guestView.hand.toSet()).isEmpty(), "hands must not overlap")
-        assertEquals(listOf(7, 7, 7, 7), hostView.handCounts)
+        assertEquals(List(Pack.PLAYERS) { Pack.HAND_SIZE }, hostView.handCounts)
 
         host.close()
         guest.close()
@@ -125,7 +126,7 @@ class GameServerTest {
         val host = ws.webSocketSession("/ws")
         host.say(ClientMessage.Hello("Ali"))
         host.await<ServerMessage.Welcome>()
-        host.say(ClientMessage.CreateRoom(RuleSet.CLASSIC_DRAW))
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         host.await<ServerMessage.RoomUpdate>()
         (1..3).forEach { host.say(ClientMessage.SetBot(it, enabled = true, difficulty = Difficulty.NORMAL)) }
         host.await<ServerMessage.RoomUpdate> { it.room.seats.count { s -> s.isBot } == 3 }
@@ -133,8 +134,8 @@ class GameServerTest {
         val view = host.await<ServerMessage.GameUpdate>().view
 
         // Claim a tile that is not in hand: the referee lives on the server, not the phone.
-        val notHeld = com.teera.core.DominoSet.DOUBLE_SIX.tiles().first { it !in view.hand }
-        host.say(ClientMessage.MakeMove(Move.Play(notHeld, com.teera.core.End.RIGHT)))
+        val notHeld = Pack.tiles.first { it !in view.hand }
+        host.say(ClientMessage.MakeMove(Move.Play(notHeld, null)))
         val rejected = host.await<ServerMessage.MoveRejected>()
         assertNotNull(rejected.view)
 
@@ -149,7 +150,7 @@ class GameServerTest {
         val host = ws.webSocketSession("/ws")
         host.say(ClientMessage.Hello("Ali"))
         host.await<ServerMessage.Welcome>()
-        host.say(ClientMessage.CreateRoom(RuleSet.CLASSIC_DRAW))
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         host.await<ServerMessage.RoomUpdate>()
         (1..3).forEach { host.say(ClientMessage.SetBot(it, enabled = true, difficulty = Difficulty.NORMAL)) }
         host.await<ServerMessage.RoomUpdate> { it.room.seats.count { s -> s.isBot } == 3 }
@@ -162,7 +163,7 @@ class GameServerTest {
         while (tilesOnTable < 4) {
             val view = host.await<ServerMessage.GameUpdate>().view
             tilesOnTable = maxOf(tilesOnTable, view.board.size)
-            if (view.isYourTurn) {
+            if (view.isYourMove) {
                 val move = view.legalMoves.firstOrNull() ?: break
                 host.say(ClientMessage.MakeMove(move))
                 humanPlays++

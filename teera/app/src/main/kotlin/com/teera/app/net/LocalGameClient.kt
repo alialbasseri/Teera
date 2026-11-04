@@ -2,7 +2,7 @@ package com.teera.app.net
 
 import com.teera.core.ClientMessage
 import com.teera.core.Room
-import com.teera.core.RuleSet
+import com.teera.core.Rules
 import com.teera.core.ServerMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -23,7 +23,7 @@ class LocalGameClient(
     private val scope: CoroutineScope,
     private val playerId: String,
     private val playerName: String,
-    rules: RuleSet = RuleSet.CLASSIC_DRAW,
+    rules: Rules = Rules.DEFAULT,
     private val botThinkMillis: Long = 750L,
 ) : GameClient {
 
@@ -61,9 +61,10 @@ class LocalGameClient(
             is ClientMessage.SetRules -> room.setRules(playerId, message.rules)
             is ClientMessage.SetBot -> room.setBot(playerId, message.seat, message.enabled, message.difficulty)
             is ClientMessage.Ready -> room.setReady(playerId, message.ready)
+            is ClientMessage.TakeSeat -> room.takeSeat(playerId, message.seat)
             ClientMessage.StartMatch -> room.start(playerId)
             is ClientMessage.MakeMove -> room.move(playerId, message.move)
-            ClientMessage.NextRound -> room.nextRound(playerId)
+            ClientMessage.NextGame -> room.nextGame(playerId)
             is ClientMessage.Chat -> room.chat(playerId, message.text)
                 ?.let { Room.Output(direct = listOf(playerId to it)) } ?: Room.Output.NOTHING
             ClientMessage.LeaveRoom -> room.leave(playerId)

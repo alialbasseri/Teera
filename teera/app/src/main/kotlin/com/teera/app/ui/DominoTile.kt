@@ -26,6 +26,22 @@ import kotlin.math.min
  * in one place.
  */
 
+/**
+ * The colour each number is drilled in, following the coloured sets people actually
+ * play with. The count and arrangement of the pips still carries the meaning, so the
+ * colour is a help rather than the signal — a player who cannot tell them apart can
+ * still read every tile.
+ */
+fun pipColour(value: Int): Color = when (value) {
+    1 -> Color(0xFF35A8DE)   // light blue
+    2 -> Color(0xFF1F7A3A)   // dark green
+    3 -> Color(0xFFC9437F)   // pink
+    4 -> Color(0xFF8C8176)   // taupe
+    5 -> Color(0xFF2B4C9B)   // navy
+    6 -> Color(0xFFD9A21B)   // yellow
+    else -> Felt.Pip
+}
+
 /** Pip positions for a face, as fractions of the half-tile they sit in. */
 fun pipLayout(value: Int): List<Offset> {
     val a = 0.26f
@@ -55,13 +71,18 @@ fun pipLayout(value: Int): List<Offset> {
     }
 }
 
-private fun DrawScope.drawFace(value: Int, area: Rect, pipColor: Color) {
+private fun DrawScope.drawFace(value: Int, area: Rect) {
     val radius = min(area.width, area.height) * 0.085f
+    val colour = pipColour(value)
     for (pip in pipLayout(value)) {
         val centre = Offset(area.left + pip.x * area.width, area.top + pip.y * area.height)
-        // A hint of a drilled hole: dark spot over a soft highlight below it.
-        drawCircle(Felt.IvoryShade, radius * 1.12f, centre.copy(y = centre.y + radius * 0.18f))
-        drawCircle(pipColor, radius, centre)
+        // A hint of a drilled hole: the spot sitting over its own shadow.
+        drawCircle(Color.Black.copy(alpha = 0.22f), radius * 1.15f, centre.copy(y = centre.y + radius * 0.2f))
+        drawCircle(colour, radius, centre)
+        drawCircle(Color.White.copy(alpha = 0.3f), radius * 0.34f, centre.copy(
+            x = centre.x - radius * 0.3f,
+            y = centre.y - radius * 0.32f,
+        ))
     }
 }
 
@@ -130,8 +151,8 @@ fun DrawScope.drawDomino(
             end = Offset(width * 0.88f, height / 2f),
             strokeWidth = divider,
         )
-        drawFace(faceA ?: 0, Rect(0f, 0f, width, height / 2f), Felt.Pip)
-        drawFace(faceB ?: 0, Rect(0f, height / 2f, width, height), Felt.Pip)
+        drawFace(faceA ?: 0, Rect(0f, 0f, width, height / 2f))
+        drawFace(faceB ?: 0, Rect(0f, height / 2f, width, height))
     } else {
         drawLine(
             color = Felt.Pip.copy(alpha = 0.55f),
@@ -139,8 +160,8 @@ fun DrawScope.drawDomino(
             end = Offset(width / 2f, height * 0.88f),
             strokeWidth = divider,
         )
-        drawFace(faceA ?: 0, Rect(0f, 0f, width / 2f, height), Felt.Pip)
-        drawFace(faceB ?: 0, Rect(width / 2f, 0f, width, height), Felt.Pip)
+        drawFace(faceA ?: 0, Rect(0f, 0f, width / 2f, height))
+        drawFace(faceB ?: 0, Rect(width / 2f, 0f, width, height))
     }
 
     if (dimmed) {

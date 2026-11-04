@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,10 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,157 +31,210 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.teera.app.ui.theme.Felt
+import com.teera.core.Arm
 import com.teera.core.Domino
-import com.teera.core.End
+import com.teera.core.GameEnd
 import com.teera.core.Move
 import com.teera.core.Phase
 import com.teera.core.PlayerView
-import com.teera.core.RoundEndReason
+import com.teera.core.teamOf
+
+/** What the rescuer has chosen to do for the seat stuck after them. */
+private enum class RescueMode { GIVE, PLAY_FOR }
 
 /**
  * The table.
  *
- * Everything drawn here comes from the [PlayerView] the referee sent, including which
- * moves are legal, so the screen cannot offer a move the server would refuse.
+ * Everything drawn here comes from the [PlayerView] the referee sent, the list of legal
+ * moves included, so the screen can never offer a move the server would refuse.
  */
 @Composable
 fun TableScreen(
     view: PlayerView,
     onMove: (Move) -> Unit,
-    onNextRound: () -> Unit,
+    onNextGame: () -> Unit,
     onLeave: () -> Unit,
 ) {
-    var selected by remember(view.roundNumber) { mutableStateOf<Domino?>(null) }
+    var selected by remember(view.gameNumber, view.board.size) { mutableStateOf<Domino?>(null) }
+    var rescueMode by remember(view.stuckSeat) { mutableStateOf<RescueMode?>(null) }
 
     val plays = view.legalMoves.filterIsInstance<Move.Play>()
-    val playableTiles = plays.map { it.domino }.toSet()
-    val endsFor = { tile: Domino -> plays.filter { it.domino == tile }.map { it.end }.toSet() }
+    val playFors = view.legalMoves.filterIsInstance<Move.PlayFor>()
+    val gives = view.legalMoves.filterIsInstance<Move.Give>()
+
+    /** Where a chosen tile may go, which is empty while the four sides are being closed. */
+    fun armsFor(tile: Domino): List<Arm> = when {
+        view.phase == Phase.RESCUE -> playFors.filter { it.domino == tile }.map { it.arm }
+        else -> plays.filter { it.domino == tile }.mapNotNull { it.arm }
+    }
+
+    fun lay(tile: Domino, arm: Arm?) {
+        if (view.phase == Phase.RESCUE) {
+            onMove(Move.PlayFor(tile, arm ?: Arm.NORTH))
+        } else {
+            onMove(Move.Play(tile, arm))
+        }
+        selected = null
+        rescueMode = null
+    }
+
+    fun tapTile(tile: Domino) {
+        if (view.phase == Phase.RESCUE && rescueMode == RescueMode.GIVE) {
+            if (gives.any { it.domino == tile }) {
+                onMove(Move.Give(tile))
+                rescueMode = null
+            }
+            return
+        }
+        val arms = armsFor(tile)
+        when {
+            arms.isEmpty() && playableNow(view, tile, plays, playFors, rescueMode) -> lay(tile, null)
+            arms.size == 1 -> lay(tile, arms.first())
+            arms.size > 1 -> selected = if (selected == tile) null else tile
+            else -> selected = tile
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
-        ScoreBar(view, onLeave)
-
+        ScoreRail(view, onLeave)
         OpponentRow(view)
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             BoardView(
                 board = view.board,
                 modifier = Modifier.fillMaxSize(),
-                liveEnds = selected?.let(endsFor) ?: emptySet(),
+                liveArms = selected?.let { armsFor(it).toSet() } ?: emptySet(),
+                onArmTapped = { arm -> selected?.let { lay(it, arm) } },
             )
 
-            if (view.isYourTurn && plays.isEmpty()) {
-                Box(Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)) {
-                    StuckControls(view, onMove)
-                }
-            }
+            Prompt(
+                view = view,
+                rescueMode = rescueMode,
+                onRescueMode = { rescueMode = it },
+                onMove = onMove,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+            )
         }
 
-        HandRow(
+        Hand(
             view = view,
             selected = selected,
-            playable = playableTiles,
-            onSelect = { tile ->
-                val ends = endsFor(tile)
-                when {
-                    !view.isYourTurn -> selected = tile
-                    ends.size == 1 -> { onMove(Move.Play(tile, ends.first())); selected = null }
-                    ends.size > 1 -> selected = if (selected == tile) null else tile
-                    else -> selected = tile
-                }
-            },
+            playable = handHighlights(view, plays, playFors, gives, rescueMode),
+            onTap = ::tapTile,
         )
-
-        // A bone that fits at both ends needs the player to say which.
-        val choice = selected?.takeIf { view.isYourTurn && endsFor(it).size > 1 }
-        if (choice != null) {
-            EndChooser(
-                left = view.board.leftEnd,
-                right = view.board.rightEnd,
-                onPick = { end -> onMove(Move.Play(choice, end)); selected = null },
-                onCancel = { selected = null },
-            )
-        }
     }
 
-    if (view.phase == Phase.ROUND_OVER || view.phase == Phase.MATCH_OVER) {
-        RoundSummary(view, onNextRound, onLeave)
+    if (view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER) {
+        GameSummary(view, onNextGame, onLeave)
     }
 }
 
+private fun playableNow(
+    view: PlayerView,
+    tile: Domino,
+    plays: List<Move.Play>,
+    playFors: List<Move.PlayFor>,
+    rescueMode: RescueMode?,
+): Boolean = if (view.phase == Phase.RESCUE && rescueMode == RescueMode.PLAY_FOR) {
+    playFors.any { it.domino == tile }
+} else {
+    plays.any { it.domino == tile }
+}
+
+/** Which tiles in hand are worth lighting up right now. */
+private fun handHighlights(
+    view: PlayerView,
+    plays: List<Move.Play>,
+    playFors: List<Move.PlayFor>,
+    gives: List<Move.Give>,
+    rescueMode: RescueMode?,
+): Set<Domino> = when {
+    view.phase == Phase.RESCUE && rescueMode == RescueMode.GIVE -> gives.map { it.domino }.toSet()
+    view.phase == Phase.RESCUE && rescueMode == RescueMode.PLAY_FOR -> playFors.map { it.domino }.toSet()
+    view.phase == Phase.RESCUE -> emptySet()
+    else -> plays.map { it.domino }.toSet()
+}
+
 @Composable
-private fun ScoreBar(view: PlayerView, onLeave: () -> Unit) {
+private fun ScoreRail(view: PlayerView, onLeave: () -> Unit) {
+    val us = view.scores.getOrElse(view.yourTeam) { 0 }
+    val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
+
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Felt.Rail)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().background(Felt.Rail).padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
-                if (view.rules.partners) "Us ${view.scores.getOrElse(view.yourSeat % 2) { 0 }}"
-                else "You ${view.scores.getOrElse(view.yourSeat) { 0 }}",
-                color = Felt.Brass,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                if (view.rules.partners) "Them ${view.scores.getOrElse((view.yourSeat + 1) % 2) { 0 }}"
-                else view.scores.withIndex()
-                    .filter { it.index != view.yourSeat }
-                    .joinToString(" · ") { "${it.value}" },
-                color = Felt.IvoryShade,
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            // Scores count against you here, so the lower number is the one in front.
+            Text("نحن  $us", color = if (us > them) Felt.Danger else Felt.Playable,
+                style = MaterialTheme.typography.titleMedium)
+            Text("هم  $them", color = Felt.IvoryShade, style = MaterialTheme.typography.bodyMedium)
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("ROUND ${view.roundNumber}", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
-            Text("to ${view.rules.targetScore}", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
+            Text("جيم ${view.gameNumber}", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
+            Text("لـ ${view.rules.target}", color = Felt.Brass, style = MaterialTheme.typography.labelSmall)
         }
-        Spacer(Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text("BONEYARD", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
-            Text("${view.boneyardCount}", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)
+        if (view.alerts.any { it > 0 }) {
+            Spacer(Modifier.width(10.dp))
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("ألرت", color = Felt.IvoryShade, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    "${view.alerts.getOrElse(view.yourTeam) { 0 }}-${view.alerts.getOrElse(1 - view.yourTeam) { 0 }}",
+                    color = Felt.Danger,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
-        Spacer(Modifier.width(10.dp))
-        TextButton(onClick = onLeave) { Text("Exit", color = Felt.IvoryShade) }
+        TextButton(onClick = onLeave) { Text("خروج", color = Felt.IvoryShade) }
     }
 }
 
-/** The other seats, with a face-down fan showing how close each is to going out. */
 @Composable
 private fun OpponentRow(view: PlayerView) {
-    val others = view.seats.filter { it.seat != view.yourSeat }
+    // Seated in turn order starting from your left, so the table reads the way it sits.
+    val others = (1..3).map { (view.yourSeat + it) % 4 }
+
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
         others.forEach { seat ->
-            val onTurn = seat.seat == view.turn && view.phase == Phase.IN_ROUND
+            val acting = seat == view.actingSeat
+            val partner = teamOf(seat) == view.yourTeam
+            val stuck = seat == view.stuckSeat
+
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row {
-                    val count = view.handCounts.getOrElse(seat.seat) { 0 }
-                    repeat(count.coerceAtMost(7)) { index ->
+                    repeat(view.handCounts.getOrElse(seat) { 0 }.coerceAtMost(8)) { index ->
                         DominoTile(
                             null,
-                            Modifier
-                                .size(13.dp, 24.dp)
-                                .offset(x = (-4 * index).dp),
+                            Modifier.size(12.dp, 22.dp).offset(x = (-3 * index).dp),
                             faceUp = false,
                         )
                     }
                 }
                 Text(
-                    seat.name,
-                    color = if (onTurn) Felt.Brass else Felt.IvoryShade,
+                    view.seatInfo(seat)?.name.orEmpty().ifEmpty { "لاعب" },
+                    color = when {
+                        acting -> Felt.Brass
+                        partner -> Felt.Playable
+                        else -> Felt.IvoryShade
+                    },
                     style = MaterialTheme.typography.labelSmall,
                 )
                 Text(
-                    "${view.handCounts.getOrElse(seat.seat) { 0 }}" +
-                        if (view.rules.partners && seat.seat % 2 == view.yourSeat % 2) " · partner" else "",
-                    color = if (onTurn) Felt.Brass else Felt.IvoryShade.copy(alpha = 0.7f),
+                    when {
+                        stuck -> "مسكّر عليه"
+                        partner -> "شريكك · ${view.handCounts.getOrElse(seat) { 0 }}"
+                        else -> "${view.handCounts.getOrElse(seat) { 0 }}"
+                    },
+                    color = if (stuck) Felt.Danger else Felt.IvoryShade.copy(alpha = 0.7f),
                     style = MaterialTheme.typography.labelSmall,
                 )
             }
@@ -186,51 +242,140 @@ private fun OpponentRow(view: PlayerView) {
     }
 }
 
+/** The one thing the table is waiting for, said plainly. */
 @Composable
-private fun HandRow(
+private fun Prompt(
+    view: PlayerView,
+    rescueMode: RescueMode?,
+    onRescueMode: (RescueMode?) -> Unit,
+    onMove: (Move) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val waitingOn = view.actingSeat?.let { view.seatInfo(it)?.name } ?: ""
+
+    Box(modifier) {
+        when {
+            view.phase == Phase.TEERA_OFFER && view.isYourMove -> Panel {
+                Text(
+                    if (view.handPips == 0) "تقدر تطير بصفر" else "تقدر تطير بواحد",
+                    color = Felt.Parchment,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "الطيرة تنهي الجيم بدون اكس",
+                    color = Felt.IvoryShade,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { onMove(Move.Teera) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
+                    ) { Text("طيّر") }
+                    OutlinedButton(onClick = { onMove(Move.CarryOn) }) { Text("كمّل للاكس") }
+                }
+            }
+
+            view.phase == Phase.REDEAL_OFFER && view.isYourMove -> Panel {
+                Text("بيدك أربع دبلات", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Button(
+                        onClick = { onMove(Move.Redeal) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
+                    ) { Text("أعد الخلط") }
+                    OutlinedButton(onClick = { onMove(Move.KeepHand) }) { Text("كمّل") }
+                }
+            }
+
+            view.phase == Phase.RESCUE && view.isYourMove -> Panel {
+                val stuckName = view.stuckSeat?.let { view.seatInfo(it)?.name }.orEmpty()
+                Text("$stuckName مسكّر عليه", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)
+                when (rescueMode) {
+                    null -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Button(
+                            onClick = { onRescueMode(RescueMode.PLAY_FOR) },
+                            enabled = view.legalMoves.any { it is Move.PlayFor },
+                            colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
+                        ) { Text("العب بداله") }
+                        OutlinedButton(onClick = { onRescueMode(RescueMode.GIVE) }) { Text("انطيه بول") }
+                    }
+                    RescueMode.GIVE -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("اختر البول اللي تنطيه", color = Felt.IvoryShade)
+                        TextButton(onClick = { onRescueMode(null) }) { Text("رجوع", color = Felt.Brass) }
+                    }
+                    RescueMode.PLAY_FOR -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("اختر البول اللي تلعبه", color = Felt.IvoryShade)
+                        TextButton(onClick = { onRescueMode(null) }) { Text("رجوع", color = Felt.Brass) }
+                    }
+                }
+            }
+
+            view.phase == Phase.RESCUE && view.stuckSeat == view.yourSeat -> Panel {
+                Text("مسكّر عليك", color = Felt.Danger, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "$waitingOn إما ينطيك بول أو يلعب بدالك",
+                    color = Felt.IvoryShade,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+
+            else -> Unit
+        }
+    }
+}
+
+@Composable
+private fun Panel(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Felt.Deep.copy(alpha = 0.93f))
+            .padding(horizontal = 18.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) { content() }
+}
+
+@Composable
+private fun Hand(
     view: PlayerView,
     selected: Domino?,
     playable: Set<Domino>,
-    onSelect: (Domino) -> Unit,
+    onTap: (Domino) -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Felt.Rail)
-            .padding(vertical = 10.dp),
-    ) {
+    Column(Modifier.fillMaxWidth().background(Felt.Rail).padding(vertical = 8.dp)) {
         Text(
             text = when {
-                view.phase != Phase.IN_ROUND -> " "
-                view.isYourTurn && playable.isEmpty() -> "No move — draw or pass"
-                view.isYourTurn -> "Your turn"
-                else -> "${view.seatInfo(view.turn)?.name ?: "Someone"} is thinking…"
+                view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
+                view.isYourMove && view.board.isEmpty -> "افتح الجيم بدبل"
+                view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
+                view.isYourMove -> "دورك"
+                else -> "${view.actingSeat?.let { view.seatInfo(it)?.name }.orEmpty()} يفكّر…"
             },
-            color = if (view.isYourTurn) Felt.Brass else Felt.IvoryShade,
+            color = if (view.isYourMove) Felt.Brass else Felt.IvoryShade,
             style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
         )
 
         LazyRow(
-            modifier = Modifier.fillMaxWidth().height(104.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp),
+            modifier = Modifier.fillMaxWidth().height(100.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             items(view.hand.size) { index ->
                 val tile = view.hand[index]
-                val isPlayable = tile in playable
+                val live = tile in playable
                 DominoTile(
                     domino = tile,
                     modifier = Modifier
-                        .size(46.dp, if (selected == tile) 96.dp else 88.dp)
-                        .clickable { onSelect(tile) },
+                        .size(44.dp, if (selected == tile) 94.dp else 86.dp)
+                        .clickable { onTap(tile) },
                     highlight = when {
                         selected == tile -> Felt.Brass
-                        isPlayable && view.isYourTurn -> Felt.Playable.copy(alpha = 0.8f)
+                        live -> Felt.Playable.copy(alpha = 0.85f)
                         else -> null
                     },
-                    dimmed = view.isYourTurn && !isPlayable,
+                    dimmed = view.isYourMove && !live,
                 )
             }
         }
@@ -238,44 +383,10 @@ private fun HandRow(
 }
 
 @Composable
-private fun StuckControls(view: PlayerView, onMove: (Move) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        if (view.legalMoves.contains(Move.Draw)) {
-            Button(
-                onClick = { onMove(Move.Draw) },
-                colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
-            ) {
-                Text("Draw (${view.boneyardCount})")
-            }
-        }
-        if (view.legalMoves.contains(Move.Pass)) {
-            Button(onClick = { onMove(Move.Pass) }) { Text("Pass") }
-        }
-    }
-}
-
-@Composable
-private fun EndChooser(left: Int?, right: Int?, onPick: (End) -> Unit, onCancel: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Felt.Deep)
-            .padding(12.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Button(onClick = { onPick(End.LEFT) }) { Text("Play on the $left end") }
-        Button(onClick = { onPick(End.RIGHT) }) { Text("Play on the $right end") }
-        TextButton(onClick = onCancel) { Text("Cancel", color = Felt.IvoryShade) }
-    }
-}
-
-@Composable
-private fun RoundSummary(view: PlayerView, onNextRound: () -> Unit, onLeave: () -> Unit) {
-    val result = view.lastRound
+private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () -> Unit) {
+    val result = view.lastGame
     val matchOver = view.phase == Phase.MATCH_OVER
-    val myKey = if (view.rules.partners) view.yourSeat % 2 else view.yourSeat
-    val wonMatch = view.matchWinner == myKey
+    val weLost = view.losingTeam == view.yourTeam
 
     AlertDialog(
         onDismissRequest = {},
@@ -283,11 +394,12 @@ private fun RoundSummary(view: PlayerView, onNextRound: () -> Unit, onLeave: () 
         title = {
             Text(
                 when {
-                    matchOver && wonMatch -> "You win the match"
-                    matchOver -> "Match over"
-                    result?.winnerSeat == view.yourSeat -> "You went out"
-                    result?.reason == RoundEndReason.BLOCKED -> "Blocked"
-                    else -> "Round over"
+                    matchOver && weLost -> "خسرتوا المباراة"
+                    matchOver -> "فزتوا بالمباراة"
+                    result?.end == GameEnd.BLOCKED -> "الجيم انسدّ"
+                    result?.end == GameEnd.TEERA -> "طيرة"
+                    result?.winnerSeat == view.yourSeat -> "خلّصت — اكس"
+                    else -> "خلص الجيم"
                 },
                 color = Felt.Brass,
             )
@@ -295,32 +407,39 @@ private fun RoundSummary(view: PlayerView, onNextRound: () -> Unit, onLeave: () 
         text = {
             Column {
                 if (result != null) {
-                    val winnerName = result.winnerSeat?.let { view.seatInfo(it)?.name } ?: "Nobody"
-                    Text("$winnerName took ${result.points} points", color = Felt.Parchment)
+                    val winner = result.winnerSeat?.let { view.seatInfo(it)?.name } ?: "لا أحد"
+                    Text(
+                        when (result.end) {
+                            GameEnd.BLOCKED -> "ما تسجّلت نقاط، والفتحة لـ $winner"
+                            GameEnd.TEERA -> "$winner طيّر بـ ${result.handPips.getOrElse(result.winnerSeat ?: 0) { 0 }}"
+                            GameEnd.X -> "$winner خلّص وأخذ اكس"
+                        },
+                        color = Felt.Parchment,
+                    )
                     Spacer(Modifier.height(8.dp))
-                    result.handPips.forEachIndexed { seat, pips ->
-                        Text(
-                            "${view.seatInfo(seat)?.name ?: "Seat ${seat + 1}"}: $pips spots left",
-                            color = Felt.IvoryShade,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
+                    Text(
+                        "هذا الجيم:  نحن ${result.scored.getOrElse(view.yourTeam) { 0 }}" +
+                            "   ·   هم ${result.scored.getOrElse(1 - view.yourTeam) { 0 }}",
+                        color = Felt.IvoryShade,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    view.scores.mapIndexed { key, score ->
-                        if (view.rules.partners) "Team ${if (key == 0) "A" else "B"}: $score" else "Seat ${key + 1}: $score"
-                    }.joinToString("   "),
+                    "المجموع:  نحن ${view.scores.getOrElse(view.yourTeam) { 0 }}" +
+                        "   ·   هم ${view.scores.getOrElse(1 - view.yourTeam) { 0 }}",
                     color = Felt.Parchment,
+                    textAlign = TextAlign.Center,
                 )
             }
         },
         confirmButton = {
             if (matchOver) {
-                TextButton(onClick = onLeave) { Text("Back to the menu", color = Felt.Brass) }
+                TextButton(onClick = onLeave) { Text("رجوع للقائمة", color = Felt.Brass) }
             } else {
-                TextButton(onClick = onNextRound) { Text("Deal the next round", color = Felt.Brass) }
+                TextButton(onClick = onNextGame) { Text("الجيم الجاي", color = Felt.Brass) }
             }
         },
     )
 }
+

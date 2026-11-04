@@ -10,9 +10,10 @@ import com.teera.app.net.WebSocketGameClient
 import com.teera.core.ClientMessage
 import com.teera.core.Difficulty
 import com.teera.core.Move
+import com.teera.core.Pack
 import com.teera.core.PlayerView
 import com.teera.core.RoomInfo
-import com.teera.core.RuleSet
+import com.teera.core.Rules
 import com.teera.core.ServerMessage
 import java.util.UUID
 import kotlinx.coroutines.Job
@@ -22,7 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class Screen { Menu, Rules, Lobby, Table }
+enum class Screen { Menu, Lobby, Table }
 
 data class ChatLine(val name: String, val text: String)
 
@@ -35,7 +36,7 @@ data class UiState(
     val view: PlayerView? = null,
     val chat: List<ChatLine> = emptyList(),
     /** Whatever the host is editing before the deal; the table's rules once it starts. */
-    val draftRules: RuleSet = RuleSet.CLASSIC_DRAW,
+    val draftRules: Rules = Rules.DEFAULT,
     val notice: String? = null,
     val connecting: Boolean = false,
     val offline: Boolean = false,
@@ -85,12 +86,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(serverUrl = url) }
     }
 
-    fun setDraftRules(rules: RuleSet) {
+    fun setDraftRules(rules: Rules) {
         _state.update { it.copy(draftRules = rules) }
         client?.send(ClientMessage.SetRules(rules))
     }
-
-    fun openRules() = _state.update { it.copy(screen = Screen.Rules) }
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
@@ -107,12 +106,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A table against bots, refereed in this process. */
-    fun playOffline(bots: Int = 3, difficulty: Difficulty = Difficulty.NORMAL) {
+    fun playOffline(difficulty: Difficulty = Difficulty.NORMAL) {
         val rules = _state.value.draftRules
         attach(LocalGameClient(viewModelScope, playerId, _state.value.playerName, rules))
         _state.update { it.copy(offline = true, connecting = false) }
-        repeat(bots.coerceAtMost(rules.playerCount - 1)) { index ->
-            client?.send(ClientMessage.SetBot(index + 1, enabled = true, difficulty = difficulty))
+        for (seat in 1 until Pack.PLAYERS) {
+            client?.send(ClientMessage.SetBot(seat, enabled = true, difficulty = difficulty))
         }
         client?.send(ClientMessage.StartMatch)
     }
@@ -181,7 +180,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun play(move: Move) = client?.send(ClientMessage.MakeMove(move))
 
-    fun nextRound() = client?.send(ClientMessage.NextRound)
+    fun nextGame() = client?.send(ClientMessage.NextGame)
+
+    fun takeSeat(seat: Int) = client?.send(ClientMessage.TakeSeat(seat))
 
     fun chat(text: String) = client?.send(ClientMessage.Chat(text))
 
@@ -197,9 +198,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun back() {
         when (_state.value.screen) {
-            Screen.Rules -> _state.update {
-                it.copy(screen = if (it.room != null) Screen.Lobby else Screen.Menu)
-            }
             Screen.Lobby, Screen.Table -> leave()
             Screen.Menu -> Unit
         }
@@ -218,13 +216,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 }
 
 private fun com.teera.core.Rejection.explain(): String = when (this) {
-    com.teera.core.Rejection.NOT_YOUR_TURN -> "Wait for your turn"
-    com.teera.core.Rejection.ROUND_NOT_RUNNING -> "That round is over"
-    com.teera.core.Rejection.TILE_NOT_IN_HAND -> "You are not holding that bone"
-    com.teera.core.Rejection.TILE_DOES_NOT_MATCH -> "That bone does not match the end"
-    com.teera.core.Rejection.MUST_PLAY_OPENING_TILE -> "The opening bone has to go down first"
-    com.teera.core.Rejection.MUST_PLAY_IF_ABLE -> "You have a legal move, so you must play it"
-    com.teera.core.Rejection.MUST_DRAW_FIRST -> "Draw from the boneyard before passing"
-    com.teera.core.Rejection.BONEYARD_EMPTY -> "The boneyard is empty"
-    com.teera.core.Rejection.DRAW_LIMIT_REACHED -> "No more draws this turn"
+    com.teera.core.Rejection.NOT_YOUR_TURN -> "مو دورك"
+    com.teera.core.Rejection.WRONG_PHASE -> "مو وقت هذي الحركة"
+    com.teera.core.Rejection.TILE_NOT_IN_HAND -> "هذا البول مو بيدك"
+    com.teera.core.Rejection.MUST_OPEN_WITH_A_DOUBLE -> "الجيم يُفتح بدبل"
+    com.teera.core.Rejection.MUST_OPEN_WITH_THE_SIX -> "أول جيم يُفتح بالست ست"
+    com.teera.core.Rejection.MUST_OPEN_A_FRESH_SIDE -> "لازم تسكّر جهة جديدة من الدبل"
+    com.teera.core.Rejection.TILE_DOES_NOT_MATCH -> "البول ما يطابق الطرف"
+    com.teera.core.Rejection.NO_ARM_GIVEN -> "اختر الجهة"
+    com.teera.core.Rejection.MUST_PLAY_IF_ABLE -> "عندك بول تلعبه"
+    com.teera.core.Rejection.CANNOT_PLAY_FOR_THEM -> "ما تقدر تلعب هذا البول"
+    com.teera.core.Rejection.TOO_HEAVY_FOR_A_TEERA -> "بيدك أكثر من نقطة وحدة"
 }

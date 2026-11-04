@@ -20,7 +20,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.teera.app.ui.LobbyScreen
 import com.teera.app.ui.MenuScreen
-import com.teera.app.ui.RulesScreen
 import com.teera.app.ui.TableScreen
 import com.teera.app.ui.theme.DominoesTheme
 
@@ -59,15 +58,7 @@ fun DominoesApp(viewModel: GameViewModel = viewModel()) {
                     onHost = viewModel::hostOnline,
                     onJoin = viewModel::join,
                     onSolo = { viewModel.playOffline() },
-                    onRules = viewModel::openRules,
                     connecting = state.connecting,
-                )
-
-                Screen.Rules -> RulesScreen(
-                    rules = state.draftRules,
-                    editable = state.isHost && state.room?.started != true,
-                    onChange = viewModel::setDraftRules,
-                    onDone = viewModel::back,
                 )
 
                 Screen.Lobby -> state.room?.let { room ->
@@ -76,8 +67,9 @@ fun DominoesApp(viewModel: GameViewModel = viewModel()) {
                         myId = state.myId,
                         isHost = state.isHost,
                         offline = state.offline,
+                        onTakeSeat = viewModel::takeSeat,
                         onToggleBot = { seat, enabled -> viewModel.setBot(seat, enabled) },
-                        onEditRules = viewModel::openRules,
+                        onSetRules = viewModel::setDraftRules,
                         onStart = viewModel::startMatch,
                         onLeave = viewModel::leave,
                     )
@@ -87,7 +79,7 @@ fun DominoesApp(viewModel: GameViewModel = viewModel()) {
                     TableScreen(
                         view = view,
                         onMove = viewModel::play,
-                        onNextRound = viewModel::nextRound,
+                        onNextGame = viewModel::nextGame,
                         onLeave = viewModel::leave,
                     )
                 }
