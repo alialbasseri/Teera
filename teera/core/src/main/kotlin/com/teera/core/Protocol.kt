@@ -146,7 +146,18 @@ sealed interface ClientMessage {
 
     @Serializable @SerialName("ping")
     data object Ping : ClientMessage
+
+    /** A button on the soundboard, heard by everybody at the table. */
+    @Serializable @SerialName("emote")
+    data class SendEmote(val emote: Emote) : ClientMessage
 }
+
+/**
+ * The soundboard. Each one is a sound and, where it has one, a line said with it —
+ * "ابلع" being what you tell somebody as you push a tile onto them.
+ */
+@Serializable
+enum class Emote { GULP, DRUMROLL, SAD, SLAP }
 
 @Serializable
 enum class ErrorCode {
@@ -176,4 +187,7 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("pong")
     data object Pong : ServerMessage
+
+    @Serializable @SerialName("emote")
+    data class EmoteShown(val seat: Int, val emote: Emote) : ServerMessage
 }

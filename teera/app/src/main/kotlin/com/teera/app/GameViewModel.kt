@@ -7,8 +7,11 @@ import androidx.lifecycle.viewModelScope
 import com.teera.app.net.GameClient
 import com.teera.app.net.LocalGameClient
 import com.teera.app.net.WebSocketGameClient
+import com.teera.app.sound.Reaction
+import com.teera.app.sound.react
 import com.teera.core.ClientMessage
 import com.teera.core.Difficulty
+import com.teera.core.Emote
 import com.teera.core.Move
 import com.teera.core.Pack
 import com.teera.core.PlayerView
@@ -17,6 +20,10 @@ import com.teera.core.Rules
 import com.teera.core.ServerMessage
 import java.util.UUID
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,9 +47,14 @@ data class UiState(
     val notice: String? = null,
     val connecting: Boolean = false,
     val offline: Boolean = false,
+    /** Soundboard presses still on screen, newest last. */
+    val emotes: List<ShownEmote> = emptyList(),
 ) {
     val isHost: Boolean get() = room == null || room.hostId == myId
 }
+
+/** A soundboard press, shown as a bubble over the seat that sent it. */
+data class ShownEmote(val seat: Int, val emote: Emote, val id: Long)
 
 const val DEFAULT_SERVER = "wss://dominoes.example.com/ws"
 
@@ -73,6 +85,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     private var client: GameClient? = null
     private var pump: Job? = null
+
+    /**
+     * What the table should sound like, one change at a time. The screen plays these; the
+     * view model only decides them, so the decision is the same online and off.
+     */
+    private val _reactions = MutableSharedFlow<Reaction>(extraBufferCapacity = 64)
+    val reactions: SharedFlow<Reaction> = _reactions.asSharedFlow()
+
+    private var lastView: PlayerView? = null
+    private var emoteCounter = 0L
 
     val hostId: String get() = playerId
 
@@ -151,8 +173,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 )
             }
 
-            is ServerMessage.GameUpdate -> _state.update {
-                it.copy(view = message.view, screen = Screen.Table, connecting = false)
+            is ServerMessage.GameUpdate -> {
+                _reactions.tryEmit(react(lastView, message.view))
+                lastView = message.view
+                _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false) }
+            }
+
+            is ServerMessage.EmoteShown -> {
+                _reactions.tryEmit(react(message.emote))
+                val shown = ShownEmote(message.seat, message.emote, ++emoteCounter)
+                _state.update { it.copy(emotes = (it.emotes + shown).takeLast(4)) }
+                viewModelScope.launch {
+                    delay(EMOTE_SHOWN_MS)
+                    _state.update { s -> s.copy(emotes = s.emotes.filterNot { it.id == shown.id }) }
+                }
             }
 
             // A refused move means the phone and the referee disagreed; the view attached
@@ -186,6 +220,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun chat(text: String) = client?.send(ClientMessage.Chat(text))
 
+    fun sendEmote(emote: Emote) = client?.send(ClientMessage.SendEmote(emote))
+
     fun leave() {
         client?.send(ClientMessage.LeaveRoom)
         client?.close()
@@ -209,6 +245,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private companion object {
+        const val EMOTE_SHOWN_MS = 2_600L
         const val KEY_ID = "playerId"
         const val KEY_NAME = "playerName"
         const val KEY_SERVER = "serverUrl"

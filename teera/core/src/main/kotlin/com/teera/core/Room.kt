@@ -258,4 +258,30 @@ class Room(
         if (trimmed.isEmpty()) return null
         return ServerMessage.ChatMessage(member.seat, member.name, trimmed, clock())
     }
+
+    private val lastEmote = HashMap<String, Long>()
+
+    /**
+     * Sends a soundboard button to everybody at the table. One every couple of seconds
+     * per player, so a held thumb cannot drown out the game.
+     */
+    fun emote(playerId: String, emote: Emote): Output {
+        val member = members[playerId] ?: return Output.NOTHING
+        val now = clock()
+        if (now - (lastEmote[playerId] ?: Long.MIN_VALUE / 2) < EMOTE_GAP_MS) return Output.NOTHING
+        lastEmote[playerId] = now
+        val shown = ServerMessage.EmoteShown(member.seat, emote)
+        return Output(direct = humanIds().map { it to shown })
+    }
+
+    /** A bot's turn at the soundboard, so an offline table is not silent company. */
+    fun botEmote(seat: Int, emote: Emote): Output {
+        if (members.values.any { it.seat == seat && it.connected }) return Output.NOTHING
+        val shown = ServerMessage.EmoteShown(seat, emote)
+        return Output(direct = humanIds().map { it to shown })
+    }
+
+    private companion object {
+        const val EMOTE_GAP_MS = 1_800L
+    }
 }

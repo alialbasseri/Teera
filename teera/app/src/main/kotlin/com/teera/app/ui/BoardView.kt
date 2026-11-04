@@ -1,6 +1,7 @@
 package com.teera.app.ui
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -15,7 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +25,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.teera.app.ui.theme.Felt
@@ -47,15 +51,20 @@ fun BoardView(
     modifier: Modifier = Modifier,
     liveArms: Set<Arm> = emptySet(),
     onArmTapped: (Arm) -> Unit = {},
+    /** The tile just laid, and where its player sits, so it can be seen arriving. */
+    arrival: Arrival? = null,
 ) {
     val layout = BoardLayout.compute(board)
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
 
-    // The last tile laid settles onto the table rather than appearing on it.
-    val settle by animateFloatAsState(
-        targetValue = board.size.toFloat(),
-        animationSpec = tween(220),
-        label = "settle",
-    )
+    // A laid tile travels from the hand that played it, turning as it lands.
+    val flight = remember { Animatable(1f) }
+    LaunchedEffect(arrival, board.size) {
+        if (arrival != null) {
+            flight.snapTo(0f)
+            flight.animateTo(1f, tween(440, easing = FastOutSlowInEasing))
+        }
+    }
 
     BoxWithConstraints(modifier = modifier.background(Felt.Rail)) {
         if (board.isEmpty) {
@@ -112,24 +121,33 @@ fun BoardView(
             )
             drawFrame(inset)
 
-            val newest = layout.placements.lastOrNull()
-            for (placement in layout.placements) {
+            // The arriving tile is drawn last, so it passes over the others on its way in.
+            val arriving = arrival?.let { a -> layout.placements.firstOrNull { it.domino == a.domino } }
+            val ordered = layout.placements.filter { it !== arriving } + listOfNotNull(arriving)
+
+            for (placement in ordered) {
                 // A tile is drawn lying down and then turned, so the face nearer the
                 // middle of the table has to end up pointing inwards.
                 val inward = placement.arm == Arm.WEST || placement.arm == Arm.NORTH
+                val home = frame.pointOf(placement.centreX, placement.centreY)
+                val t = if (placement === arriving) flight.value else 1f
+                val from = arrival?.from?.anchor(size.width, size.height, rtl) ?: home
+                val spin = if (arrival?.from == SeatSpot.BOTTOM) -38f else 38f
+
                 drawDominoAt(
                     leftFace = if (inward) placement.outer else placement.inner,
                     rightFace = if (inward) placement.inner else placement.outer,
-                    centre = frame.pointOf(placement.centreX, placement.centreY),
+                    centre = Offset(from.x + (home.x - from.x) * t, from.y + (home.y - from.y) * t),
                     width = BoardLayout.TILE_LENGTH * frame.unit * 0.97f,
                     height = BoardLayout.TILE_WIDTH * frame.unit * 0.97f,
-                    rotationDegrees = placement.rotationDegrees,
-                    highlight = if (placement.isCentre) Felt.Brass.copy(alpha = 0.75f) else null,
-                    scale = if (placement === newest) {
-                        (settle - board.size + 1f).coerceIn(0.4f, 1f)
-                    } else {
-                        1f
+                    rotationDegrees = placement.rotationDegrees + spin * (1f - t),
+                    highlight = when {
+                        placement.isCentre -> Felt.Brass.copy(alpha = 0.75f)
+                        placement === arriving && t >= 1f -> Felt.Brass.copy(alpha = 0.45f)
+                        else -> null
                     },
+                    // Lifted while it travels, so it reads as in the hand and then down.
+                    scale = 1f + 0.28f * (1f - t),
                 )
             }
         }
@@ -200,3 +218,22 @@ private fun armTarget(layout: BoardLayout.Layout, arm: Arm): Pair<Float, Float> 
         Arm.SOUTH -> last.centreX to (last.centreY + TARGET_REACH)
     }
 }
+
+/**
+ * Where a player sits relative to you on screen: you along the bottom, the other three
+ * along the top in the order the seats are drawn.
+ */
+enum class SeatSpot {
+    BOTTOM, TOP_START, TOP_MIDDLE, TOP_END;
+
+    /** The point on the table nearest that seat. The seat row flips in a right-to-left layout. */
+    fun anchor(width: Float, height: Float, rtl: Boolean): Offset = when (this) {
+        BOTTOM -> Offset(width / 2f, height * 0.98f)
+        TOP_MIDDLE -> Offset(width / 2f, height * 0.02f)
+        TOP_START -> Offset(if (rtl) width * 0.83f else width * 0.17f, height * 0.02f)
+        TOP_END -> Offset(if (rtl) width * 0.17f else width * 0.83f, height * 0.02f)
+    }
+}
+
+/** A tile that has just gone down, and where it came from. */
+data class Arrival(val domino: com.teera.core.Domino, val from: SeatSpot)

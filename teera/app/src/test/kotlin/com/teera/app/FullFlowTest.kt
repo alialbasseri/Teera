@@ -42,9 +42,13 @@ class FullFlowTest {
 
     private fun currentView(): PlayerView? = viewModel().state.value.view
 
-    /** Lets the bots think and the screen catch up. */
+    /**
+     * Lets time pass on both clocks: the looper the bots and the offline table run on, and
+     * Compose's own clock, which drives the screen's animations and timed moments.
+     */
     private fun pass(millis: Long) {
         shadowOf(Looper.getMainLooper()).idleFor(millis, TimeUnit.MILLISECONDS)
+        compose.mainClock.advanceTimeBy(millis)
         compose.waitForIdle()
     }
 
@@ -67,6 +71,14 @@ class FullFlowTest {
     /** One decision, made by pressing the screen. Returns false if it was not ours to make. */
     private fun act(view: PlayerView): Boolean {
         if (view.phase == Phase.GAME_OVER) {
+            // The game ends with a moment on the table, and the sums come after it.
+            repeat(30) {
+                if (compose.onAllNodesWithText("الجيم الجاي").fetchSemanticsNodes().isNotEmpty()) {
+                    press("الجيم الجاي")
+                    return true
+                }
+                pass(200)
+            }
             press("الجيم الجاي")
             return true
         }
@@ -106,7 +118,7 @@ class FullFlowTest {
         var lastGame = 0
         var idle = 0
 
-        while (gamesFinished < 3 && decisions < 400) {
+        while (gamesFinished < 4 && decisions < 600) {
             pass(200)
             val view = currentView() ?: continue
             if (view.phase == Phase.MATCH_OVER) break
@@ -135,7 +147,9 @@ class FullFlowTest {
             )
         }
 
-        assertTrue(decisions >= 20, "only $decisions decisions came up")
-        assertTrue(gamesFinished >= 1, "no game was played to the end")
+        // How many decisions a game puts to one player depends on the deal; what matters is
+        // that games kept being played to the end and every press moved the table on.
+        assertTrue(gamesFinished >= 3 || currentView()?.phase == Phase.MATCH_OVER, "only $gamesFinished games finished")
+        assertTrue(decisions >= 8, "only $decisions decisions came up")
     }
 }

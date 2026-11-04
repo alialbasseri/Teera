@@ -1,6 +1,9 @@
 package com.teera.app.net
 
 import com.teera.core.ClientMessage
+import com.teera.core.Emote
+import com.teera.core.GameEvent
+import com.teera.core.teamOf
 import com.teera.core.Room
 import com.teera.core.Rules
 import com.teera.core.ServerMessage
@@ -49,6 +52,7 @@ class LocalGameClient(
                 if (room.awaitingBot()) {
                     delay(botThinkMillis)
                     publish(room.stepBot())
+                    banter()
                 } else {
                     publish(room.expireTurnIfDue())
                 }
@@ -69,9 +73,32 @@ class LocalGameClient(
                 ?.let { Room.Output(direct = listOf(playerId to it)) } ?: Room.Output.NOTHING
             ClientMessage.LeaveRoom -> room.leave(playerId)
             ClientMessage.Ping -> Room.Output(direct = listOf(playerId to ServerMessage.Pong))
+            is ClientMessage.SendEmote -> room.emote(playerId, message.emote)
             is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> Room.Output.ROOM
         }
         publish(output)
+    }
+
+    /**
+     * Bots talk too. Pushing a tile onto somebody who is stuck comes with "ابلع", the way
+     * it would across a real table, and losing a game gets a sigh.
+     */
+    private fun banter() {
+        val state = room.game ?: return
+        val mySeat = room.seatOf(playerId) ?: return
+        for (event in state.events) {
+            when (event) {
+                is GameEvent.Gave ->
+                    if (event.to == mySeat) publish(room.botEmote(event.from, Emote.GULP))
+                is GameEvent.GameEnded -> {
+                    val winner = event.result.winnerSeat ?: continue
+                    if (winner != mySeat && teamOf(winner) != teamOf(mySeat)) {
+                        publish(room.botEmote(winner, Emote.SLAP))
+                    }
+                }
+                else -> Unit
+            }
+        }
     }
 
     override fun close() {

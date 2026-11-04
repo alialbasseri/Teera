@@ -192,6 +192,7 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
             Room.Output(direct = room.humanIds().map { it to chat })
         }
         ClientMessage.Ping -> Room.Output(direct = listOf(playerId to ServerMessage.Pong))
+        is ClientMessage.SendEmote -> room.emote(playerId, message.emote)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> null
     }
 }
