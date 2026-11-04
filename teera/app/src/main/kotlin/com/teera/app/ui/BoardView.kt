@@ -9,7 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
@@ -142,7 +142,10 @@ fun BoardView(
 
             Box(
                 modifier = Modifier
-                    .offset {
+                    // Absolute, not offset: the tiles are painted left to right whatever the
+                    // phone's language, and an Arabic layout would otherwise mirror the
+                    // targets onto the wrong side of the table.
+                    .absoluteOffset {
                         androidx.compose.ui.unit.IntOffset(
                             (centre.x - with(density) { diameter.toPx() } / 2f).toInt(),
                             (centre.y - with(density) { diameter.toPx() } / 2f).toInt(),

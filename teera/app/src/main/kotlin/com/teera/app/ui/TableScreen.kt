@@ -26,9 +26,11 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,7 +53,7 @@ import com.teera.core.PlayerView
 import com.teera.core.teamOf
 
 /** What the rescuer has chosen to do for the seat stuck after them. */
-private enum class RescueMode { GIVE, PLAY_FOR }
+internal enum class RescueMode { GIVE, PLAY_FOR }
 
 /**
  * The table.
@@ -66,45 +68,46 @@ fun TableScreen(
     onNextGame: () -> Unit,
     onLeave: () -> Unit,
 ) {
-    var selected by remember(view.gameNumber, view.board.size) { mutableStateOf<Domino?>(null) }
-    var rescueMode by remember(view.stuckSeat) { mutableStateOf<RescueMode?>(null) }
+    // These two state holders live for the whole table and are never swapped out. Keying
+    // them on the board, as this screen once did, handed a fresh holder to each new frame
+    // while a click handler remembered from an earlier one kept writing to the old one —
+    // so a tap on a lit bone went nowhere. They are cleared in place instead.
+    val selectedState = remember { mutableStateOf<Domino?>(null) }
+    val rescueState = remember { mutableStateOf<RescueMode?>(null) }
+    LaunchedEffect(view.gameNumber, view.board.size) { selectedState.value = null }
+    LaunchedEffect(view.stuckSeat) { rescueState.value = null }
 
-    val plays = view.legalMoves.filterIsInstance<Move.Play>()
-    val playFors = view.legalMoves.filterIsInstance<Move.PlayFor>()
-    val gives = view.legalMoves.filterIsInstance<Move.Give>()
+    // Handlers below read the table through these, so however old the handler, it acts
+    // on the table as it stands now.
+    val currentView by rememberUpdatedState(view)
+    val send by rememberUpdatedState(onMove)
 
-    /** Where a chosen tile may go, which is empty while the four sides are being closed. */
-    fun armsFor(tile: Domino): List<Arm> = when {
-        view.phase == Phase.RESCUE -> playFors.filter { it.domino == tile }.map { it.arm }
-        else -> plays.filter { it.domino == tile }.mapNotNull { it.arm }
-    }
-
-    fun lay(tile: Domino, arm: Arm?) {
-        if (view.phase == Phase.RESCUE) {
-            onMove(Move.PlayFor(tile, arm ?: Arm.NORTH))
-        } else {
-            onMove(Move.Play(tile, arm))
-        }
-        selected = null
-        rescueMode = null
-    }
-
-    fun tapTile(tile: Domino) {
-        if (view.phase == Phase.RESCUE && rescueMode == RescueMode.GIVE) {
-            if (gives.any { it.domino == tile }) {
-                onMove(Move.Give(tile))
-                rescueMode = null
+    val tapTile: (Domino) -> Unit = remember {
+        { tile ->
+            when (val tap = decideTap(currentView, tile, selectedState.value, rescueState.value)) {
+                is Tap.Send -> {
+                    send(tap.move)
+                    selectedState.value = null
+                    rescueState.value = null
+                }
+                is Tap.Select -> selectedState.value = tap.tile
+                Tap.Ignore -> Unit
             }
-            return
-        }
-        val arms = armsFor(tile)
-        when {
-            arms.isEmpty() && playableNow(view, tile, plays, playFors, rescueMode) -> lay(tile, null)
-            arms.size == 1 -> lay(tile, arms.first())
-            arms.size > 1 -> selected = if (selected == tile) null else tile
-            else -> selected = tile
         }
     }
+    val tapArm: (Arm) -> Unit = remember {
+        { arm ->
+            val chosen = selectedState.value
+            if (chosen != null) {
+                send(placeOn(currentView, chosen, arm))
+                selectedState.value = null
+                rescueState.value = null
+            }
+        }
+    }
+
+    val selected = selectedState.value
+    val rescueMode = rescueState.value
 
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
@@ -115,14 +118,14 @@ fun TableScreen(
             BoardView(
                 board = view.board,
                 modifier = Modifier.fillMaxSize(),
-                liveArms = selected?.let { armsFor(it).toSet() } ?: emptySet(),
-                onArmTapped = { arm -> selected?.let { lay(it, arm) } },
+                liveArms = selected?.let { armsFor(view, it).toSet() } ?: emptySet(),
+                onArmTapped = tapArm,
             )
 
             Prompt(
                 view = view,
                 rescueMode = rescueMode,
-                onRescueMode = { rescueMode = it },
+                onRescueMode = { rescueState.value = it },
                 onMove = onMove,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
             )
@@ -131,8 +134,8 @@ fun TableScreen(
         Hand(
             view = view,
             selected = selected,
-            playable = handHighlights(view, plays, playFors, gives, rescueMode),
-            onTap = ::tapTile,
+            playable = handHighlights(view, rescueMode),
+            onTap = tapTile,
         )
     }
 
@@ -141,30 +144,77 @@ fun TableScreen(
     }
 }
 
-private fun playableNow(
-    view: PlayerView,
-    tile: Domino,
-    plays: List<Move.Play>,
-    playFors: List<Move.PlayFor>,
-    rescueMode: RescueMode?,
-): Boolean = if (view.phase == Phase.RESCUE && rescueMode == RescueMode.PLAY_FOR) {
-    playFors.any { it.domino == tile }
-} else {
-    plays.any { it.domino == tile }
+/** What pressing a bone in hand comes to. */
+internal sealed interface Tap {
+    /** The tap settles it: send this move. */
+    data class Send(val move: Move) : Tap
+
+    /** The bone could go more than one way, so hold it up and let the table be tapped. */
+    data class Select(val tile: Domino?) : Tap
+
+    data object Ignore : Tap
 }
 
+/**
+ * Decides what a tap on [tile] means, from nothing but the table as it stands.
+ *
+ * Kept free of Compose so it can be checked in a plain test, and so the click handler
+ * that calls it carries no state of its own that could go stale.
+ */
+internal fun decideTap(view: PlayerView, tile: Domino, selected: Domino?, rescueMode: RescueMode?): Tap {
+    if (!view.isYourMove) return Tap.Ignore
+
+    if (view.phase == Phase.RESCUE) {
+        return when (rescueMode) {
+            RescueMode.GIVE ->
+                if (view.legalMoves.any { it is Move.Give && it.domino == tile }) Tap.Send(Move.Give(tile))
+                else Tap.Ignore
+            RescueMode.PLAY_FOR -> {
+                val arms = armsFor(view, tile)
+                when (arms.size) {
+                    0 -> Tap.Ignore
+                    1 -> Tap.Send(Move.PlayFor(tile, arms.first()))
+                    else -> Tap.Select(if (selected == tile) null else tile)
+                }
+            }
+            null -> Tap.Ignore
+        }
+    }
+
+    val plays = view.legalMoves.filterIsInstance<Move.Play>().filter { it.domino == tile }
+    if (plays.isEmpty()) return Tap.Ignore
+
+    // While the opening double's sides are being closed the engine picks the side, and
+    // the moves carry no arm; a single home also needs no question asking.
+    val arms = plays.mapNotNull { it.arm }.distinct()
+    return when {
+        arms.size <= 1 -> Tap.Send(plays.first())
+        else -> Tap.Select(if (selected == tile) null else tile)
+    }
+}
+
+/** Where a held bone may go: the arms the referee will accept it on. */
+internal fun armsFor(view: PlayerView, tile: Domino): List<Arm> = when (view.phase) {
+    Phase.RESCUE -> view.legalMoves.filterIsInstance<Move.PlayFor>().filter { it.domino == tile }.map { it.arm }
+    else -> view.legalMoves.filterIsInstance<Move.Play>().filter { it.domino == tile }.mapNotNull { it.arm }
+}
+
+/** The move that lays a held bone on [arm]. */
+internal fun placeOn(view: PlayerView, tile: Domino, arm: Arm): Move =
+    if (view.phase == Phase.RESCUE) Move.PlayFor(tile, arm) else Move.Play(tile, arm)
+
 /** Which tiles in hand are worth lighting up right now. */
-private fun handHighlights(
-    view: PlayerView,
-    plays: List<Move.Play>,
-    playFors: List<Move.PlayFor>,
-    gives: List<Move.Give>,
-    rescueMode: RescueMode?,
-): Set<Domino> = when {
-    view.phase == Phase.RESCUE && rescueMode == RescueMode.GIVE -> gives.map { it.domino }.toSet()
-    view.phase == Phase.RESCUE && rescueMode == RescueMode.PLAY_FOR -> playFors.map { it.domino }.toSet()
-    view.phase == Phase.RESCUE -> emptySet()
-    else -> plays.map { it.domino }.toSet()
+private fun handHighlights(view: PlayerView, rescueMode: RescueMode?): Set<Domino> {
+    if (!view.isYourMove) return emptySet()
+    val moves = view.legalMoves
+    return when {
+        view.phase == Phase.RESCUE && rescueMode == RescueMode.GIVE ->
+            moves.filterIsInstance<Move.Give>().map { it.domino }.toSet()
+        view.phase == Phase.RESCUE && rescueMode == RescueMode.PLAY_FOR ->
+            moves.filterIsInstance<Move.PlayFor>().map { it.domino }.toSet()
+        view.phase == Phase.RESCUE -> emptySet()
+        else -> moves.filterIsInstance<Move.Play>().map { it.domino }.toSet()
+    }
 }
 
 @Composable
