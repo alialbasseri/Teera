@@ -22,20 +22,25 @@ import com.teera.app.ui.theme.Felt
  * hairlines, so it costs nothing and stays sharp at any size.
  */
 
+/**
+ * Draws one rosette. [alpha] is clamped: callers fade it in with springs, and a spring
+ * overshoots its target, while a colour more opaque than opaque is an error that closes
+ * the app — which is exactly what the menu's emblem did on Ali's phone.
+ */
 fun DrawScope.drawRosette(centre: Offset, radius: Float, alpha: Float = 1f) {
+    val opacity = alpha.coerceIn(0f, 1f)
+    if (opacity == 0f) return
     val petal = radius * 0.42f
-    rotate(0f, centre) {
-        for (index in 0 until 8) {
-            rotate(index * 45f, centre) {
-                drawOval(
-                    color = Felt.Brass.copy(alpha = alpha),
-                    topLeft = Offset(centre.x - petal / 2f, centre.y - radius),
-                    size = Size(petal, radius),
-                )
-            }
+    for (index in 0 until 8) {
+        rotate(index * 45f, centre) {
+            drawOval(
+                color = Felt.Brass.copy(alpha = opacity),
+                topLeft = Offset(centre.x - petal / 2f, centre.y - radius),
+                size = Size(petal, radius),
+            )
         }
     }
-    drawCircle(Felt.GoldDeep.copy(alpha = alpha), radius * 0.26f, centre)
+    drawCircle(Felt.GoldDeep.copy(alpha = opacity), radius * 0.26f, centre)
 }
 
 /** Two gold hairlines around the felt, with a rosette at each corner and along the rails. */

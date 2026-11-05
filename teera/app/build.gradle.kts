@@ -13,8 +13,8 @@ android {
         // 26: the room server a phone runs to host on the Wi-Fi needs java.time and NIO.
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "0.5.0"
+        versionCode = 6
+        versionName = "0.5.1"
 
         // The internet server, once one is hosted: ./gradlew assembleDebug -Pteera.server=wss://host/ws
         // Left empty, the app says plainly that internet play needs a server and offers Wi-Fi.
