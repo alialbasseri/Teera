@@ -31,7 +31,12 @@ import com.teera.core.Domino
  * The middle is kept dim so the menu reads clearly over it; the life is round the edges.
  */
 @Composable
-fun CafeTable(modifier: Modifier = Modifier, content: @Composable BoxScope.() -> Unit) {
+fun CafeTable(
+    modifier: Modifier = Modifier,
+    bones: List<Lying> = LYING,
+    cups: List<Cup> = CUPS,
+    content: @Composable BoxScope.() -> Unit,
+) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val w = maxWidth
         val h = maxHeight
@@ -46,13 +51,13 @@ fun CafeTable(modifier: Modifier = Modifier, content: @Composable BoxScope.() ->
                     radius = size.maxDimension * 0.7f,
                 ),
             )
-            // Two tea glasses: one by the top corner, one by the bottom.
-            istikan(Offset(size.width * 0.13f, size.height * 0.075f), size.minDimension * 0.11f, spoonAngle = 145f)
-            istikan(Offset(size.width * 1.0f, size.height * 0.29f), size.minDimension * 0.1f, spoonAngle = -150f)
+            cups.forEach { cup ->
+                istikan(Offset(size.width * cup.x, size.height * cup.y), size.minDimension * cup.size, cup.spoonAngle)
+            }
         }
 
         // Bones left lying where the last game ended: half off the edges, some face down.
-        LYING.forEach { tile ->
+        bones.forEach { tile ->
             DominoTile(
                 tile.domino,
                 Modifier
@@ -82,7 +87,13 @@ fun CafeTable(modifier: Modifier = Modifier, content: @Composable BoxScope.() ->
     }
 }
 
-private class Lying(val domino: Domino?, val x: Float, val y: Float, val angle: Float)
+/** A bone left on the table: where, as fractions of the screen, and at what angle. Null is face down. */
+class Lying(val domino: Domino?, val x: Float, val y: Float, val angle: Float)
+
+/** A glass of tea on its saucer. */
+class Cup(val x: Float, val y: Float, val size: Float, val spoonAngle: Float)
+
+private val CUPS = listOf(Cup(0.13f, 0.075f, 0.11f, 145f), Cup(1.0f, 0.29f, 0.1f, -150f))
 
 /** Where the bones lie, as fractions of the screen. Chosen by eye, the same every time. */
 private val LYING = listOf(
