@@ -13,12 +13,14 @@ android {
         // 26: the room server a phone runs to host on the Wi-Fi needs java.time and NIO.
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.6.0"
+        versionCode = 8
+        versionName = "0.6.1"
 
-        // The internet server, once one is hosted: ./gradlew assembleDebug -Pteera.server=wss://host/ws
-        // Left empty, the app says plainly that internet play needs a server and offers Wi-Fi.
-        buildConfigField("String", "SERVER_URL", "\"${project.findProperty("teera.server") ?: ""}\"")
+        // Ali's server on Render (see DEPLOY.md); -Pteera.server=... points a build elsewhere.
+        buildConfigField(
+            "String", "SERVER_URL",
+            "\"${project.findProperty("teera.server") ?: "wss://teera-xfvr.onrender.com/ws"}\"",
+        )
     }
 
     buildTypes {
