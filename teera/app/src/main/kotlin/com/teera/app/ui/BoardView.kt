@@ -17,6 +17,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +58,9 @@ fun BoardView(
 ) {
     val layout = BoardLayout.compute(board)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+    // Which way the cross was drawn last frame, so it only turns for a clear gain.
+    val turnedLast = remember { mutableStateOf(false) }
+    LaunchedEffect(board.isEmpty) { if (board.isEmpty) turnedLast.value = false }
 
     // A laid tile travels from the hand that played it, turning as it lands.
     val flight = remember { Animatable(1f) }
@@ -95,7 +100,8 @@ fun BoardView(
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val frame = frameFor(layout, widthPx, heightPx)
+        val frame = frameFor(layout, widthPx, heightPx, wasTurned = turnedLast.value)
+        SideEffect { turnedLast.value = frame.turned }
 
         Canvas(Modifier.fillMaxSize()) {
             // Felt laid inside the cabinet: the light falls in the middle and the
@@ -140,7 +146,7 @@ fun BoardView(
                     centre = Offset(from.x + (home.x - from.x) * t, from.y + (home.y - from.y) * t),
                     width = BoardLayout.TILE_LENGTH * frame.unit * 0.97f,
                     height = BoardLayout.TILE_WIDTH * frame.unit * 0.97f,
-                    rotationDegrees = placement.rotationDegrees + spin * (1f - t),
+                    rotationDegrees = placement.rotationDegrees + frame.twist + spin * (1f - t),
                     highlight = when {
                         placement.isCentre -> Felt.Brass.copy(alpha = 0.75f)
                         placement === arriving && t >= 1f -> Felt.Brass.copy(alpha = 0.45f)
@@ -187,26 +193,68 @@ fun BoardView(
     }
 }
 
-/** How the table in tile units maps onto the pixels we have. */
-private class Frame(val unit: Float, val originX: Float, val originY: Float) {
-    fun pointOf(x: Float, y: Float) = Offset(originX + x * unit, originY + y * unit)
+/**
+ * How the table in tile units maps onto the pixels we have.
+ *
+ * When [turned], the whole cross is drawn a quarter turn round. The four arms are alike,
+ * so nothing about the game changes; it only lets a cross that has grown wide use the
+ * height of a phone held upright instead of shrinking to fit its width.
+ */
+internal class Frame(val unit: Float, val originX: Float, val originY: Float, val turned: Boolean) {
+    fun pointOf(x: Float, y: Float): Offset =
+        if (turned) Offset(originX - y * unit, originY + x * unit)
+        else Offset(originX + x * unit, originY + y * unit)
+
+    /** Extra rotation every tile takes when the cross is turned. */
+    val twist: Float get() = if (turned) 90f else 0f
 }
 
 private const val TARGET_REACH = BoardLayout.TILE_LENGTH / 2f + 0.5f
 
-private fun frameFor(layout: BoardLayout.Layout, width: Float, height: Float): Frame {
+/** How large a tile may get, as a share of the table's short side: a lone double stays a tile. */
+private const val MAX_UNIT_SHARE = 1f / 7.5f
+
+/** Bigger tiles from turning the cross only count if they are bigger by at least this much. */
+private const val TURN_GAIN = 1.12f
+
+internal fun frameFor(
+    layout: BoardLayout.Layout,
+    width: Float,
+    height: Float,
+    wasTurned: Boolean = false,
+): Frame {
     // Leave room for the targets, which sit a little beyond the ends of the arms.
     val padding = 14f
-    val unit = minOf(
-        (width - padding * 2) / (layout.width + TARGET_REACH * 2),
-        (height - padding * 2) / (layout.height + TARGET_REACH * 2),
-    ).coerceAtLeast(4f)
-
-    return Frame(
-        unit = unit,
-        originX = (width - layout.width * unit) / 2f - layout.minX * unit,
-        originY = (height - layout.height * unit) / 2f - layout.minY * unit,
+    fun fit(across: Float, down: Float) = minOf(
+        (width - padding * 2) / (across + TARGET_REACH * 2),
+        (height - padding * 2) / (down + TARGET_REACH * 2),
     )
+    val straight = fit(layout.width, layout.height)
+    val sideways = fit(layout.height, layout.width)
+
+    // Turn only for a clear gain, and turn back only for a clear loss, so a growing cross
+    // does not flip from one tile to the next.
+    val turned = if (wasTurned) sideways * TURN_GAIN >= straight else sideways >= straight * TURN_GAIN
+    val unit = (if (turned) sideways else straight)
+        .coerceAtMost(minOf(width, height) * MAX_UNIT_SHARE)
+        .coerceAtLeast(4f)
+
+    return if (turned) {
+        // Turned a quarter: x runs from -maxY to -minY and y from minX to maxX.
+        Frame(
+            unit = unit,
+            originX = (width - layout.height * unit) / 2f + layout.maxY * unit,
+            originY = (height - layout.width * unit) / 2f - layout.minX * unit,
+            turned = true,
+        )
+    } else {
+        Frame(
+            unit = unit,
+            originX = (width - layout.width * unit) / 2f - layout.minX * unit,
+            originY = (height - layout.height * unit) / 2f - layout.minY * unit,
+            turned = false,
+        )
+    }
 }
 
 private fun armTarget(layout: BoardLayout.Layout, arm: Arm): Pair<Float, Float> {
