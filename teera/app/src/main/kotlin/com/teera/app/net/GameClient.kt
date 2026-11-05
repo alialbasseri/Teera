@@ -1,10 +1,11 @@
 package com.teera.app.net
 
 import com.teera.core.ClientMessage
-import com.teera.core.ErrorCode
 import com.teera.core.Protocol
 import com.teera.core.ServerMessage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * The link between the phone and whoever is refereeing.
@@ -15,14 +16,26 @@ import kotlinx.coroutines.flow.Flow
  */
 interface GameClient {
     val incoming: Flow<ServerMessage>
+
+    /** How the line to the referee is doing. A table in this process is always up. */
+    val link: StateFlow<Link> get() = ALWAYS_UP
+
     fun send(message: ClientMessage)
     fun close()
 }
 
-/** Turns a socket failure into something a person can read. */
-internal fun connectionLost(detail: String?) = ServerMessage.Failure(
-    ErrorCode.INTERNAL,
-    detail?.takeIf { it.isNotBlank() } ?: "Lost connection to the table",
-)
+/** The state of the line to the referee, as the screens describe it. */
+enum class Link {
+    /** Knocking on a sleeping internet server; the first visit after a quiet spell is slow. */
+    WAKING,
+    CONNECTING,
+    UP,
+    /** It was up and dropped; reconnecting on its own, seat held. */
+    LOST,
+    /** Never got through, and has stopped trying. */
+    UNREACHABLE,
+}
+
+private val ALWAYS_UP: StateFlow<Link> = MutableStateFlow(Link.UP)
 
 internal fun encode(message: ClientMessage): String = Protocol.encode(message)

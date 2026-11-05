@@ -60,6 +60,10 @@ fun MenuScreen(
     onJoinAddress: (String) -> Unit = {},
     hasInternetServer: Boolean = false,
     onSetServer: (String) -> Unit = {},
+    /** Knocking on a sleeping server, which takes a while the first time. */
+    waking: Boolean = false,
+    /** The internet room this phone was last in, if any, to go straight back to. */
+    lastRoom: String? = null,
 ) {
     var code by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -107,6 +111,78 @@ fun MenuScreen(
             RosetteRule(Modifier.padding(horizontal = 50.dp))
             Spacer(Modifier.height(10.dp))
 
+            // Friends anywhere, the usual case: first, because they are rarely in the same house.
+            Text("عبر الإنترنت", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            if (hasInternetServer) {
+                if (lastRoom != null) {
+                    GoldButton("ارجع للغرفة $lastRoom", { onJoin(lastRoom) })
+                    Spacer(Modifier.height(10.dp))
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it.uppercase().filter(Char::isLetterOrDigit).take(4) },
+                        label = { Text("كود الغرفة") },
+                        singleLine = true,
+                        colors = brassField(),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters,
+                            imeAction = ImeAction.Go,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    BrassButton("ادخل", { onJoin(code) }, enabled = code.length == 4 && !connecting)
+                }
+                Spacer(Modifier.height(10.dp))
+                BrassButton(
+                    when {
+                        connecting && waking -> "السيرفر يصحى…"
+                        connecting -> "يحاول يتصل…"
+                        else -> "افتح غرفة عبر الإنترنت"
+                    },
+                    onHost,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !connecting,
+                )
+                if (connecting && waking) {
+                    Text(
+                        "إذا محد لعب من فترة، السيرفر ينام وياخذ تقريباً دقيقة حتى يصحى",
+                        color = Felt.Muted,
+                        style = MaterialTheme.typography.labelSmall,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
+            } else {
+                Text(
+                    "يحتاج سيرفر على الإنترنت، ولسه ما منصوب",
+                    color = Felt.Muted,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+                var server by remember { mutableStateOf("") }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = server,
+                        onValueChange = { server = it.trim() },
+                        label = { Text("عنوان السيرفر") },
+                        singleLine = true,
+                        colors = brassField(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    BrassButton("حفظ", { onSetServer(server) }, enabled = server.contains('.'))
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+            RosetteRule(Modifier.padding(horizontal = 50.dp))
+            Spacer(Modifier.height(10.dp))
+
             // Friends in the same room: one phone hosts, the rest find it on the Wi-Fi.
             Text("مع أصحابك على نفس الواي فاي", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
@@ -150,56 +226,6 @@ fun MenuScreen(
                     )
                     Spacer(Modifier.width(10.dp))
                     BrassButton("ادخل", { onJoinAddress(address) }, enabled = address.count { it == '.' } == 3)
-                }
-            }
-
-            Spacer(Modifier.height(14.dp))
-            RosetteRule(Modifier.padding(horizontal = 50.dp))
-            Spacer(Modifier.height(10.dp))
-
-            // Friends anywhere: needs the internet server, which has to be hosted first.
-            Text("عبر الإنترنت", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            if (hasInternetServer) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it.uppercase().filter(Char::isLetterOrDigit).take(4) },
-                        label = { Text("كود الغرفة") },
-                        singleLine = true,
-                        colors = brassField(),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                            imeAction = ImeAction.Go,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    BrassButton("ادخل", { onJoin(code) }, enabled = code.length == 4 && !connecting)
-                }
-                Spacer(Modifier.height(10.dp))
-                BrassButton("افتح غرفة عبر الإنترنت", onHost, modifier = Modifier.fillMaxWidth(), enabled = !connecting)
-            } else {
-                Text(
-                    "يحتاج سيرفر على الإنترنت، ولسه ما منصوب",
-                    color = Felt.Muted,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-                var server by remember { mutableStateOf("") }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = server,
-                        onValueChange = { server = it.trim() },
-                        label = { Text("عنوان السيرفر") },
-                        singleLine = true,
-                        colors = brassField(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    BrassButton("حفظ", { onSetServer(server) }, enabled = server.contains('.'))
                 }
             }
 

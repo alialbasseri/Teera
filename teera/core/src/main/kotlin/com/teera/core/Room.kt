@@ -40,6 +40,8 @@ class Room(
         var seat: Int,
         var connected: Boolean = true,
         var ready: Boolean = false,
+        /** When the connection dropped, so a bot only steps in once they are really gone. */
+        var goneSince: Long? = null,
     )
 
     var rules: Rules = rules
@@ -87,6 +89,7 @@ class Room(
     fun join(playerId: String, name: String): Output {
         members[playerId]?.let { existing ->
             existing.connected = true
+            existing.goneSince = null
             existing.name = name
             return Output(roomChanged = true, viewChanged = isStarted)
         }
@@ -121,6 +124,7 @@ class Room(
     fun disconnect(playerId: String): Output {
         val member = members[playerId] ?: return Output.NOTHING
         member.connected = false
+        member.goneSince = clock()
         member.ready = false
         if (!isStarted) members.remove(playerId)
         if (hostId == playerId) {
@@ -201,12 +205,18 @@ class Room(
         return Output.VIEW
     }
 
-    /** True when the seat the table is waiting on is a bot, or somebody who has gone. */
+    /**
+     * True when the seat the table is waiting on is a bot, or somebody who has been gone
+     * longer than [RECONNECT_GRACE_MS]. A phone on mobile data drops for a few seconds
+     * all the time, walking between rooms or through a tunnel; a bot playing your tile
+     * the moment that happens would be worse than the table waiting a little.
+     */
     fun awaitingBot(): Boolean {
         val state = game ?: return false
         val seat = state.actingSeat ?: return false
-        val member = members.values.firstOrNull { it.seat == seat }
-        return member == null || !member.connected
+        val member = members.values.firstOrNull { it.seat == seat } ?: return true
+        if (member.connected) return false
+        return clock() - (member.goneSince ?: Long.MIN_VALUE / 2) >= RECONNECT_GRACE_MS
     }
 
     /** Plays one bot move. Callers space these out so the table reads at human speed. */
@@ -249,7 +259,9 @@ class Room(
     fun viewFor(playerId: String): PlayerView? {
         val state = game ?: return null
         val seat = seatOf(playerId) ?: return null
-        return state.viewFor(seat, code, turnDeadline)
+        // The deal fixed who sits where; whether each of them is still connected is live.
+        val seats = state.seats.map { it.copy(connected = it.isBot || members[it.playerId]?.connected == true) }
+        return state.viewFor(seat, code, turnDeadline).copy(seats = seats)
     }
 
     fun chat(playerId: String, text: String): ServerMessage.ChatMessage? {
@@ -281,7 +293,10 @@ class Room(
         return Output(direct = humanIds().map { it to shown })
     }
 
-    private companion object {
-        const val EMOTE_GAP_MS = 1_800L
+    companion object {
+        private const val EMOTE_GAP_MS = 1_800L
+
+        /** How long the table waits for somebody whose connection dropped before covering for them. */
+        const val RECONNECT_GRACE_MS = 25_000L
     }
 }

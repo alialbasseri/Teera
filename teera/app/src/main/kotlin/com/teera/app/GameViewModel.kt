@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.teera.app.net.GameClient
 import com.teera.app.net.LanBeacon
 import com.teera.app.net.LanHost
+import com.teera.app.net.Link
 import com.teera.app.net.WifiTable
 import com.teera.app.net.localAddress
 import com.teera.app.net.openRoomAt
@@ -15,6 +16,7 @@ import com.teera.app.net.WebSocketGameClient
 import com.teera.app.sound.Reaction
 import com.teera.app.sound.react
 import com.teera.core.ClientMessage
+import com.teera.core.ErrorCode
 import com.teera.core.Difficulty
 import com.teera.core.Emote
 import com.teera.core.Move
@@ -60,6 +62,10 @@ data class UiState(
     val wifiAddress: String? = null,
     /** Tables other phones on this Wi-Fi are hosting. */
     val wifiTables: List<WifiTable> = emptyList(),
+    /** How the line to the referee is doing. */
+    val link: Link = Link.UP,
+    /** The internet room this phone was last in, offered on the menu to go back to. */
+    val lastRoom: String? = null,
 ) {
     /** Whether an internet server has actually been set up yet. */
     val hasInternetServer: Boolean get() = serverUrl.startsWith("ws")
@@ -106,12 +112,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             myId = playerId,
             playerName = prefs.getString(KEY_NAME, null) ?: "Player",
             serverUrl = prefs.getString(KEY_SERVER, null) ?: DEFAULT_SERVER,
+            lastRoom = prefs.getString(KEY_LAST_ROOM, null),
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var client: GameClient? = null
     private var pump: Job? = null
+    private var linkWatch: Job? = null
+
+    /** Whether the current table is on the internet server, the one worth coming back to. */
+    private var onInternet = false
 
     /**
      * What the table should sound like, one change at a time. The screen plays these; the
@@ -152,14 +163,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun hostOnline() {
         if (!_state.value.hasInternetServer) return noInternetServer()
-        connectTo(_state.value.serverUrl)
+        connectTo(_state.value.serverUrl, internet = true)
         client?.send(ClientMessage.CreateRoom(_state.value.draftRules))
     }
 
     fun join(code: String) {
         if (!_state.value.hasInternetServer) return noInternetServer()
-        connectTo(_state.value.serverUrl)
+        connectTo(_state.value.serverUrl, internet = true)
         client?.send(ClientMessage.JoinRoom(code.trim().uppercase()))
+    }
+
+    private fun rememberRoom(code: String?) {
+        prefs.edit().apply { if (code == null) remove(KEY_LAST_ROOM) else putString(KEY_LAST_ROOM, code) }.apply()
+        _state.update { it.copy(lastRoom = code) }
     }
 
     /**
@@ -249,25 +265,51 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client?.send(ClientMessage.StartMatch)
     }
 
-    private fun connectTo(url: String) {
+    private fun connectTo(url: String, internet: Boolean = false) {
         attach(
             WebSocketGameClient(
                 url = url,
                 scope = viewModelScope,
                 playerId = playerId,
                 playerName = _state.value.playerName,
+                wakeFirst = internet,
             ),
         )
+        onInternet = internet
         _state.update { it.copy(connecting = true, offline = false) }
     }
 
     private fun attach(next: GameClient) {
         client?.close()
         pump?.cancel()
+        linkWatch?.cancel()
         client = next
+        onInternet = false
         _state.update { it.copy(room = null, view = null, chat = emptyList(), notice = null) }
         pump = viewModelScope.launch {
             next.incoming.collect(::onMessage)
+        }
+        linkWatch = viewModelScope.launch {
+            next.link.collect { link ->
+                _state.update { it.copy(link = link) }
+                if (link == Link.UNREACHABLE) unreachable()
+            }
+        }
+    }
+
+    /** The client has given up getting through: say so plainly and go back to the menu. */
+    private fun unreachable() {
+        val where = if (onInternet) "السيرفر" else "الطاولة"
+        client?.close()
+        client = null
+        pump?.cancel()
+        lastView = null
+        stopHosting()
+        _state.update {
+            it.copy(
+                screen = Screen.Menu, room = null, view = null, connecting = false, link = Link.UP,
+                notice = "ما قدرت أوصل لـ$where. تأكد من النت وجرّب مرة ثانية",
+            )
         }
     }
 
@@ -277,6 +319,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
             is ServerMessage.RoomUpdate -> {
                 announceIfHosting(message.room)
+                if (onInternet && message.room.code != _state.value.lastRoom) rememberRoom(message.room.code)
                 // Once the deal is done nobody else can sit down, so stop advertising it.
                 if (message.room.started) beacon.stopAnnouncing()
                 _state.update {
@@ -311,7 +354,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(view = message.view, notice = message.reason.explain())
             }
 
-            is ServerMessage.Failure -> _state.update { it.copy(notice = message.message, connecting = false) }
+            is ServerMessage.Failure -> {
+                if (message.code == ErrorCode.ROOM_NOT_FOUND) rememberRoom(null)
+                _state.update { it.copy(notice = message.explain(), connecting = false) }
+            }
 
             is ServerMessage.ChatMessage -> _state.update {
                 it.copy(chat = (it.chat + ChatLine(message.name, message.text)).takeLast(30))
@@ -343,10 +389,16 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client?.close()
         client = null
         pump?.cancel()
+        linkWatch?.cancel()
+        if (onInternet) rememberRoom(null)
+        onInternet = false
         lastView = null
         stopHosting()
         _state.update {
-            it.copy(screen = Screen.Menu, room = null, view = null, chat = emptyList(), offline = false)
+            it.copy(
+                screen = Screen.Menu, room = null, view = null, chat = emptyList(),
+                offline = false, connecting = false, link = Link.UP,
+            )
         }
     }
 
@@ -369,7 +421,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_ID = "playerId"
         const val KEY_NAME = "playerName"
         const val KEY_SERVER = "serverUrl"
+        const val KEY_LAST_ROOM = "lastRoom"
     }
+}
+
+/** The server writes its refusals in English for the logs; the table reads them in Arabic. */
+private fun ServerMessage.Failure.explain(): String = when (code) {
+    ErrorCode.ROOM_NOT_FOUND -> "ماكو غرفة بهذا الكود. يمكن خلصت أو انسدّت"
+    ErrorCode.ROOM_FULL -> "الغرفة مليانة"
+    ErrorCode.ROOM_ALREADY_STARTED -> "اللعب بدأ بهذي الغرفة"
+    ErrorCode.NOT_HOST -> "بس صاحب الغرفة يقدر يسويها"
+    ErrorCode.SEAT_TAKEN -> "هذا الكرسي محجوز"
+    ErrorCode.NOT_ENOUGH_PLAYERS -> "لازم أربعة، أو كمّلوا ببوتات"
+    ErrorCode.VERSION_MISMATCH -> "نسختك قديمة، نزّل النسخة الجديدة من التطبيق"
+    else -> message
 }
 
 private fun com.teera.core.Rejection.explain(): String = when (this) {

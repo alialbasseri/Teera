@@ -131,6 +131,8 @@ class Screenshots {
         MenuScreen(
             "علي", {}, {}, {}, {}, connecting = false,
             wifiTables = listOf(com.teera.app.net.WifiTable("سارة", "192.168.1.7", 8765, "KHAN")),
+            hasInternetServer = true,
+            lastRoom = "KHAN",
         )
     }
 
@@ -198,7 +200,11 @@ class Screenshots {
     fun emote() = shoot("emote") {
         val v = midGame()
         TableScreen(
-            v.copy(actingSeat = 2, events = emptyList()),
+            v.copy(
+                actingSeat = 2, events = emptyList(),
+                // Omar's line has dropped: the table waits for him, and says so.
+                seats = v.seats.map { if (it.seat == 2) it.copy(connected = false) else it },
+            ),
             onMove = {}, onNextGame = {}, onLeave = {},
             emotes = listOf(com.teera.app.ShownEmote(1, com.teera.core.Emote.GULP, 1)),
         )
@@ -213,6 +219,7 @@ class Screenshots {
             ),
             myId = "me", isHost = true, offline = false,
             onTakeSeat = {}, onToggleBot = { _, _ -> }, onSetRules = {}, onStart = {}, onLeave = {},
+            onShare = {},
         )
     }
 }

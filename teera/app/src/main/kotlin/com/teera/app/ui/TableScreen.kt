@@ -439,6 +439,7 @@ private fun OpponentRow(view: PlayerView, emotes: List<ShownEmote>) {
             val acting = seat == view.actingSeat
             val partner = teamOf(seat) == view.yourTeam
             val stuck = seat == view.stuckSeat
+            val dropped = view.isDropped(seat)
             val tint = when {
                 acting -> Felt.Brass
                 partner -> Felt.Playable
@@ -494,11 +495,12 @@ private fun OpponentRow(view: PlayerView, emotes: List<ShownEmote>) {
                     Text(name, color = tint, style = MaterialTheme.typography.labelSmall)
                     Text(
                         when {
+                            dropped -> "انقطع"
                             stuck -> "مسكّر عليه"
                             partner -> "شريكك"
                             else -> " "
                         },
-                        color = if (stuck) Felt.Danger else Felt.Muted,
+                        color = if (stuck || dropped) Felt.Danger else Felt.Muted,
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
@@ -768,6 +770,8 @@ private fun Hand(
                         view.isYourMove && view.phase == Phase.TEERA_OFFER -> "قرارك"
                         view.isYourMove && selected != null -> "دوس على الجهة اللي تريدها"
                         view.isYourMove -> "دورك — اختر بول"
+                        view.actingSeat?.let(view::isDropped) == true ->
+                            "${view.actingSeat?.let { view.seatInfo(it)?.name }.orEmpty()} انقطع… ننتظره شوي"
                         else -> "${view.actingSeat?.let { view.seatInfo(it)?.name }.orEmpty()} يفكّر…"
                     },
                     color = if (view.isYourMove) Felt.Brass else Felt.Muted,
@@ -955,3 +959,7 @@ private fun SumRow(label: String, us: Int, them: Int, signed: Boolean) {
         Text("هم ${show(them)}", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)
     }
 }
+
+/** A person (not a bot) whose connection has dropped; the referee is holding their seat. */
+internal fun PlayerView.isDropped(seat: Int): Boolean =
+    seatInfo(seat)?.let { !it.isBot && it.playerId.isNotEmpty() && !it.connected } == true

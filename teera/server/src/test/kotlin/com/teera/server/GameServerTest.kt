@@ -5,6 +5,7 @@ import com.teera.room.gameServer
 
 import com.teera.core.ClientMessage
 import com.teera.core.Difficulty
+import com.teera.core.GameEvent
 import com.teera.core.Move
 import com.teera.core.Pack
 import com.teera.core.Protocol
@@ -160,19 +161,25 @@ class GameServerTest {
         host.say(ClientMessage.StartMatch)
 
         // The bots keep the line going on their own; the human only answers when the turn
-        // actually reaches their seat.
-        var tilesOnTable = 0
-        var humanPlays = 0
-        while (tilesOnTable < 4) {
+        // actually reaches their seat. Counted from what the referee says each seat did, so
+        // a deal where the human has to rescue (give, not lay) cannot fool the count.
+        val botTiles = mutableSetOf<com.teera.core.Domino>()
+        var views = 0
+        while (botTiles.size < 2 && views++ < 200) {
             val view = host.await<ServerMessage.GameUpdate>().view
-            tilesOnTable = maxOf(tilesOnTable, view.board.size)
+            view.events.forEach { event ->
+                when (event) {
+                    is GameEvent.Opened -> if (event.seat != view.yourSeat) botTiles += event.domino
+                    is GameEvent.Played -> if (event.seat != view.yourSeat) botTiles += event.domino
+                    else -> Unit
+                }
+            }
             if (view.isYourMove) {
                 val move = view.legalMoves.firstOrNull() ?: break
                 host.say(ClientMessage.MakeMove(move))
-                humanPlays++
             }
         }
-        assertTrue(tilesOnTable - humanPlays >= 2, "bots played their own turns unprompted")
+        assertTrue(botTiles.size >= 2, "bots played their own turns unprompted")
 
         host.close()
     }

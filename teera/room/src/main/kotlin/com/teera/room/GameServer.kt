@@ -150,6 +150,10 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             target.lock.withLock { publish(target, target.room.join(me, name)) }
                         }
 
+                        // Answered anywhere, in a room or not: the app pings to keep a
+                        // free host from putting the server to sleep mid-match.
+                        ClientMessage.Ping -> send(Protocol.encode(ServerMessage.Pong))
+
                         else -> {
                             val current = holder
                             if (current == null) {

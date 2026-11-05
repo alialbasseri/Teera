@@ -61,6 +61,8 @@ fun LobbyScreen(
     onSetRules: (Rules) -> Unit,
     onStart: () -> Unit,
     onLeave: () -> Unit,
+    /** Sends the room code through WhatsApp or whatever the phone has; null hides it. */
+    onShare: ((String) -> Unit)? = null,
 ) {
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
@@ -86,7 +88,7 @@ fun LobbyScreen(
                 when {
                     offline -> "لعب بدون إنترنت"
                     wifiAddress != null -> "أصحابك على نفس الواي فاي يشوفون الطاولة بالقائمة"
-                    else -> "اقرأ الكود لأصحابك حتى يدخلون"
+                    else -> "أصحابك يكتبون الكود بـ «عبر الإنترنت» ويدخلون"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Felt.Muted,
@@ -99,6 +101,10 @@ fun LobbyScreen(
                     style = MaterialTheme.typography.labelLarge,
                     color = Felt.Brass,
                 )
+            }
+            if (onShare != null && !offline && wifiAddress == null) {
+                Spacer(Modifier.height(6.dp))
+                BrassButton("دزّ الكود لأصحابك", { onShare(room.code) })
             }
 
             Spacer(Modifier.height(10.dp))

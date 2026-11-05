@@ -1,11 +1,24 @@
 package com.teera.app
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import com.teera.app.net.Link
+import com.teera.app.ui.theme.Felt
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -63,6 +76,7 @@ class MainActivity : ComponentActivity() {
 fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     // Toggles live in the engine; this mirrors them so the screen redraws when they change.
     var effectsOn by remember { mutableStateOf(sound?.effectsOn ?: false) }
@@ -111,6 +125,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onJoinAddress = viewModel::joinAddress,
                     hasInternetServer = state.hasInternetServer,
                     onSetServer = viewModel::setServer,
+                    waking = state.link == Link.WAKING,
+                    lastRoom = state.lastRoom,
                 )
 
                 Screen.Lobby -> state.room?.let { room ->
@@ -125,6 +141,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onSetRules = viewModel::setDraftRules,
                         onStart = viewModel::startMatch,
                         onLeave = viewModel::leave,
+                        onShare = { code -> shareRoomCode(context, code) },
                     )
                 }
 
@@ -145,6 +162,28 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     )
                 }
             }
+
+            // The server is holding the seat; say so, so nobody thinks the game froze.
+            if (state.link == Link.LOST && state.screen != Screen.Menu) {
+                Text(
+                    "انقطع الاتصال… يرجع لحاله، ومكانك محفوظ",
+                    color = Felt.Parchment,
+                    style = MaterialTheme.typography.labelLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xE6812A1E))
+                        .padding(vertical = 8.dp, horizontal = 12.dp),
+                )
+            }
         }
     }
+}
+
+/** Hands the room code to WhatsApp, Telegram or whatever the phone offers. */
+private fun shareRoomCode(context: Context, code: String) {
+    val text = "تعال نلعب طيرة 🎲\nكود الغرفة: $code\nافتح التطبيق ← عبر الإنترنت ← اكتب الكود"
+    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+    context.startActivity(Intent.createChooser(send, "دزّ الكود"))
 }

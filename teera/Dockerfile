@@ -14,5 +14,7 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /src/server/build/install/server /app
 ENV PORT=8080
+# Free hosts give the container about half a gigabyte; keep the JVM well inside it.
+ENV JAVA_OPTS="-Xmx300m -Xss512k -XX:+UseSerialGC -XX:MaxMetaspaceSize=96m"
 EXPOSE 8080
 CMD ["/app/bin/server"]
