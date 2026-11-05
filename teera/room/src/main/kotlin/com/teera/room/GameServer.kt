@@ -91,8 +91,15 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
             suspend fun fail(code: ErrorCode, message: String) =
                 send(Protocol.encode(ServerMessage.Failure(code, message)))
 
+            val voiceAllowance = VoiceAllowance()
+
             try {
                 incoming.consumeEach { frame ->
+                    // Table talk: binary, passed straight on without being opened.
+                    if (frame is Frame.Binary) {
+                        relayVoice(holder, playerId, frame.data, voiceAllowance)
+                        return@consumeEach
+                    }
                     val text = (frame as? Frame.Text)?.readText() ?: return@consumeEach
                     val message = try {
                         Protocol.decodeClient(text)
@@ -184,6 +191,49 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                 }
             }
         }
+    }
+}
+
+/** The most a phone may send in one voice packet; a 40 ms one is about 330 bytes. */
+private const val MAX_VOICE_BYTES = 2_048
+
+/**
+ * About 25 voice packets a second is a person talking. Allows a burst after a stall,
+ * and stops a broken or hostile client from flooding the table.
+ */
+private class VoiceAllowance(private val perSecond: Double = 40.0, private val burst: Double = 60.0) {
+    private var tokens = burst
+    private var last = System.nanoTime()
+
+    fun take(): Boolean {
+        val now = System.nanoTime()
+        tokens = minOf(burst, tokens + (now - last) / 1e9 * perSecond)
+        last = now
+        if (tokens < 1.0) return false
+        tokens -= 1.0
+        return true
+    }
+}
+
+/**
+ * Passes a voice packet to everybody else in the room, with the speaker's seat in front
+ * so their phones know whose ring to light. A listener on a slow line has packets
+ * dropped rather than holding the speaker up: late speech is worse than missing speech.
+ */
+private suspend fun relayVoice(
+    holder: RoomRegistry.Holder?,
+    playerId: String?,
+    payload: ByteArray,
+    allowance: VoiceAllowance,
+) {
+    if (holder == null || playerId == null) return
+    if (payload.isEmpty() || payload.size > MAX_VOICE_BYTES || !allowance.take()) return
+    val seat = holder.lock.withLock { holder.room.seatOf(playerId) } ?: return
+    val relayed = ByteArray(payload.size + 1)
+    relayed[0] = seat.toByte()
+    payload.copyInto(relayed, 1)
+    for ((id, session) in holder.sessions) {
+        if (id != playerId) session.outgoing.trySend(Frame.Binary(true, relayed))
     }
 }
 

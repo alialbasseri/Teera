@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.RecordVoiceOver
+import androidx.compose.material.icons.rounded.VoiceOverOff
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MusicOff
@@ -118,6 +120,8 @@ fun TableScreen(
     emotes: List<ShownEmote> = emptyList(),
     onEmote: (Emote) -> Unit = {},
     sound: SoundSettings = SoundSettings(),
+    /** Table talk; null at a table of bots, where there is nobody to talk to. */
+    talk: Talk? = null,
 ) {
     // These two state holders live for the whole table and are never swapped out. Keying
     // them on the board, as this screen once did, handed a fresh holder to each new frame
@@ -174,8 +178,8 @@ fun TableScreen(
 
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
-        ScoreRail(view, sound, onLeave = { if (over) onLeave() else confirmLeave = true })
-        OpponentRow(view, emotes)
+        ScoreRail(view, sound, onLeave = { if (over) onLeave() else confirmLeave = true }, talk = talk)
+        OpponentRow(view, emotes, talk?.speaking.orEmpty())
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
             BoardView(
@@ -209,6 +213,7 @@ fun TableScreen(
             playable = handHighlights(view, rescueMode),
             onTap = tapTile,
             onEmote = onEmote,
+            talk = talk,
         )
     }
 
@@ -336,7 +341,7 @@ internal fun spotOf(view: PlayerView, seat: Int): SeatSpot =
 // -- the rail ----------------------------------------------------------------
 
 @Composable
-private fun ScoreRail(view: PlayerView, sound: SoundSettings, onLeave: () -> Unit) {
+private fun ScoreRail(view: PlayerView, sound: SoundSettings, onLeave: () -> Unit, talk: Talk? = null) {
     val us = view.scores.getOrElse(view.yourTeam) { 0 }
     val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
 
@@ -384,6 +389,16 @@ private fun ScoreRail(view: PlayerView, sound: SoundSettings, onLeave: () -> Uni
                     )
                 }
             }
+            if (talk != null) {
+                // Muting everybody else; your own mic is the button by your hand.
+                IconButton(onClick = talk.onHearing, modifier = Modifier.size(36.dp)) {
+                    Icon(
+                        if (talk.hearing) Icons.Rounded.RecordVoiceOver else Icons.Rounded.VoiceOverOff,
+                        contentDescription = if (talk.hearing) "اكتم أصوات اللاعبين" else "اسمع اللاعبين",
+                        tint = if (talk.hearing) Felt.Brass else Felt.Muted,
+                    )
+                }
+            }
             IconButton(onClick = onLeave) {
                 Icon(Icons.AutoMirrored.Rounded.ExitToApp, contentDescription = "خروج", tint = Felt.Muted)
             }
@@ -420,7 +435,7 @@ private fun ScorePlate(who: String, score: Int, leading: Boolean) {
 
 /** The other three seats: who is on, how many bones they hold, and who your partner is. */
 @Composable
-private fun OpponentRow(view: PlayerView, emotes: List<ShownEmote>) {
+private fun OpponentRow(view: PlayerView, emotes: List<ShownEmote>, speaking: Set<Int> = emptySet()) {
     val others = (1..3).map { (view.yourSeat + it) % 4 }
     val pulse = rememberInfiniteTransition(label = "pulse")
     val ring by pulse.animateFloat(
@@ -449,6 +464,7 @@ private fun OpponentRow(view: PlayerView, emotes: List<ShownEmote>) {
             Box(contentAlignment = Alignment.TopCenter) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(contentAlignment = Alignment.Center) {
+                        if (seat in speaking) SpeakingHalo(52.dp)
                         // Whoever the table is waiting on breathes, so you can see it from
                         // across the room.
                         if (acting) {
@@ -753,6 +769,7 @@ private fun Hand(
     playable: Set<Domino>,
     onTap: (Domino) -> Unit,
     onEmote: (Emote) -> Unit,
+    talk: Talk? = null,
 ) {
     Box {
         WalnutSurface(Modifier.matchParentSize())
@@ -778,6 +795,7 @@ private fun Hand(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f),
                 )
+                if (talk != null) MicButton(talk, size = 40.dp)
                 Soundboard(onEmote)
             }
 

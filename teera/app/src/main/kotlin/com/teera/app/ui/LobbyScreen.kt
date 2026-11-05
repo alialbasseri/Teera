@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -63,6 +64,8 @@ fun LobbyScreen(
     onLeave: () -> Unit,
     /** Sends the room code through WhatsApp or whatever the phone has; null hides it. */
     onShare: ((String) -> Unit)? = null,
+    /** Table talk; null when the other chairs can only hold bots. */
+    talk: Talk? = null,
 ) {
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
@@ -102,9 +105,24 @@ fun LobbyScreen(
                     color = Felt.Brass,
                 )
             }
-            if (onShare != null && !offline && wifiAddress == null) {
-                Spacer(Modifier.height(6.dp))
-                BrassButton("دزّ الكود لأصحابك", { onShare(room.code) })
+            // Sharing the code and opening the mic share one row: the chairs need the height.
+            val sharing = onShare != null && !offline && wifiAddress == null
+            if (sharing || talk != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    if (sharing) BrassButton("دزّ الكود لأصحابك", { onShare?.invoke(room.code) })
+                    if (talk != null) {
+                        Spacer(Modifier.width(10.dp))
+                        MicButton(talk, size = 40.dp)
+                        if (!sharing) {
+                            Text(
+                                if (talk.micOn) "المايك مفتوح، تكلّم" else "افتح المايك وسولف وياهم",
+                                color = if (talk.micOn) Felt.Playable else Felt.Muted,
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -116,17 +134,17 @@ fun LobbyScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                SeatChair(room, (mySeat + 2) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot)
+                SeatChair(room, (mySeat + 2) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    SeatChair(room, (mySeat + 1) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot)
+                    SeatChair(room, (mySeat + 1) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
                     RoundTable(Modifier.size(118.dp))
-                    SeatChair(room, (mySeat + 3) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot)
+                    SeatChair(room, (mySeat + 3) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
                 }
-                SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot)
+                SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
             }
 
             RosetteRule(Modifier.padding(horizontal = 40.dp, vertical = 6.dp))
@@ -202,6 +220,7 @@ private fun SeatChair(
     onTakeSeat: (Int) -> Unit,
     onToggleBot: (Int, Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    speaking: Set<Int> = emptySet(),
 ) {
     val info: Seat? = room.seats.firstOrNull { it.seat == seat }
     val human = !info?.playerId.isNullOrEmpty() && info?.isBot != true
@@ -217,6 +236,9 @@ private fun SeatChair(
             .testTag("seat-$seat"),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        // The ring is drawn past the chair's edge rather than making the chair bigger.
+        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+        if (seat in speaking) SpeakingHalo(60.dp, Modifier.requiredSize(60.dp))
         Box(
             Modifier
                 .size(52.dp)
@@ -244,6 +266,7 @@ private fun SeatChair(
                 color = if (empty) Felt.Brass else Felt.Parchment,
                 style = MaterialTheme.typography.titleLarge,
             )
+        }
         }
         Text(
             when {

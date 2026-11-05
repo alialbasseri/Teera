@@ -25,6 +25,8 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import okio.ByteString
+import okio.ByteString.Companion.toByteString
 
 /**
  * Talks to the room server.
@@ -54,6 +56,13 @@ class WebSocketGameClient(
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
     override val incoming: Flow<ServerMessage> = events.asSharedFlow()
+
+    // Voice is only worth anything live: a slow reader loses the oldest, never blocks.
+    private val voiceIn = MutableSharedFlow<ByteArray>(
+        extraBufferCapacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    )
+    override val voice: Flow<ByteArray> = voiceIn.asSharedFlow()
 
     private val _link = MutableStateFlow(if (wakeFirst) Link.WAKING else Link.CONNECTING)
     override val link: StateFlow<Link> = _link.asStateFlow()
@@ -150,6 +159,10 @@ class WebSocketGameClient(
             events.tryEmit(message)
         }
 
+        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
+            voiceIn.tryEmit(bytes.toByteArray())
+        }
+
         override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
             webSocket.close(1000, null)
         }
@@ -225,6 +238,15 @@ class WebSocketGameClient(
         Unit
     }
 
+    override fun sendVoice(packet: ByteArray) = synchronized(this) {
+        val current = socket ?: return@synchronized
+        // A line that cannot keep up would only deliver speech late; skip rather than queue.
+        if (_link.value == Link.UP && current.queueSize() < MAX_VOICE_BACKLOG) {
+            current.send(packet.toByteString())
+        }
+        Unit
+    }
+
     override fun close() = synchronized(this) {
         closed = true
         keepAlive.cancel()
@@ -237,6 +259,7 @@ class WebSocketGameClient(
         private const val FIRST_CONNECT_ATTEMPTS = 6
         private const val WAKE_TIMEOUT_MS = 100_000L
         private const val KEEP_ALIVE_MS = 4 * 60_000L
+        private const val MAX_VOICE_BACKLOG = 8_000L
 
         /** wss://host/ws → https://host/health */
         fun healthUrlFor(socketUrl: String): String = socketUrl

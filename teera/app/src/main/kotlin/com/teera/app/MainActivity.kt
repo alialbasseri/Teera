@@ -1,10 +1,16 @@
 package com.teera.app
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
@@ -37,12 +43,14 @@ import com.teera.app.sound.SoundEngine
 import com.teera.app.ui.LobbyScreen
 import com.teera.app.ui.MenuScreen
 import com.teera.app.ui.SoundSettings
+import com.teera.app.ui.Talk
 import com.teera.app.ui.TableScreen
 import com.teera.app.ui.theme.TeeraTheme
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var sound: SoundEngine
+    private val model: GameViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +74,12 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onStop() {
+        // Out of sight, the mic closes: nobody at the table should overhear the room.
+        model.pauseVoice()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         if (isFinishing) sound.release()
         super.onDestroy()
@@ -77,6 +91,30 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val snackbars = remember { SnackbarHostState() }
     val context = LocalContext.current
+
+    // Table talk: the mic needs asking for the first time, and only then.
+    val micOn by viewModel.voice.micOn.collectAsStateWithLifecycle()
+    val talking by viewModel.voice.talking.collectAsStateWithLifecycle()
+    val hearing by viewModel.voice.hearing.collectAsStateWithLifecycle()
+    val speaking by viewModel.voice.speaking.collectAsStateWithLifecycle()
+    val askForMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.setMic(true) else viewModel.micRefused()
+    }
+    val talk = Talk(
+        micOn = micOn,
+        talking = talking,
+        hearing = hearing,
+        speaking = speaking,
+        onMic = {
+            when {
+                micOn -> viewModel.setMic(false)
+                ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED -> viewModel.setMic(true)
+                else -> askForMic.launch(Manifest.permission.RECORD_AUDIO)
+            }
+        },
+        onHearing = { viewModel.setHearing(!hearing) },
+    ).takeUnless { state.offline }
 
     // Toggles live in the engine; this mirrors them so the screen redraws when they change.
     var effectsOn by remember { mutableStateOf(sound?.effectsOn ?: false) }
@@ -142,6 +180,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onStart = viewModel::startMatch,
                         onLeave = viewModel::leave,
                         onShare = { code -> shareRoomCode(context, code) },
+                        talk = talk,
                     )
                 }
 
@@ -159,6 +198,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                             onEffects = { on -> sound?.effectsOn = on; effectsOn = on },
                             onMusic = { on -> sound?.musicOn = on; musicOn = on },
                         ),
+                        talk = talk,
                     )
                 }
             }

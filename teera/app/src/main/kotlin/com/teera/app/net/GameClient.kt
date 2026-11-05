@@ -4,6 +4,7 @@ import com.teera.core.ClientMessage
 import com.teera.core.Protocol
 import com.teera.core.ServerMessage
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -21,6 +22,16 @@ interface GameClient {
     val link: StateFlow<Link> get() = ALWAYS_UP
 
     fun send(message: ClientMessage)
+
+    /**
+     * Table talk, as relayed by the referee: `[seat][packet]`. Empty for a table in this
+     * process, where everybody else is a bot.
+     */
+    val voice: Flow<ByteArray> get() = emptyFlow()
+
+    /** Sends one packet of this player's voice; dropped when the line is not up. */
+    fun sendVoice(packet: ByteArray) = Unit
+
     fun close()
 }
 

@@ -207,6 +207,8 @@ class Screenshots {
             ),
             onMove = {}, onNextGame = {}, onLeave = {},
             emotes = listOf(com.teera.app.ShownEmote(1, com.teera.core.Emote.GULP, 1)),
+            // Sara is talking, and so is this player: mic open.
+            talk = com.teera.app.ui.Talk(micOn = true, talking = true, speaking = setOf(1)),
         )
     }
 
@@ -220,6 +222,7 @@ class Screenshots {
             myId = "me", isHost = true, offline = false,
             onTakeSeat = {}, onToggleBot = { _, _ -> }, onSetRules = {}, onStart = {}, onLeave = {},
             onShare = {},
+            talk = com.teera.app.ui.Talk(speaking = setOf(1)),
         )
     }
 }

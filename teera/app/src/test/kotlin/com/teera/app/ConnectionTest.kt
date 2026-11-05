@@ -58,6 +58,7 @@ class ConnectionTest {
     private inner class Phone(name: String, wake: Boolean = true, wakeMillis: Long = 20_000) {
         val heard = CopyOnWriteArrayList<ServerMessage>()
         val links = CopyOnWriteArrayList<Link>()
+        val voices = CopyOnWriteArrayList<ByteArray>()
         val client = WebSocketGameClient(
             "ws://127.0.0.1:$port/ws", scope, "id-$name", name,
             wakeFirst = wake, wakeTimeoutMillis = wakeMillis,
@@ -66,6 +67,7 @@ class ConnectionTest {
         init {
             scope.launch { client.incoming.collect { heard += it } }
             scope.launch { client.link.collect { links += it } }
+            scope.launch { client.voice.collect { voices += it } }
         }
 
         val room: RoomInfo? get() = heard.filterIsInstance<ServerMessage.RoomUpdate>().lastOrNull()?.room
@@ -132,6 +134,29 @@ class ConnectionTest {
         assertEquals(saraSeat, back.yourSeat, "same seat")
         assertTrue(back.hand.toSet().all { it in saraHand }, "same hand, less whatever she played")
         assertTrue(Link.LOST in sara.links, "the screen was told while it was down")
+        ali.client.close()
+        sara.client.close()
+    }
+
+    @Test
+    fun `what one player says is heard by the other, from the right seat`() = runBlocking {
+        serverUp()
+        val ali = Phone("Ali")
+        ali.client.send(ClientMessage.CreateRoom(Rules.DEFAULT))
+        until("room") { ali.room != null }
+        val sara = Phone("Sara")
+        sara.client.send(ClientMessage.JoinRoom(ali.room!!.code))
+        until("Sara seated") { sara.room?.seats?.any { it.name == "Sara" } == true }
+        val aliSeat = ali.room!!.seats.first { it.name == "Ali" }.seat
+
+        val words = ShortArray(com.teera.app.voice.VoiceWire.FRAME_SAMPLES) { (kotlin.math.sin(it / 6.0) * 8_000).toInt().toShort() }
+        repeat(5) { ali.client.sendVoice(com.teera.app.voice.VoiceWire.pack(it, words)) }
+
+        until("Sara hears all of it") { sara.voices.size == 5 }
+        val heard = assertNotNull(com.teera.app.voice.VoiceWire.unpack(sara.voices.last()))
+        assertEquals(aliSeat, heard.seat)
+        assertEquals(4, heard.seq)
+        assertTrue(ali.voices.isEmpty(), "Ali does not hear himself")
         ali.client.close()
         sara.client.close()
     }

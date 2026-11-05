@@ -15,6 +15,7 @@ import com.teera.app.net.LocalGameClient
 import com.teera.app.net.WebSocketGameClient
 import com.teera.app.sound.Reaction
 import com.teera.app.sound.react
+import com.teera.app.voice.VoiceChat
 import com.teera.core.ClientMessage
 import com.teera.core.ErrorCode
 import com.teera.core.Difficulty
@@ -117,9 +118,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
+    // Read from the microphone's thread as well as the main one.
+    @Volatile
     private var client: GameClient? = null
     private var pump: Job? = null
     private var linkWatch: Job? = null
+    private var listening: Job? = null
+
+    /** Table talk. Its packets go out over whatever connection the table is on. */
+    val voice = VoiceChat(app).also { chat -> chat.send = { packet -> client?.sendVoice(packet) } }
 
     /** Whether the current table is on the internet server, the one worth coming back to. */
     private var onInternet = false
@@ -289,6 +296,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         pump = viewModelScope.launch {
             next.incoming.collect(::onMessage)
         }
+        listening?.cancel()
+        listening = viewModelScope.launch(Dispatchers.Default) {
+            next.voice.collect(voice::receive)
+        }
         linkWatch = viewModelScope.launch {
             next.link.collect { link ->
                 _state.update { it.copy(link = link) }
@@ -300,6 +311,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** The client has given up getting through: say so plainly and go back to the menu. */
     private fun unreachable() {
         val where = if (onInternet) "السيرفر" else "الطاولة"
+        voice.stopAll()
+        listening?.cancel()
         client?.close()
         client = null
         pump?.cancel()
@@ -384,7 +397,29 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sendEmote(emote: Emote) = client?.send(ClientMessage.SendEmote(emote))
 
+    // -- talking -----------------------------------------------------------------
+
+    /** The screen has made sure of the microphone permission before switching it on. */
+    fun setMic(on: Boolean) {
+        if (on && _state.value.offline) return
+        voice.setMic(on)
+        if (on && !voice.micOn.value) {
+            _state.update { it.copy(notice = "ما قدرت أشغّل المايك") }
+        }
+    }
+
+    fun micRefused() = _state.update {
+        it.copy(notice = "حتى تحچي ويا أصحابك لازم تسمح للتطبيق يستعمل المايك")
+    }
+
+    fun setHearing(on: Boolean) = voice.setHearing(on)
+
+    /** The app has gone into the background: close the mic, nobody should be overheard. */
+    fun pauseVoice() = voice.setMic(false)
+
     fun leave() {
+        voice.stopAll()
+        listening?.cancel()
         client?.send(ClientMessage.LeaveRoom)
         client?.close()
         client = null
@@ -410,6 +445,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        voice.stopAll()
         client?.close()
         beacon.close()
         lanHost.stop()

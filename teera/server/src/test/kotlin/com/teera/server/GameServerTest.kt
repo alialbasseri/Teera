@@ -202,3 +202,46 @@ class OpenRoomsTest {
         host.close()
     }
 }
+
+class VoiceRelayTest {
+
+    @Test
+    fun `talk reaches everyone else at the table with the speaker's seat, and not the speaker`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali"))
+        ali.await<ServerMessage.Welcome>()
+        ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = ali.await<ServerMessage.RoomUpdate>().room.code
+
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara"))
+        sara.await<ServerMessage.Welcome>()
+        sara.say(ClientMessage.JoinRoom(code))
+        sara.await<ServerMessage.RoomUpdate>()
+        ali.await<ServerMessage.RoomUpdate> { it.room.seats.any { s -> s.name == "Sara" } }
+
+        // A stranger who never joined the room cannot speak into it.
+        val stranger = ws.webSocketSession("/ws")
+        stranger.say(ClientMessage.Hello("Nobody"))
+        stranger.await<ServerMessage.Welcome>()
+        stranger.send(Frame.Binary(true, byteArrayOf(1, 0, 9, 9, 9, 9, 9)))
+
+        sara.send(Frame.Binary(true, byteArrayOf(1, 0, 7, 10, 20, 30, 40)))
+        val heard = withTimeout(5_000) {
+            var frame: Frame
+            do { frame = ali.incoming.receive() } while (frame !is Frame.Binary)
+            frame.data
+        }
+        assertEquals(listOf<Byte>(1, 1, 0, 7, 10, 20, 30, 40), heard.toList(), "Sara's seat, then her packet untouched")
+
+        // And it was not sent back to Sara herself: the next thing she gets is a pong.
+        sara.say(ClientMessage.Ping)
+        val next = withTimeout(5_000) { sara.incoming.receive() }
+        assertTrue(next is Frame.Text, "no echo of her own voice")
+
+        ali.close(); sara.close(); stranger.close()
+    }
+}
