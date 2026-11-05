@@ -128,7 +128,10 @@ class Screenshots {
 
     @Test
     fun menu() = shoot("menu") {
-        MenuScreen("علي", {}, {}, {}, {}, connecting = false)
+        MenuScreen(
+            "علي", {}, {}, {}, {}, connecting = false,
+            wifiTables = listOf(com.teera.app.net.WifiTable("سارة", "192.168.1.7", 8765, "KHAN")),
+        )
     }
 
     @Test
@@ -173,6 +176,31 @@ class Screenshots {
                 events = emptyList(),
             ),
             onMove = {}, onNextGame = {}, onLeave = {},
+        )
+    }
+
+    /** The moment a game ends, before the sums come up. */
+    @Test
+    fun celebration() = shoot("celebration", settleMillis = 700) {
+        val v = midGame()
+        TableScreen(
+            v.copy(
+                phase = Phase.GAME_OVER, actingSeat = null, legalMoves = emptyList(),
+                lastGame = GameResult(4, GameEnd.TEERA, 0, listOf(1, 9, 4, 12), listOf(1, 21), 0),
+                events = emptyList(),
+            ),
+            onMove = {}, onNextGame = {}, onLeave = {},
+        )
+    }
+
+    /** A bot pushing a tile onto you, and saying so. */
+    @Test
+    fun emote() = shoot("emote") {
+        val v = midGame()
+        TableScreen(
+            v.copy(actingSeat = 2, events = emptyList()),
+            onMove = {}, onNextGame = {}, onLeave = {},
+            emotes = listOf(com.teera.app.ShownEmote(1, com.teera.core.Emote.GULP, 1)),
         )
     }
 
