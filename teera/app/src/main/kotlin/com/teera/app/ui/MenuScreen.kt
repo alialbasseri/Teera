@@ -16,11 +16,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -87,17 +90,25 @@ fun MenuScreen(
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Smaller phones get a smaller emblem rather than a scrolling menu.
             val roomy = maxHeight > 720.dp
+            // Laid out to fill exactly one screen; only if a small phone with large text
+            // cannot hold it all does it scroll, rather than cutting the bottom off.
             Column(
-                Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .heightIn(min = maxHeight)
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-                Spacer(Modifier.weight(0.5f))
+              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Emblem(Modifier.scale(if (roomy) 1f else 0.78f))
                 Text("طيرة", color = Felt.Brass, fontSize = if (roomy) 62.sp else 52.sp, style = MaterialTheme.typography.displayLarge)
                 if (roomy) {
                     Text("دومينا عراقية · أربعة · فريقين", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium)
                 }
-                Spacer(Modifier.weight(0.6f))
+              }
+              Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 12.dp)) {
 
                 // Who you are: your picture opens your profile.
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -179,8 +190,8 @@ fun MenuScreen(
                     }
                 }
 
-                Spacer(Modifier.weight(1f))
-
+              }
+              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 // The quieter doors.
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -200,6 +211,7 @@ fun MenuScreen(
                     style = MaterialTheme.typography.labelSmall,
                     color = Felt.Muted,
                 )
+              }
             }
         }
     }
@@ -327,9 +339,9 @@ private fun Credits() {
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // One line each, never wrapped: a narrow phone or large text broke "Tech Vision" in two.
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             CreditLine("Designed by", "Ali Albasseri") { runCatching { links.openUri(DESIGNER_URL) } }
-            Text("  ·  ", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
             CreditLine("Powered by", "Tech Vision") { runCatching { links.openUri(TECH_VISION_URL) } }
         }
     }
@@ -338,14 +350,16 @@ private fun Credits() {
 @Composable
 private fun CreditLine(lead: String, name: String, open: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("$lead ", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        Text("$lead ", color = Felt.Muted, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false)
         Text(
             name,
+            maxLines = 1,
+            softWrap = false,
             color = Felt.Brass,
             style = MaterialTheme.typography.labelLarge.copy(
                 textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
             ),
-            modifier = Modifier.clickable(onClick = open).padding(vertical = 4.dp, horizontal = 2.dp),
+            modifier = Modifier.clickable(onClick = open).padding(vertical = 2.dp, horizontal = 2.dp),
         )
     }
 }

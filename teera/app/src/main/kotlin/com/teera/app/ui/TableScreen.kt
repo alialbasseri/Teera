@@ -38,6 +38,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.VoiceOverOff
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
@@ -395,65 +398,64 @@ private fun ScoreRail(
             modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // Three plates of one size in a row: us, them, and which game of how many points.
             // Points are a burden here, so whoever has fewer is the one in front.
-            ScorePlate(view.teamName(view.yourTeam), us, leading = us <= them)
+            ScorePlate(view.teamName(view.yourTeam), "$us", if (us <= them) Felt.Playable else Felt.Behind, animated = us)
             Spacer(Modifier.width(8.dp))
-            ScorePlate(view.teamName(1 - view.yourTeam), them, leading = them < us)
+            ScorePlate(view.teamName(1 - view.yourTeam), "$them", if (them < us) Felt.Playable else Felt.Behind, animated = them)
+            Spacer(Modifier.width(8.dp))
+            ScorePlate("گيم ${view.gameNumber}", "لـ ${view.rules.target}", Felt.Brass)
 
             Spacer(Modifier.weight(1f))
 
-            Column(horizontalAlignment = Alignment.End) {
-                Text("گيم ${view.gameNumber}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
-                Text(
-                    "لـ ${view.rules.target}",
-                    color = Felt.Brass,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (view.alerts.any { it > 0 }) {
-                    Text(
-                        "ألرت ${view.alerts.getOrElse(view.yourTeam) { 0 }} · ${view.alerts.getOrElse(1 - view.yourTeam) { 0 }}",
-                        color = Felt.Danger,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
+            // Everything else a player reaches for mid-game, behind one button.
+            var menuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("table-menu")) {
+                    Icon(Icons.Rounded.MoreVert, contentDescription = "القائمة", tint = Felt.Brass)
                 }
-            }
-            // Four small switches in a square: music, effects, other players' voices, rules.
-            Column {
-                Row {
-                    IconButton(onClick = { sound.onMusic(!sound.musicOn) }, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            if (sound.musicOn) Icons.Rounded.MusicNote else Icons.Rounded.MusicOff,
-                            contentDescription = "موسيقى",
-                            tint = if (sound.musicOn) Felt.Brass else Felt.Muted,
+                DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                    modifier = Modifier.background(Felt.Rail),
+                ) {
+                    @Composable
+                    fun Entry(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, lit: Boolean = true, action: () -> Unit) =
+                        DropdownMenuItem(
+                            text = { Text(label, color = if (lit) Felt.Parchment else Felt.Muted, style = MaterialTheme.typography.bodyLarge) },
+                            leadingIcon = { Icon(icon, contentDescription = null, tint = if (lit) Felt.Brass else Felt.Muted) },
+                            onClick = action,
                         )
-                    }
-                    IconButton(onClick = { sound.onEffects(!sound.effectsOn) }, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            if (sound.effectsOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
-                            contentDescription = "أصوات",
-                            tint = if (sound.effectsOn) Felt.Brass else Felt.Muted,
-                        )
-                    }
-                }
-                Row {
+                    Entry(
+                        if (sound.musicOn) "الموسيقى شغّالة" else "الموسيقى طافية",
+                        if (sound.musicOn) Icons.Rounded.MusicNote else Icons.Rounded.MusicOff,
+                        sound.musicOn,
+                    ) { sound.onMusic(!sound.musicOn) }
+                    Entry(
+                        if (sound.effectsOn) "أصوات اللعب شغّالة" else "أصوات اللعب طافية",
+                        if (sound.effectsOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
+                        sound.effectsOn,
+                    ) { sound.onEffects(!sound.effectsOn) }
                     if (talk != null) {
-                        // Muting everybody else; your own mic is the button by your hand.
-                        IconButton(onClick = talk.onHearing, modifier = Modifier.size(36.dp)) {
-                            Icon(
-                                if (talk.hearing) Icons.Rounded.RecordVoiceOver else Icons.Rounded.VoiceOverOff,
-                                contentDescription = if (talk.hearing) "اكتم أصوات اللاعبين" else "اسمع اللاعبين",
-                                tint = if (talk.hearing) Felt.Brass else Felt.Muted,
-                            )
-                        }
+                        Entry(
+                            if (talk.hearing) "أسمع جماعتي" else "جماعتي مكتومين",
+                            if (talk.hearing) Icons.Rounded.RecordVoiceOver else Icons.Rounded.VoiceOverOff,
+                            talk.hearing,
+                        ) { talk.onHearing() }
                     }
-                    IconButton(onClick = onRules, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.AutoMirrored.Rounded.MenuBook, contentDescription = "القوانين", tint = Felt.Brass)
-                    }
+                    Entry("القوانين", Icons.AutoMirrored.Rounded.MenuBook) { menuOpen = false; onRules() }
+                    HorizontalDivider(color = Felt.Brass.copy(alpha = 0.4f))
+                    Entry("اطلع من الطاولة", Icons.AutoMirrored.Rounded.ExitToApp) { menuOpen = false; onLeave() }
                 }
             }
-            IconButton(onClick = onLeave) {
-                Icon(Icons.AutoMirrored.Rounded.ExitToApp, contentDescription = "خروج", tint = Felt.Muted)
-            }
+        }
+        if (view.alerts.any { it > 0 }) {
+            Text(
+                "ألرت ${view.alerts.getOrElse(view.yourTeam) { 0 }} · ${view.alerts.getOrElse(1 - view.yourTeam) { 0 }}",
+                color = Felt.Danger,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp),
+            )
         }
         HorizontalDivider(
             color = Felt.Brass.copy(alpha = 0.85f),
@@ -463,30 +465,37 @@ private fun ScoreRail(
     }
 }
 
-/** An engraved plaque, its number rolling to the new score rather than jumping to it. */
+/**
+ * An engraved plaque: a small label over a big value. A score rolls to its new number
+ * rather than jumping to it.
+ */
 @Composable
-private fun ScorePlate(who: String, score: Int, leading: Boolean) {
-    val shown by animateIntAsState(score, animationSpec = tween(900), label = "score")
+private fun ScorePlate(label: String, value: String, colour: Color, animated: Int? = null) {
+    val rolled = animated?.let { target -> animateIntAsState(target, animationSpec = tween(900), label = "score").value }
     Column(
         modifier = Modifier
+            .height(58.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(Color(0xFF120B05).copy(alpha = 0.55f))
             .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 14.dp, vertical = 4.dp),
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
     ) {
         Text(
-            who,
+            label,
             color = Felt.Muted,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 104.dp),
+            modifier = Modifier.widthIn(max = 92.dp),
         )
         Text(
             // A score can go below zero; isolated so the minus stays in front of it.
-            "\u2066$shown\u2069",
-            color = if (leading) Felt.Playable else Felt.Behind,
+            "\u2066" + (rolled?.toString() ?: value) + "\u2069",
+            color = colour,
             style = MaterialTheme.typography.titleLarge,
+            maxLines = 1,
         )
     }
 }

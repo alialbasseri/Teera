@@ -89,7 +89,7 @@ fun BoardView(
                 drawFrame(inset)
             }
             Text(
-                text = "الفتحة بالچفت",
+                text = "العب الچفت",
                 color = Color.White.copy(alpha = 0.3f),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.align(Alignment.Center),

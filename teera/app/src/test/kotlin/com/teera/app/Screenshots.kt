@@ -143,6 +143,13 @@ class Screenshots {
         )
     }
 
+    /** A narrower phone with its text turned up, which is where the menu wrapped before. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h740dp-xxhdpi", fontScale = 1.3f)
+    fun menuLargeText() = shoot("menu-large-text") {
+        MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "KHAN")
+    }
+
     @Test
     fun table() = shoot("table") {
         val v = midGame()
