@@ -5,6 +5,11 @@ import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.teera.app.net.GameClient
+import com.teera.app.net.LanBeacon
+import com.teera.app.net.LanHost
+import com.teera.app.net.WifiTable
+import com.teera.app.net.localAddress
+import com.teera.app.net.openRoomAt
 import com.teera.app.net.LocalGameClient
 import com.teera.app.net.WebSocketGameClient
 import com.teera.app.sound.Reaction
@@ -19,6 +24,7 @@ import com.teera.core.RoomInfo
 import com.teera.core.Rules
 import com.teera.core.ServerMessage
 import java.util.UUID
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,6 +35,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class Screen { Menu, Lobby, Table }
 
@@ -49,14 +56,34 @@ data class UiState(
     val offline: Boolean = false,
     /** Soundboard presses still on screen, newest last. */
     val emotes: List<ShownEmote> = emptyList(),
+    /** Set while this phone hosts a table on the Wi-Fi: the address friends can type in. */
+    val wifiAddress: String? = null,
+    /** Tables other phones on this Wi-Fi are hosting. */
+    val wifiTables: List<WifiTable> = emptyList(),
 ) {
+    /** Whether an internet server has actually been set up yet. */
+    val hasInternetServer: Boolean get() = serverUrl.startsWith("ws")
     val isHost: Boolean get() = room == null || room.hostId == myId
+}
+
+/** Turns a pasted host name or web address into the websocket address the server listens on. */
+fun normaliseServer(input: String): String {
+    var address = input.trim().trimEnd('/')
+    if (address.isEmpty()) return ""
+    address = when {
+        address.startsWith("wss://") || address.startsWith("ws://") -> address
+        address.startsWith("https://") -> "wss://" + address.removePrefix("https://")
+        address.startsWith("http://") -> "ws://" + address.removePrefix("http://")
+        else -> "wss://$address"
+    }
+    return if (address.endsWith("/ws")) address else "$address/ws"
 }
 
 /** A soundboard press, shown as a bubble over the seat that sent it. */
 data class ShownEmote(val seat: Int, val emote: Emote, val id: Long)
 
-const val DEFAULT_SERVER = "wss://dominoes.example.com/ws"
+/** The internet server baked into this build, or empty when none has been set up. */
+val DEFAULT_SERVER: String = BuildConfig.SERVER_URL
 
 /**
  * Holds the connection and the last view the referee sent.
@@ -103,9 +130,15 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(playerName = name) }
     }
 
+    /**
+     * Points this phone at an internet server. Takes whatever somebody is likely to paste
+     * - "teera.onrender.com", "https://teera.onrender.com" - and makes a websocket address
+     * of it.
+     */
     fun setServer(url: String) {
-        prefs.edit().putString(KEY_SERVER, url).apply()
-        _state.update { it.copy(serverUrl = url) }
+        val address = normaliseServer(url)
+        prefs.edit().putString(KEY_SERVER, address).apply()
+        _state.update { it.copy(serverUrl = address) }
     }
 
     fun setDraftRules(rules: Rules) {
@@ -118,13 +151,91 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     // -- starting a table ---------------------------------------------------
 
     fun hostOnline() {
-        connectOnline()
+        if (!_state.value.hasInternetServer) return noInternetServer()
+        connectTo(_state.value.serverUrl)
         client?.send(ClientMessage.CreateRoom(_state.value.draftRules))
     }
 
     fun join(code: String) {
-        connectOnline()
+        if (!_state.value.hasInternetServer) return noInternetServer()
+        connectTo(_state.value.serverUrl)
         client?.send(ClientMessage.JoinRoom(code.trim().uppercase()))
+    }
+
+    /**
+     * Until somebody hosts the server on the internet there is nothing to connect to, and
+     * trying only produces "unable to resolve host". Say what does work instead.
+     */
+    private fun noInternetServer() = _state.update {
+        it.copy(notice = "اللعب عبر الإنترنت يحتاج سيرفر، ولسه ما منصوب. العبوا على نفس الواي فاي")
+    }
+
+    // -- a table on the Wi-Fi -------------------------------------------------
+
+    private val lanHost = LanHost()
+    private val beacon = LanBeacon(app)
+    private var announcedCode: String? = null
+
+    init {
+        viewModelScope.launch {
+            beacon.tables.collect { found -> _state.update { it.copy(wifiTables = found) } }
+        }
+    }
+
+    /** Called while the menu is showing, so tables on the network appear as they open. */
+    fun lookForWifiTables(looking: Boolean) = if (looking) beacon.startLooking() else beacon.stopLooking()
+
+    /** This phone becomes the referee; friends on the same Wi-Fi find it and join. */
+    fun hostOnWifi() {
+        viewModelScope.launch {
+            val port = runCatching { withContext(Dispatchers.IO) { lanHost.start() } }.getOrElse {
+                _state.update { it.copy(notice = "ما قدرت أفتح الطاولة على هذا الجهاز") }
+                return@launch
+            }
+            connectTo("ws://127.0.0.1:$port/ws")
+            _state.update { it.copy(wifiAddress = localAddress()?.let { ip -> "$ip:$port" }) }
+            client?.send(ClientMessage.CreateRoom(_state.value.draftRules))
+        }
+    }
+
+    fun joinWifiTable(table: WifiTable) {
+        viewModelScope.launch {
+            val code = table.code ?: openRoomAt(table.host, table.port)
+            if (code == null) {
+                _state.update { it.copy(notice = "الطاولة بدت أو انسدّت") }
+                return@launch
+            }
+            connectTo("ws://${table.host}:${table.port}/ws")
+            client?.send(ClientMessage.JoinRoom(code))
+        }
+    }
+
+    /** For a network that hides tables from each other: type the host's address instead. */
+    fun joinAddress(address: String) {
+        val parts = address.trim().split(":")
+        val host = parts.firstOrNull()?.takeIf { it.isNotBlank() } ?: return
+        val port = parts.getOrNull(1)?.toIntOrNull() ?: LanHost.DEFAULT_PORT
+        joinWifiTable(WifiTable(name = host, host = host, port = port, code = null))
+    }
+
+    /** Puts the hosted table on the network once the room exists and has a code. */
+    private fun announceIfHosting(room: RoomInfo) {
+        if (!lanHost.isRunning || room.started || announcedCode == room.code) return
+        announcedCode = room.code
+        beacon.announce(_state.value.playerName, lanHost.port, room.code)
+    }
+
+    private fun stopHosting() {
+        beacon.stopAnnouncing()
+        announcedCode = null
+        if (lanHost.isRunning) {
+            viewModelScope.launch(Dispatchers.IO) {
+                // Give the goodbye a moment to reach the other phones before the referee goes.
+                delay(400)
+                lanHost.stop()
+            }
+        }
+        _state.update { it.copy(wifiAddress = null) }
     }
 
     /** A table against bots, refereed in this process. */
@@ -138,10 +249,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client?.send(ClientMessage.StartMatch)
     }
 
-    private fun connectOnline() {
+    private fun connectTo(url: String) {
         attach(
             WebSocketGameClient(
-                url = _state.value.serverUrl,
+                url = url,
                 scope = viewModelScope,
                 playerId = playerId,
                 playerName = _state.value.playerName,
@@ -164,13 +275,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         when (message) {
             is ServerMessage.Welcome -> _state.update { it.copy(connecting = false) }
 
-            is ServerMessage.RoomUpdate -> _state.update {
-                it.copy(
-                    room = message.room,
-                    draftRules = if (message.room.started) it.draftRules else message.room.rules,
-                    screen = if (message.room.started) Screen.Table else Screen.Lobby,
-                    connecting = false,
-                )
+            is ServerMessage.RoomUpdate -> {
+                announceIfHosting(message.room)
+                // Once the deal is done nobody else can sit down, so stop advertising it.
+                if (message.room.started) beacon.stopAnnouncing()
+                _state.update {
+                    it.copy(
+                        room = message.room,
+                        draftRules = if (message.room.started) it.draftRules else message.room.rules,
+                        screen = if (message.room.started) Screen.Table else Screen.Lobby,
+                        connecting = false,
+                    )
+                }
             }
 
             is ServerMessage.GameUpdate -> {
@@ -227,6 +343,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client?.close()
         client = null
         pump?.cancel()
+        lastView = null
+        stopHosting()
         _state.update {
             it.copy(screen = Screen.Menu, room = null, view = null, chat = emptyList(), offline = false)
         }
@@ -241,6 +359,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         client?.close()
+        beacon.close()
+        lanHost.stop()
         super.onCleared()
     }
 

@@ -90,6 +90,9 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
         if (state.screen == Screen.Table) sound?.startMusic() else sound?.stopMusic()
     }
 
+    // Tables on the Wi-Fi are only looked for while somebody could pick one.
+    LaunchedEffect(state.screen) { viewModel.lookForWifiTables(state.screen == Screen.Menu) }
+
     BackHandler(enabled = state.screen != Screen.Menu) { viewModel.back() }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbars) }) { padding ->
@@ -102,6 +105,12 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onJoin = viewModel::join,
                     onSolo = { viewModel.playOffline() },
                     connecting = state.connecting,
+                    onHostWifi = viewModel::hostOnWifi,
+                    wifiTables = state.wifiTables,
+                    onJoinWifi = viewModel::joinWifiTable,
+                    onJoinAddress = viewModel::joinAddress,
+                    hasInternetServer = state.hasInternetServer,
+                    onSetServer = viewModel::setServer,
                 )
 
                 Screen.Lobby -> state.room?.let { room ->
@@ -110,6 +119,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         myId = state.myId,
                         isHost = state.isHost,
                         offline = state.offline,
+                        wifiAddress = state.wifiAddress,
                         onTakeSeat = viewModel::takeSeat,
                         onToggleBot = { seat, enabled -> viewModel.setBot(seat, enabled) },
                         onSetRules = viewModel::setDraftRules,

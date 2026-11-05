@@ -10,10 +10,15 @@ android {
 
     defaultConfig {
         applicationId = "com.teera.app"
-        minSdk = 24
+        // 26: the room server a phone runs to host on the Wi-Fi needs java.time and NIO.
+        minSdk = 26
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.4.0"
+        versionCode = 5
+        versionName = "0.5.0"
+
+        // The internet server, once one is hosted: ./gradlew assembleDebug -Pteera.server=wss://host/ws
+        // Left empty, the app says plainly that internet play needs a server and offers Wi-Fi.
+        buildConfigField("String", "SERVER_URL", "\"${project.findProperty("teera.server") ?: ""}\"")
     }
 
     buildTypes {
@@ -52,7 +57,12 @@ android {
     sourceSets["test"].java.srcDirs("src/test/kotlin")
 
     packaging {
-        resources.excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
+        resources.excludes += setOf(
+            "/META-INF/{AL2.0,LGPL2.1}",
+            "/META-INF/INDEX.LIST",
+            "/META-INF/io.netty.versions.properties",
+            "/META-INF/DEPENDENCIES",
+        )
     }
 }
 
@@ -68,6 +78,9 @@ tasks.withType<Test>().configureEach {
 
 dependencies {
     implementation(project(":core"))
+    // The same room server the cloud runs, so a phone can host a table on the Wi-Fi.
+    implementation(project(":room"))
+    implementation("io.ktor:ktor-server-cio-jvm:2.3.12")
 
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")

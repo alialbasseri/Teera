@@ -55,6 +55,7 @@ fun LobbyScreen(
     myId: String,
     isHost: Boolean,
     offline: Boolean,
+    wifiAddress: String? = null,
     onTakeSeat: (Int) -> Unit,
     onToggleBot: (seat: Int, enabled: Boolean) -> Unit,
     onSetRules: (Rules) -> Unit,
@@ -82,11 +83,23 @@ fun LobbyScreen(
                 Text(room.code, fontSize = 40.sp, style = MaterialTheme.typography.displaySmall, color = Felt.Brass)
             }
             Text(
-                if (offline) "لعب بدون إنترنت" else "اقرأ الكود لأصحابك حتى يدخلون",
+                when {
+                    offline -> "لعب بدون إنترنت"
+                    wifiAddress != null -> "أصحابك على نفس الواي فاي يشوفون الطاولة بالقائمة"
+                    else -> "اقرأ الكود لأصحابك حتى يدخلون"
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Felt.Muted,
+                textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            if (wifiAddress != null) {
+                Text(
+                    "أو يدخلون بالعنوان: $wifiAddress",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Felt.Brass,
+                )
+            }
 
             Spacer(Modifier.height(10.dp))
 

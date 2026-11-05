@@ -1,4 +1,4 @@
-package com.teera.server
+package com.teera.room
 
 import com.teera.core.Room
 import com.teera.core.Rules

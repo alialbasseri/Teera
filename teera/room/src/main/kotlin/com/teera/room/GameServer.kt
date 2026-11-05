@@ -1,4 +1,4 @@
-package com.teera.server
+package com.teera.room
 
 import com.teera.core.ClientMessage
 import com.teera.core.ErrorCode
@@ -6,6 +6,7 @@ import com.teera.core.Phase
 import com.teera.core.Protocol
 import com.teera.core.Room
 import com.teera.core.ServerMessage
+import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.install
@@ -13,8 +14,6 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets
-import io.ktor.server.websocket.pingPeriod
-import io.ktor.server.websocket.timeout
 import io.ktor.server.websocket.webSocket
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.Frame
@@ -22,8 +21,9 @@ import io.ktor.websocket.WebSocketSession
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import io.ktor.websocket.send
-import java.time.Duration
 import java.util.UUID
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.consumeEach
 import kotlinx.coroutines.delay
@@ -41,8 +41,8 @@ private const val IDLE_ROOM_MS = 30 * 60 * 1000L
 
 fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(20)
-        timeout = Duration.ofSeconds(45)
+        pingPeriodMillis = 20_000
+        timeoutMillis = 45_000
     }
 
     // One ticker for the whole server: it moves bots, covers players who have run out
@@ -71,6 +71,16 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
     routing {
         get("/health") {
             call.respondText("ok rooms=${registry.size()}")
+        }
+
+        // Rooms still waiting for players. A phone hosting on the Wi-Fi only ever has one,
+        // so a friend who typed the host's address can find it without a code.
+        get("/rooms") {
+            val open = registry.all().filter { !it.room.isStarted }.map { it.room.code }
+            call.respondText(
+                Protocol.json.encodeToString(ListSerializer(String.serializer()), open),
+                ContentType.Application.Json,
+            )
         }
 
         webSocket("/ws") {

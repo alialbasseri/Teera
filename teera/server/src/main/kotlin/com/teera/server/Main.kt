@@ -1,5 +1,6 @@
 package com.teera.server
 
+import com.teera.room.gameServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 

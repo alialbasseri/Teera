@@ -1,5 +1,8 @@
 package com.teera.server
 
+import com.teera.room.RoomRegistry
+import com.teera.room.gameServer
+
 import com.teera.core.ClientMessage
 import com.teera.core.Difficulty
 import com.teera.core.Move
@@ -171,6 +174,24 @@ class GameServerTest {
         }
         assertTrue(tilesOnTable - humanPlays >= 2, "bots played their own turns unprompted")
 
+        host.close()
+    }
+}
+
+class OpenRoomsTest {
+    @Test
+    fun `waiting rooms are listed so a friend can find one by address alone`() = testApplication {
+        application { gameServer() }
+        assertEquals("[]", client.get("/rooms").bodyAsText())
+
+        val ws = createClient { install(WebSockets) }
+        val host = ws.webSocketSession("/ws")
+        host.say(ClientMessage.Hello("Ali"))
+        host.await<ServerMessage.Welcome>()
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = host.await<ServerMessage.RoomUpdate>().room.code
+
+        assertEquals("[\"$code\"]", client.get("/rooms").bodyAsText())
         host.close()
     }
 }

@@ -58,8 +58,6 @@ class WebSocketGameClient(
 
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 attempt = 0
-                webSocket.send(encode(ClientMessage.Hello(playerName, playerId)))
-                rejoinCode?.let { webSocket.send(encode(ClientMessage.JoinRoom(it))) }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -80,7 +78,13 @@ class WebSocketGameClient(
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 if (!closed) retry()
             }
-        })
+        }).also { fresh ->
+            // OkHttp queues anything sent before the socket opens, in order. The hello has
+            // to be first in that queue: the server refuses everything until it has one,
+            // so sending it from onOpen let a "create room" sent straight away overtake it.
+            fresh.send(encode(ClientMessage.Hello(playerName, playerId)))
+            rejoinCode?.let { fresh.send(encode(ClientMessage.JoinRoom(it))) }
+        }
     }
 
     private fun retry() {
