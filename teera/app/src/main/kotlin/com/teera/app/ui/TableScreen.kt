@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,6 +68,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.translate
@@ -370,9 +372,9 @@ private fun ScoreRail(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Points are a burden here, so whoever has fewer is the one in front.
-            ScorePlate("نحن", us, leading = us <= them)
+            ScorePlate(view.teamName(view.yourTeam), us, leading = us <= them)
             Spacer(Modifier.width(8.dp))
-            ScorePlate("هم", them, leading = them < us)
+            ScorePlate(view.teamName(1 - view.yourTeam), them, leading = them < us)
 
             Spacer(Modifier.weight(1f))
 
@@ -448,7 +450,14 @@ private fun ScorePlate(who: String, score: Int, leading: Boolean) {
             .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
             .padding(horizontal = 14.dp, vertical = 4.dp),
     ) {
-        Text(who, color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(
+            who,
+            color = Felt.Muted,
+            style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 104.dp),
+        )
         Text(
             // A score can go below zero; isolated so the minus stays in front of it.
             "\u2066$shown\u2069",
@@ -974,9 +983,20 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
                     textAlign = TextAlign.Center,
                 )
                 HorizontalDivider(color = Felt.Brass.copy(alpha = 0.4f))
-                SumRow("هذا الجيم", result.scored.getOrElse(view.yourTeam) { 0 }, result.scored.getOrElse(1 - view.yourTeam) { 0 }, signed = true)
             }
-            SumRow("المجموع", view.scores.getOrElse(view.yourTeam) { 0 }, view.scores.getOrElse(1 - view.yourTeam) { 0 }, signed = false)
+            // The sums as a little table: one column per team, named for its players.
+            val teams = listOf(view.yourTeam, 1 - view.yourTeam)
+            SumRow("", teams.map { Cell.Name(view.teamName(it)) })
+            if (result != null) {
+                SumRow(
+                    "هذا الجيم",
+                    teams.map { team ->
+                        val tookX = result.end == GameEnd.X && result.winnerSeat?.let(::teamOf) == team
+                        if (tookX) Cell.X else Cell.Points(result.scored.getOrElse(team) { 0 }, signed = true)
+                    },
+                )
+            }
+            SumRow("المجموع", teams.map { Cell.Points(view.scores.getOrElse(it) { 0 }, signed = false) })
             Text(
                 "اللي يوصل ${view.rules.target} يخسر",
                 color = Felt.Muted,
@@ -994,17 +1014,67 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
     }
 }
 
+/** One cell of the sums: a team's name, its points, or the X it took. */
+private sealed interface Cell {
+    data class Name(val text: String) : Cell
+    data class Points(val value: Int, val signed: Boolean) : Cell
+    data object X : Cell
+}
+
 @Composable
-private fun SumRow(label: String, us: Int, them: Int, signed: Boolean) {
-    // Isolated left-to-right, or the bidi algorithm puts the sign after the digits: "25-".
-    fun show(n: Int) = "\u2066" + (if (signed && n > 0) "+$n" else if (n < 0) "−${-n}" else "$n") + "\u2069"
+private fun SumRow(label: String, cells: List<Cell>) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, color = Felt.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        Text("نحن ${show(us)}", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.width(14.dp))
-        Text("هم ${show(them)}", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)
+        Text(label, color = Felt.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.9f))
+        cells.forEach { cell ->
+            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                when (cell) {
+                    is Cell.Name -> Text(
+                        cell.text,
+                        color = Felt.Brass,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                    // Isolated left-to-right, or the bidi algorithm puts the sign after the digits: "25-".
+                    is Cell.Points -> Text(
+                        "\u2066" + when {
+                            cell.signed && cell.value > 0 -> "+${cell.value}"
+                            cell.value < 0 -> "−${-cell.value}"
+                            else -> "${cell.value}"
+                        } + "\u2069",
+                        color = Felt.Parchment,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    // The X is a mark, not a number: it gets its own gold seal.
+                    Cell.X -> Box(
+                        Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Brush.verticalGradient(listOf(Felt.GoldLit, Felt.Brass, Felt.GoldDeep)))
+                            .border(1.dp, Felt.GoldLit, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 14.dp, vertical = 1.dp),
+                    ) {
+                        Text("X", color = Felt.Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
+        }
     }
 }
+
+/**
+ * A team as its players: "علي/عمر". In seat order, so every phone at the table calls a
+ * team by the same name.
+ */
+internal fun PlayerView.teamName(team: Int): String =
+    seats.filter { teamOf(it.seat) == team }
+        .sortedBy { it.seat }
+        .joinToString("/") { seat ->
+            when {
+                seat.isBot -> "بوت"
+                seat.name.isBlank() -> "لاعب"
+                else -> seat.name.trim().split(" ").first()
+            }
+        }
 
 /** A person (not a bot) whose connection has dropped; the referee is holding their seat. */
 internal fun PlayerView.isDropped(seat: Int): Boolean =
