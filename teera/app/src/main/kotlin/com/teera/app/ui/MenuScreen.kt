@@ -4,11 +4,12 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,20 +35,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import com.teera.app.net.WifiTable
 import com.teera.app.ui.theme.Felt
 import com.teera.core.Domino
 import kotlinx.coroutines.delay
 
+/**
+ * The front door. It fits on one screen with nothing to scroll: who you are, play the
+ * bots, play your friends over the internet. Playing on the same Wi-Fi, which few need
+ * now that the server is up, sits behind a small link at the bottom.
+ */
 @Composable
 fun MenuScreen(
     playerName: String,
@@ -58,191 +71,204 @@ fun MenuScreen(
     wifiTables: List<WifiTable> = emptyList(),
     onJoinWifi: (WifiTable) -> Unit = {},
     onJoinAddress: (String) -> Unit = {},
-    hasInternetServer: Boolean = false,
-    onSetServer: (String) -> Unit = {},
+    hasInternetServer: Boolean = true,
     /** Knocking on a sleeping server, which takes a while the first time. */
     waking: Boolean = false,
     /** The internet room this phone was last in, if any, to go straight back to. */
     lastRoom: String? = null,
     onRules: () -> Unit = {},
-    scroll: androidx.compose.foundation.ScrollState = rememberScrollState(),
+    onProfile: () -> Unit = {},
+    avatar: @Composable (size: Dp) -> Unit = { size -> Initial(playerName, size) },
 ) {
     var code by remember { mutableStateOf("") }
-    var address by remember { mutableStateOf("") }
-    var typingAddress by remember { mutableStateOf(false) }
+    var wifiOpen by remember { mutableStateOf(false) }
 
-    WalnutRoom {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scroll)
-                .padding(horizontal = 26.dp, vertical = 20.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(18.dp))
-            Emblem()
-            Spacer(Modifier.height(6.dp))
+    CafeTable {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            // Smaller phones get a smaller emblem rather than a scrolling menu.
+            val roomy = maxHeight > 720.dp
+            Column(
+                Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(Modifier.weight(0.5f))
+                Emblem(Modifier.scale(if (roomy) 1f else 0.78f))
+                Text("طيرة", color = Felt.Brass, fontSize = if (roomy) 62.sp else 52.sp, style = MaterialTheme.typography.displayLarge)
+                if (roomy) {
+                    Text("دومينا عراقية · أربعة · فريقين", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium)
+                }
+                Spacer(Modifier.weight(0.6f))
+
+                // Who you are: your picture opens your profile.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .border(1.5.dp, Felt.Brass, CircleShape)
+                            .clickable(onClick = onProfile)
+                            .testTag("profile"),
+                        contentAlignment = Alignment.Center,
+                    ) { avatar(56.dp) }
+                    Spacer(Modifier.width(10.dp))
+                    OutlinedTextField(
+                        value = playerName,
+                        onValueChange = { onNameChange(it.take(16)) },
+                        label = { Text("اسمك") },
+                        singleLine = true,
+                        colors = brassField(),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                Spacer(Modifier.height(14.dp))
+                GoldButton("العب ضد البوتات", onSolo)
+                Spacer(Modifier.height(14.dp))
+
+                // Friends anywhere: the way the game is mostly played.
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF120B05).copy(alpha = 0.6f))
+                        .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                        .padding(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("العب ويا جماعتك", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    if (lastRoom != null) {
+                        GoldButton("ارجع للغرفة $lastRoom", { onJoin(lastRoom) })
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    BrassButton(
+                        when {
+                            connecting && waking -> "السيرفر يحمى…"
+                            connecting -> "يحاول يتصل…"
+                            else -> "افتح غرفة"
+                        },
+                        onHost,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !connecting && hasInternetServer,
+                    )
+                    if (connecting && waking) {
+                        Text(
+                            "إذا محد لعب من فترة، السيرفر يگعد وياخذ تقريباً دقيقة حتى يحمى",
+                            color = Felt.Muted,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = code,
+                            onValueChange = { code = it.uppercase().filter(Char::isLetterOrDigit).take(4) },
+                            label = { Text("كود الغرفة") },
+                            singleLine = true,
+                            colors = brassField(),
+                            keyboardOptions = KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Characters,
+                                imeAction = ImeAction.Go,
+                            ),
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        BrassButton("ادخل", { onJoin(code) }, enabled = code.length == 4 && !connecting)
+                    }
+                }
+
+                Spacer(Modifier.weight(1f))
+
+                // The quieter doors.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    SmallLink("قوانين اللعبة", onRules)
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 6.dp))
+                    SmallLink(
+                        if (wifiTables.isEmpty()) "على نفس الواي فاي" else "على نفس الواي فاي (${wifiTables.size})",
+                        { wifiOpen = true },
+                        tag = "wifi",
+                    )
+                }
+                Credits()
+                Text(
+                    "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Felt.Muted,
+                )
+            }
+        }
+    }
+
+    if (wifiOpen) {
+        WifiDialog(
+            connecting = connecting,
+            tables = wifiTables,
+            onHost = { wifiOpen = false; onHostWifi() },
+            onJoin = { wifiOpen = false; onJoinWifi(it) },
+            onJoinAddress = { wifiOpen = false; onJoinAddress(it) },
+            onClose = { wifiOpen = false },
+        )
+    }
+}
+
+@Composable
+private fun SmallLink(text: String, onClick: () -> Unit, tag: String = text) {
+    Text(
+        text,
+        color = Felt.Brass,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 8.dp)
+            .testTag(tag),
+    )
+}
+
+/** Playing in one room with no internet: one phone hosts, the rest find it on the Wi-Fi. */
+@Composable
+private fun WifiDialog(
+    connecting: Boolean,
+    tables: List<WifiTable>,
+    onHost: () -> Unit,
+    onJoin: (WifiTable) -> Unit,
+    onJoinAddress: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var address by remember { mutableStateOf("") }
+    Dialog(onDismissRequest = onClose) {
+        Plaque {
+            Text("على نفس الواي فاي", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
             Text(
-                "طيرة",
-                color = Felt.Brass,
-                fontSize = 64.sp,
-                style = MaterialTheme.typography.displayLarge,
-            )
-            Text(
-                "دومينا عراقية · أربعة · فريقين",
-                color = Felt.Muted,
-                style = MaterialTheme.typography.bodyLarge,
+                "للعب بنفس البيت بدون إنترنت: واحد يفتح طاولة، والباقين يدخلون عليها.",
+                color = Felt.Parchment,
+                style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
             )
-            Spacer(Modifier.height(14.dp))
-            RosetteRule(Modifier.padding(horizontal = 30.dp))
-            Spacer(Modifier.height(22.dp))
-
-            OutlinedTextField(
-                value = playerName,
-                onValueChange = { onNameChange(it.take(16)) },
-                label = { Text("اسمك") },
-                singleLine = true,
-                colors = brassField(),
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(Modifier.height(18.dp))
-            GoldButton("العب ضد البوتات", onSolo)
-            Spacer(Modifier.height(10.dp))
-            BrassButton("قوانين اللعبة", onRules, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(16.dp))
-            RosetteRule(Modifier.padding(horizontal = 50.dp))
-            Spacer(Modifier.height(10.dp))
-
-            // Friends anywhere, the usual case: first, because they are rarely in the same house.
-            Text("عبر الإنترنت", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            if (hasInternetServer) {
-                if (lastRoom != null) {
-                    GoldButton("ارجع للغرفة $lastRoom", { onJoin(lastRoom) })
-                    Spacer(Modifier.height(10.dp))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it.uppercase().filter(Char::isLetterOrDigit).take(4) },
-                        label = { Text("كود الغرفة") },
-                        singleLine = true,
-                        colors = brassField(),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Characters,
-                            imeAction = ImeAction.Go,
-                        ),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    BrassButton("ادخل", { onJoin(code) }, enabled = code.length == 4 && !connecting)
-                }
-                Spacer(Modifier.height(10.dp))
-                BrassButton(
-                    when {
-                        connecting && waking -> "السيرفر يصحى…"
-                        connecting -> "يحاول يتصل…"
-                        else -> "افتح غرفة عبر الإنترنت"
-                    },
-                    onHost,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !connecting,
+            BrassButton(if (connecting) "يحاول يتصل…" else "افتح طاولة", onHost, Modifier.fillMaxWidth(), enabled = !connecting)
+            tables.forEach { table -> GoldButton("ادخل طاولة ${table.name}", { onJoin(table) }) }
+            if (tables.isEmpty()) {
+                Text("الطاولات اللي يفتحها جماعتك تطلع هنا", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it.filter { c -> c.isDigit() || c == '.' || c == ':' }.take(21) },
+                    label = { Text("أو بالعنوان، مثل 192.168.1.5") },
+                    singleLine = true,
+                    colors = brassField(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                    modifier = Modifier.weight(1f),
                 )
-                if (connecting && waking) {
-                    Text(
-                        "إذا محد لعب من فترة، السيرفر ينام وياخذ تقريباً دقيقة حتى يصحى",
-                        color = Felt.Muted,
-                        style = MaterialTheme.typography.labelSmall,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-            } else {
-                Text(
-                    "يحتاج سيرفر على الإنترنت، ولسه ما منصوب",
-                    color = Felt.Muted,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-                var server by remember { mutableStateOf("") }
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = server,
-                        onValueChange = { server = it.trim() },
-                        label = { Text("عنوان السيرفر") },
-                        singleLine = true,
-                        colors = brassField(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Done),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    BrassButton("حفظ", { onSetServer(server) }, enabled = server.contains('.'))
-                }
+                Spacer(Modifier.width(8.dp))
+                BrassButton("ادخل", { onJoinAddress(address) }, enabled = address.count { it == '.' } == 3)
             }
-
-            Spacer(Modifier.height(14.dp))
-            RosetteRule(Modifier.padding(horizontal = 50.dp))
-            Spacer(Modifier.height(10.dp))
-
-            // Friends in the same room: one phone hosts, the rest find it on the Wi-Fi.
-            Text("مع أصحابك على نفس الواي فاي", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            BrassButton(
-                if (connecting) "يحاول يتصل…" else "افتح طاولة",
-                onHostWifi,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !connecting,
-            )
-            wifiTables.forEach { table ->
-                Spacer(Modifier.height(8.dp))
-                GoldButton("ادخل طاولة ${table.name}", { onJoinWifi(table) })
-            }
-            if (wifiTables.isEmpty()) {
-                Text(
-                    "الطاولات اللي يفتحها أصحابك تطلع هنا",
-                    color = Felt.Muted,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 6.dp),
-                )
-            }
-            Text(
-                if (typingAddress) "إخفاء" else "ما طلعت الطاولة؟ ادخل بالعنوان",
-                color = Felt.Brass,
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier
-                    .padding(top = 4.dp)
-                    .clickable { typingAddress = !typingAddress }
-                    .padding(6.dp),
-            )
-            if (typingAddress) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = address,
-                        onValueChange = { address = it.filter { c -> c.isDigit() || c == '.' || c == ':' }.take(21) },
-                        label = { Text("العنوان، مثل 192.168.1.5") },
-                        singleLine = true,
-                        colors = brassField(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Spacer(Modifier.width(10.dp))
-                    BrassButton("ادخل", { onJoinAddress(address) }, enabled = address.count { it == '.' } == 3)
-                }
-            }
-
-            Spacer(Modifier.height(26.dp))
-            RosetteRule(Modifier.padding(horizontal = 80.dp))
-            Spacer(Modifier.height(10.dp))
-            Credits()
-            Text(
-                "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
-                style = MaterialTheme.typography.labelSmall,
-                color = Felt.Muted,
-                modifier = Modifier.padding(top = 6.dp),
-            )
+            SmallLink("سكّر", onClose)
         }
     }
 }
@@ -256,6 +282,8 @@ private fun brassField() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = Felt.Parchment,
     unfocusedTextColor = Felt.Parchment,
     cursorColor = Felt.Brass,
+    focusedContainerColor = Color(0x99120B05),
+    unfocusedContainerColor = Color(0x99120B05),
 )
 
 /**
@@ -263,7 +291,7 @@ private fun brassField() = OutlinedTextFieldDefaults.colors(
  * under an Ishtar rosette. It settles into place when the app opens.
  */
 @Composable
-private fun Emblem() {
+private fun Emblem(modifier: Modifier = Modifier) {
     val settle = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
         delay(120)
@@ -271,20 +299,20 @@ private fun Emblem() {
     }
     val fan = settle.value
 
-    Box(Modifier.size(200.dp, 150.dp), contentAlignment = Alignment.BottomCenter) {
-        Canvas(Modifier.size(64.dp).align(Alignment.TopCenter)) {
+    Box(modifier.size(200.dp, 140.dp), contentAlignment = Alignment.BottomCenter) {
+        Canvas(Modifier.size(60.dp).align(Alignment.TopCenter)) {
             drawRosette(Offset(size.width / 2f, size.height / 2f), size.minDimension * 0.46f, alpha = fan)
         }
         DominoTile(
             null,
-            Modifier.size(46.dp, 92.dp).offset(x = (-44 * fan).dp, y = (6 * fan).dp).rotate(-16f * fan),
+            Modifier.size(44.dp, 88.dp).offset(x = (-42 * fan).dp, y = (6 * fan).dp).rotate(-16f * fan),
             faceUp = false,
         )
         DominoTile(
             Domino(6, 6),
-            Modifier.size(46.dp, 92.dp).offset(x = (44 * fan).dp, y = (6 * fan).dp).rotate(16f * fan),
+            Modifier.size(44.dp, 88.dp).offset(x = (42 * fan).dp, y = (6 * fan).dp).rotate(16f * fan),
         )
-        DominoTile(Domino(0, 1), Modifier.size(48.dp, 96.dp).scale(0.9f + 0.1f * fan))
+        DominoTile(Domino(0, 1), Modifier.size(46.dp, 92.dp).scale(0.9f + 0.1f * fan))
     }
 }
 
@@ -299,8 +327,9 @@ private fun Credits() {
     androidx.compose.runtime.CompositionLocalProvider(
         androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             CreditLine("Designed by", "Ali Albasseri") { runCatching { links.openUri(DESIGNER_URL) } }
+            Text("  ·  ", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
             CreditLine("Powered by", "Tech Vision") { runCatching { links.openUri(TECH_VISION_URL) } }
         }
     }
@@ -308,7 +337,7 @@ private fun Credits() {
 
 @Composable
 private fun CreditLine(lead: String, name: String, open: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 1.dp)) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
         Text("$lead ", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
         Text(
             name,

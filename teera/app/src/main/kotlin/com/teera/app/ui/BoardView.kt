@@ -89,7 +89,7 @@ fun BoardView(
                 drawFrame(inset)
             }
             Text(
-                text = "الفتحة بالدبل",
+                text = "الفتحة بالچفت",
                 color = Color.White.copy(alpha = 0.3f),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.align(Alignment.Center),
@@ -166,9 +166,10 @@ fun BoardView(
 
             Box(
                 modifier = Modifier
-                    // Absolute, not offset: the tiles are painted left to right whatever the
-                    // phone's language, and an Arabic layout would otherwise mirror the
-                    // targets onto the wrong side of the table.
+                    // Absolute, not offset, and from the top-left corner: the tiles are
+                    // painted left to right whatever the phone's language. Right to left,
+                    // "start" is the right edge, and the targets landed off the table.
+                    .align(androidx.compose.ui.AbsoluteAlignment.TopLeft)
                     .absoluteOffset {
                         androidx.compose.ui.unit.IntOffset(
                             (centre.x - with(density) { diameter.toPx() } / 2f).toInt(),
@@ -272,14 +273,17 @@ private fun armTarget(layout: BoardLayout.Layout, arm: Arm): Pair<Float, Float> 
  * along the top in the order the seats are drawn.
  */
 enum class SeatSpot {
-    BOTTOM, TOP_START, TOP_MIDDLE, TOP_END;
+    BOTTOM, SIDE_START, TOP_MIDDLE, SIDE_END;
 
-    /** The point on the table nearest that seat. The seat row flips in a right-to-left layout. */
+    /**
+     * The point on the table nearest that seat: the partner across the top, the other two
+     * at either side, the next player on the reading-start side.
+     */
     fun anchor(width: Float, height: Float, rtl: Boolean): Offset = when (this) {
         BOTTOM -> Offset(width / 2f, height * 0.98f)
         TOP_MIDDLE -> Offset(width / 2f, height * 0.02f)
-        TOP_START -> Offset(if (rtl) width * 0.83f else width * 0.17f, height * 0.02f)
-        TOP_END -> Offset(if (rtl) width * 0.17f else width * 0.83f, height * 0.02f)
+        SIDE_START -> Offset(if (rtl) width * 0.98f else width * 0.02f, height * 0.5f)
+        SIDE_END -> Offset(if (rtl) width * 0.02f else width * 0.98f, height * 0.5f)
     }
 }
 

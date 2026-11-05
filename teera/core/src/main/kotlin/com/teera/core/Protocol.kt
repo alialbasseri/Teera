@@ -106,7 +106,15 @@ fun GameState.viewFor(seat: Int, roomCode: String, turnDeadlineEpochMs: Long? = 
 @Serializable
 sealed interface ClientMessage {
     @Serializable @SerialName("hello")
-    data class Hello(val name: String, val playerId: String? = null, val version: Int = Protocol.VERSION) : ClientMessage
+    data class Hello(
+        val name: String,
+        val playerId: String? = null,
+        val version: Int = Protocol.VERSION,
+        /** See [Seat.avatar]. */
+        val avatar: String = "",
+        /** The player's own picture, a small JPEG in base64, when [avatar] is "photo". */
+        val photo: String? = null,
+    ) : ClientMessage
 
     @Serializable @SerialName("createRoom")
     data class CreateRoom(val rules: Rules = Rules.DEFAULT) : ClientMessage
@@ -157,7 +165,23 @@ sealed interface ClientMessage {
  * "ابلع" being what you tell somebody as you push a tile onto them.
  */
 @Serializable
-enum class Emote { GULP, DRUMROLL, SAD, SLAP }
+enum class Emote {
+    GULP, DRUMROLL, SAD,
+    /** "خذ": retired from the board, kept so an older phone's press still plays. */
+    SLAP,
+    /** "بالله ما طيغ!" */
+    NO_WAY,
+    /** "يلا شباب خلي نسولف" */
+    CHAT,
+    /** "شيل" */
+    SHEEL,
+    ;
+
+    companion object {
+        /** What the soundboard offers, in order. */
+        val BOARD = listOf(GULP, NO_WAY, SHEEL, CHAT, DRUMROLL, SAD)
+    }
+}
 
 @Serializable
 enum class ErrorCode {
@@ -190,4 +214,8 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("emote")
     data class EmoteShown(val seat: Int, val emote: Emote) : ServerMessage
+
+    /** Somebody's own picture, sent once when either of you joins rather than with every view. */
+    @Serializable @SerialName("avatar")
+    data class Avatar(val playerId: String, val photo: String) : ServerMessage
 }

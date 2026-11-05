@@ -104,9 +104,13 @@ class WifiTableTest {
             // Counted in updates rather than tiles: a tile handed over, a redeal or a teera
             // all change the table without changing how many tiles are on it.
             val before = other.heard.count { it is ServerMessage.GameUpdate }
+            // The mover's own copy too: reading its old view next time round would offer
+            // a move the referee has already moved past.
+            val beforeMover = mover.heard.count { it is ServerMessage.GameUpdate || it is ServerMessage.MoveRejected }
             mover.client.send(ClientMessage.MakeMove(assertNotNull(mover.view).legalMoves.first()))
-            until("the move reaches the other phone") {
-                other.heard.count { it is ServerMessage.GameUpdate } > before
+            until("the move reaches both phones") {
+                other.heard.count { it is ServerMessage.GameUpdate } > before &&
+                    mover.heard.count { it is ServerMessage.GameUpdate || it is ServerMessage.MoveRejected } > beforeMover
             }
             assertTrue(mover.heard.none { it is ServerMessage.MoveRejected }, "the referee refused a move it offered")
             if (assertNotNull(other.view).phase == com.teera.core.Phase.GAME_OVER) {

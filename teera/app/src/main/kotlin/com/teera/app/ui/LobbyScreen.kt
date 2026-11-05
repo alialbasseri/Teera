@@ -66,6 +66,7 @@ fun LobbyScreen(
     onShare: ((String) -> Unit)? = null,
     /** Table talk; null when the other chairs can only hold bots. */
     talk: Talk? = null,
+    avatarFor: @Composable (Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size -> Initial(seat?.name.orEmpty(), size) },
 ) {
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
@@ -109,7 +110,7 @@ fun LobbyScreen(
             val sharing = onShare != null && !offline && wifiAddress == null
             if (sharing || talk != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                    if (sharing) BrassButton("دزّ الكود لأصحابك", { onShare?.invoke(room.code) })
+                    if (sharing) BrassButton("دزّ الكود لجماعتك", { onShare?.invoke(room.code) })
                     if (talk != null) {
                         Spacer(Modifier.width(10.dp))
                         MicButton(talk, size = 40.dp)
@@ -134,17 +135,17 @@ fun LobbyScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                SeatChair(room, (mySeat + 2) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
+                SeatChair(room, (mySeat + 2) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    SeatChair(room, (mySeat + 1) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
+                    SeatChair(room, (mySeat + 1) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
                     RoundTable(Modifier.size(118.dp))
-                    SeatChair(room, (mySeat + 3) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
+                    SeatChair(room, (mySeat + 3) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
                 }
-                SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room))
+                SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
             }
 
             RosetteRule(Modifier.padding(horizontal = 40.dp, vertical = 6.dp))
@@ -221,6 +222,7 @@ private fun SeatChair(
     onToggleBot: (Int, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     speaking: Set<Int> = emptySet(),
+    avatar: @Composable (Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size -> Initial(seat?.name.orEmpty(), size) },
 ) {
     val info: Seat? = room.seats.firstOrNull { it.seat == seat }
     val human = !info?.playerId.isNullOrEmpty() && info?.isBot != true
@@ -257,15 +259,15 @@ private fun SeatChair(
                     ),
                 )
             }
-            Text(
-                when {
-                    empty -> "+"
-                    bot -> "ب"
-                    else -> info?.name.orEmpty().take(1)
-                },
-                color = if (empty) Felt.Brass else Felt.Parchment,
-                style = MaterialTheme.typography.titleLarge,
-            )
+            if (empty || bot) {
+                Text(
+                    if (empty) "+" else "ب",
+                    color = if (empty) Felt.Brass else Felt.Parchment,
+                    style = MaterialTheme.typography.titleLarge,
+                )
+            } else {
+                Box(Modifier.size(46.dp).clip(CircleShape), contentAlignment = Alignment.Center) { avatar(info, 46.dp) }
+            }
         }
         }
         Text(
@@ -273,7 +275,7 @@ private fun SeatChair(
                 mine -> "أنت"
                 human -> info?.name.orEmpty()
                 bot -> "بوت"
-                else -> "كرسي فاضي"
+                else -> "فاضي"
             },
             color = if (empty) Felt.Muted else Felt.Parchment,
             style = MaterialTheme.typography.titleMedium,

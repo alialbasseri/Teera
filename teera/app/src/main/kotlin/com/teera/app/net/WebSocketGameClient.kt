@@ -47,6 +47,10 @@ class WebSocketGameClient(
     private val http: OkHttpClient = defaultHttpClient(),
     private val wakeFirst: Boolean = false,
     private val wakeTimeoutMillis: Long = WAKE_TIMEOUT_MS,
+    /** This player's picture, as [com.teera.core.Seat.avatar] carries it. */
+    private val avatar: String = "",
+    /** Their own photo, base64 JPEG, when [avatar] is "photo". */
+    private val photo: String? = null,
 ) : GameClient {
 
     // A small replay covers the gap between connecting and the screen subscribing.
@@ -118,7 +122,7 @@ class WebSocketGameClient(
         val fresh = http.newWebSocket(request, listener)
         // OkHttp queues anything sent before the socket opens, in order. The hello has to
         // be first in that queue: the server refuses everything until it has one.
-        fresh.send(encode(ClientMessage.Hello(playerName, playerId)))
+        fresh.send(encode(ClientMessage.Hello(playerName, playerId, avatar = avatar, photo = photo)))
         roomRequest?.let { fresh.send(encode(it)) }
         pending.forEach { fresh.send(it) }
         pending.clear()

@@ -315,6 +315,48 @@ def slap():
     return reverb(hit * 0.9 + low, 0.6, 0.2)
 
 
+def no_way():
+    """'بالله ما طيغ!': three falling qanun notes and a doum - you cannot believe it."""
+    track = silence(1.9)
+    for i, (degree, at) in enumerate([(7, 0.0), (5, 0.22), (4, 0.44)]):
+        track = place(track, qanun(hz(degree, 0), 1.3 if i == 2 else 0.5, 0.55), at)
+    track = place(track, doum(0.9), 0.44)
+    return reverb(track, 1.1, 0.25)
+
+
+def clink():
+    """'يلا شباب خلي نسولف': two tea glasses touching, the sound of sitting down to talk."""
+    def glass(f, level):
+        n = int(0.9 * RATE)
+        t = np.arange(n) / RATE
+        ring = sum(np.sin(2 * np.pi * f * r * t) * np.exp(-t / d) / (k + 1)
+                   for k, (r, d) in enumerate([(1.0, 0.35), (2.76, 0.18), (5.4, 0.08)]))
+        return ring * level
+    track = silence(1.3)
+    track = place(track, glass(2350, 0.6), 0.0)
+    track = place(track, glass(2620, 0.5), 0.13)
+    for i in range(4):  # the spoon going round the istikan
+        track = place(track, glass(3900 + 120 * i, 0.12), 0.45 + 0.09 * i)
+    return reverb(track, 0.7, 0.18)
+
+
+def whoosh():
+    """'شيل': a quick upward sweep, a tile lifted off the table."""
+    n = int(0.55 * RATE)
+    t = np.arange(n) / RATE
+    noise = RNG.normal(0, 1, n)
+    out = np.zeros(n)
+    low = 0.0
+    for i in range(n):  # a one-pole lowpass whose corner rises with the sweep
+        alpha = 0.02 + 0.5 * (t[i] / t[-1]) ** 2
+        low += alpha * (noise[i] - low)
+        out[i] = low
+    shaped = highpass(out) * np.sin(np.pi * t / t[-1]) ** 2
+    track = place(silence(0.8), shaped * 1.2, 0.0)
+    track = place(track, tak(0.5, ring=1900), 0.5)
+    return reverb(track, 0.5, 0.15)
+
+
 # ---------------------------------------------------------------- music
 
 def loop(bpm, bars, melody, rhythm, drone_every=1, level=0.5):
@@ -410,6 +452,10 @@ def main(outdir):
     write("emote_slap", slap(), outdir)
     write("music_calm", loop(78, 12, CALM_MELODY, MAQSUM_SPARSE, drone_every=1), outdir, quality=3)
     write("music_tense", loop(116, 12, TENSE_MELODY, MAQSUM, drone_every=2), outdir, quality=3)
+    # Added later; written last so the files above come out the same as before.
+    write("emote_no_way", no_way(), outdir)
+    write("emote_clink", clink(), outdir)
+    write("emote_whoosh", whoosh(), outdir)
 
 
 if __name__ == "__main__":

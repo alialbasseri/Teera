@@ -86,6 +86,8 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
         webSocket("/ws") {
             var playerId: String? = null
             var name = "Player"
+            var avatar = ""
+            var photo: String? = null
             var holder: RoomRegistry.Holder? = null
 
             suspend fun fail(code: ErrorCode, message: String) =
@@ -127,6 +129,9 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             playerId = message.playerId?.takeIf { it.isNotBlank() }
                                 ?: UUID.randomUUID().toString()
                             name = message.name.trim().take(24).ifEmpty { "Player" }
+                            avatar = message.avatar.take(12).filter { it.isLetterOrDigit() || it == ':' }
+                            photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
+                            if (avatar == "photo" && photo == null) avatar = ""
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                         }
 
@@ -141,8 +146,9 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             holder = created
                             created.sessions[me] = this
                             created.lock.withLock {
-                                publish(created, created.room.join(me, name))
+                                publish(created, created.room.join(me, name, avatar))
                             }
+                            swapPhotos(created, me, photo)
                         }
 
                         is ClientMessage.JoinRoom -> {
@@ -154,7 +160,8 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             holder?.let { detach(it, me!!) }
                             holder = target
                             target.sessions[me!!] = this
-                            target.lock.withLock { publish(target, target.room.join(me, name)) }
+                            target.lock.withLock { publish(target, target.room.join(me, name, avatar)) }
+                            swapPhotos(target, me!!, photo)
                         }
 
                         // Answered anywhere, in a room or not: the app pings to keep a
@@ -192,6 +199,22 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
             }
         }
     }
+}
+
+/** A player's own picture: a small JPEG, base64. About 12 KB is what the app sends. */
+private const val MAX_PHOTO_CHARS = 48_000
+
+/**
+ * Pictures go round once, not with every view: a newcomer gets everyone else's, and
+ * everyone else gets theirs.
+ */
+private suspend fun WebSocketSession.swapPhotos(holder: RoomRegistry.Holder, me: String, photo: String?) {
+    if (photo != null) {
+        holder.photos[me] = photo
+        val mine = ServerMessage.Avatar(me, photo)
+        for ((id, session) in holder.sessions) if (id != me) session.trySend(mine)
+    }
+    for ((id, theirs) in holder.photos) if (id != me) trySend(ServerMessage.Avatar(id, theirs))
 }
 
 /** The most a phone may send in one voice packet; a 40 ms one is about 330 bytes. */

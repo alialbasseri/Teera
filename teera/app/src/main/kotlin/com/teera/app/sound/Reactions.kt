@@ -41,7 +41,7 @@ fun react(previous: PlayerView?, next: PlayerView): Reaction {
                 GameEnd.TEERA -> cues += Cue.TEERA
                 GameEnd.BLOCKED -> {
                     cues += Cue.BLOCKED
-                    lines += Line("sadd", "سدّ")
+                    lines += Line("sadd", "قفلت")
                 }
             }
             is GameEvent.MatchEnded ->
@@ -74,4 +74,7 @@ fun react(emote: Emote): Reaction = when (emote) {
     Emote.DRUMROLL -> Reaction(listOf(Cue.EMOTE_DRUMROLL))
     Emote.SAD -> Reaction(listOf(Cue.EMOTE_SAD), listOf(Line("raahat", "راحت عليك")))
     Emote.SLAP -> Reaction(listOf(Cue.EMOTE_SLAP), listOf(Line("khudh", "خذ")))
+    Emote.NO_WAY -> Reaction(listOf(Cue.EMOTE_NO_WAY), listOf(Line("ma_teegh", "بالله ما طيغ!")))
+    Emote.CHAT -> Reaction(listOf(Cue.EMOTE_CLINK), listOf(Line("nsoolif", "يلا شباب خلي نسولف")))
+    Emote.SHEEL -> Reaction(listOf(Cue.EMOTE_WHOOSH), listOf(Line("sheel", "شيل")))
 }

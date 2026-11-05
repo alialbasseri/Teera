@@ -148,6 +148,20 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
 
     BackHandler(enabled = state.screen != Screen.Menu) { viewModel.back() }
 
+    // The system photo picker: no permission needed, and the app only sees the one picked.
+    val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let(viewModel::choosePhoto)
+    }
+
+    /** Draws whoever sits in a seat: their chosen picture, their photo, or their initial. */
+    val seatPicture: @Composable (com.teera.core.Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size ->
+        when {
+            seat == null || seat.playerId.isEmpty() -> com.teera.app.ui.Initial("", size)
+            seat.isBot -> com.teera.app.ui.Initial("ب", size)
+            else -> com.teera.app.ui.Avatar(seat.avatar, seat.name, size, state.photos[seat.playerId])
+        }
+    }
+
     Scaffold(snackbarHost = { SnackbarHost(snackbars) }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.screen) {
@@ -163,13 +177,32 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onJoinWifi = viewModel::joinWifiTable,
                     onJoinAddress = viewModel::joinAddress,
                     hasInternetServer = state.hasInternetServer,
-                    onSetServer = viewModel::setServer,
                     waking = state.link == Link.WAKING,
                     lastRoom = state.lastRoom,
                     onRules = viewModel::showRules,
+                    onProfile = viewModel::showProfile,
+                    avatar = { size ->
+                        com.teera.app.ui.Avatar(state.avatar, state.playerName, size, state.photos[state.myId])
+                    },
                 )
 
                 Screen.Rules -> RulesScreen(onClose = viewModel::closeRules)
+
+                Screen.Profile -> com.teera.app.ui.ProfileScreen(
+                    name = state.playerName,
+                    avatar = state.avatar,
+                    photo = state.photos[state.myId],
+                    onName = viewModel::setName,
+                    onPreset = viewModel::choosePreset,
+                    onPickPhoto = {
+                        pickPhoto.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly,
+                            ),
+                        )
+                    },
+                    onClose = viewModel::closeProfile,
+                )
 
                 Screen.Lobby -> state.room?.let { room ->
                     LobbyScreen(
@@ -185,6 +218,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onLeave = viewModel::leave,
                         onShare = { code -> shareRoomCode(context, code) },
                         talk = talk,
+                        avatarFor = seatPicture,
                     )
                 }
 
@@ -203,6 +237,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                             onMusic = { on -> sound?.musicOn = on; musicOn = on },
                         ),
                         talk = talk,
+                        avatarFor = { seat, size -> seatPicture(view.seatInfo(seat), size) },
                     )
                 }
             }

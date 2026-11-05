@@ -28,6 +28,7 @@ class LocalGameClient(
     private val playerName: String,
     rules: Rules = Rules.DEFAULT,
     private val botThinkMillis: Long = 750L,
+    private val avatar: String = "",
 ) : GameClient {
 
     private val room = Room(code = "SOLO", hostId = playerId, rules = rules)
@@ -45,7 +46,7 @@ class LocalGameClient(
 
     init {
         events.tryEmit(ServerMessage.Welcome(playerId))
-        publish(room.join(playerId, playerName))
+        publish(room.join(playerId, playerName, avatar))
         ticker = scope.launch {
             while (isActive) {
                 delay(TICK_MS)
@@ -93,7 +94,7 @@ class LocalGameClient(
                 is GameEvent.GameEnded -> {
                     val winner = event.result.winnerSeat ?: continue
                     if (winner != mySeat && teamOf(winner) != teamOf(mySeat)) {
-                        publish(room.botEmote(winner, Emote.SLAP))
+                        publish(room.botEmote(winner, Emote.SHEEL))
                     }
                 }
                 else -> Unit

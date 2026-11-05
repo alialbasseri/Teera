@@ -73,13 +73,13 @@ class FullFlowTest {
         if (view.phase == Phase.GAME_OVER) {
             // The game ends with a moment on the table, and the sums come after it.
             repeat(30) {
-                if (compose.onAllNodesWithText("الجيم الجاي").fetchSemanticsNodes().isNotEmpty()) {
-                    press("الجيم الجاي")
+                if (compose.onAllNodesWithText("الگيم الجاي").fetchSemanticsNodes().isNotEmpty()) {
+                    press("الگيم الجاي")
                     return true
                 }
                 pass(200)
             }
-            press("الجيم الجاي")
+            press("الگيم الجاي")
             return true
         }
         if (!view.isYourMove) return false

@@ -10,6 +10,11 @@ data class Seat(
     val name: String,
     val isBot: Boolean = false,
     val connected: Boolean = true,
+    /**
+     * The player's picture: "p:3" for one of the app's drawn pictures, "photo" when they
+     * chose their own (sent separately, see [ServerMessage.Avatar]), empty for none.
+     */
+    val avatar: String = "",
 )
 
 /** Everything a player can be asked to do. */

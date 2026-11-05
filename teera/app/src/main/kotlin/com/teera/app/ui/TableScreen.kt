@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.VoiceOverOff
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.VolumeOff
@@ -125,6 +127,9 @@ fun TableScreen(
     sound: SoundSettings = SoundSettings(),
     /** Table talk; null at a table of bots, where there is nobody to talk to. */
     talk: Talk? = null,
+    /** Draws a seat's picture; by default the first letter of their name. */
+    avatarFor: @Composable (seat: Int, size: androidx.compose.ui.unit.Dp) -> Unit =
+        { seat, size -> Initial(view.seatInfo(seat)?.name.orEmpty(), size) },
 ) {
     // These two state holders live for the whole table and are never swapped out. Keying
     // them on the board, as this screen once did, handed a fresh holder to each new frame
@@ -183,9 +188,26 @@ fun TableScreen(
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
         ScoreRail(view, sound, onLeave = { if (over) onLeave() else confirmLeave = true }, talk = talk, onRules = { showRules = true })
-        OpponentRow(view, emotes, talk?.speaking.orEmpty())
+        // The other three where they sit: partner across the table, the two of the other
+        // team either side. In right-to-left order the first in a row is on the right,
+        // and play passes to the right, so the next player is there.
+        val speaking = talk?.speaking.orEmpty()
+        fun seatAt(offset: Int) = (view.yourSeat + offset) % 4
+        @Composable
+        fun Seated(offset: Int, side: Side, modifier: Modifier = Modifier) {
+            val seat = seatAt(offset)
+            Box(modifier, contentAlignment = Alignment.Center) {
+                SeatAtTable(view, seat, side, speaking = seat in speaking, avatar = { size -> avatarFor(seat, size) })
+                emotes.lastOrNull { it.seat == seat }?.let {
+                    EmoteBubble(it, Modifier.align(if (side == Side.TOP) Alignment.BottomCenter else Alignment.Center))
+                }
+            }
+        }
+        Seated(2, Side.TOP, Modifier.fillMaxWidth())
 
-        Box(Modifier.weight(1f).fillMaxWidth()) {
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+        Seated(1, Side.RIGHT, Modifier.fillMaxHeight())
+        Box(Modifier.weight(1f).fillMaxHeight()) {
             BoardView(
                 board = view.board,
                 modifier = Modifier.fillMaxSize(),
@@ -209,6 +231,8 @@ fun TableScreen(
             emotes.lastOrNull { it.seat == view.yourSeat }?.let {
                 EmoteBubble(it, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
             }
+        }
+        Seated(3, Side.LEFT, Modifier.fillMaxHeight())
         }
 
         Hand(
@@ -347,9 +371,9 @@ private fun arrivalOf(view: PlayerView): Arrival? =
 internal fun spotOf(view: PlayerView, seat: Int): SeatSpot =
     when ((seat - view.yourSeat + 4) % 4) {
         0 -> SeatSpot.BOTTOM
-        1 -> SeatSpot.TOP_START
+        1 -> SeatSpot.SIDE_START
         2 -> SeatSpot.TOP_MIDDLE
-        else -> SeatSpot.TOP_END
+        else -> SeatSpot.SIDE_END
     }
 
 // -- the rail ----------------------------------------------------------------
@@ -379,7 +403,7 @@ private fun ScoreRail(
             Spacer(Modifier.weight(1f))
 
             Column(horizontalAlignment = Alignment.End) {
-                Text("جيم ${view.gameNumber}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+                Text("گيم ${view.gameNumber}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
                 Text(
                     "لـ ${view.rules.target}",
                     color = Felt.Brass,
@@ -469,104 +493,14 @@ private fun ScorePlate(who: String, score: Int, leading: Boolean) {
 
 // -- the seats ----------------------------------------------------------------
 
-/** The other three seats: who is on, how many bones they hold, and who your partner is. */
-@Composable
-private fun OpponentRow(view: PlayerView, emotes: List<ShownEmote>, speaking: Set<Int> = emptySet()) {
-    val others = (1..3).map { (view.yourSeat + it) % 4 }
-    val pulse = rememberInfiniteTransition(label = "pulse")
-    val ring by pulse.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.22f,
-        animationSpec = infiniteRepeatable(tween(850, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "ring",
-    )
-
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceEvenly,
-    ) {
-        others.forEach { seat ->
-            val name = view.seatInfo(seat)?.name.orEmpty().ifEmpty { "لاعب" }
-            val acting = seat == view.actingSeat
-            val partner = teamOf(seat) == view.yourTeam
-            val stuck = seat == view.stuckSeat
-            val dropped = view.isDropped(seat)
-            val tint = when {
-                acting -> Felt.Brass
-                partner -> Felt.Playable
-                else -> Felt.Muted
-            }
-
-            Box(contentAlignment = Alignment.TopCenter) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(contentAlignment = Alignment.Center) {
-                        if (seat in speaking) SpeakingHalo(52.dp)
-                        // Whoever the table is waiting on breathes, so you can see it from
-                        // across the room.
-                        if (acting) {
-                            Box(
-                                Modifier
-                                    .size(44.dp)
-                                    .scale(ring)
-                                    .alpha(1.6f - ring)
-                                    .border(2.dp, Felt.Brass, CircleShape),
-                            )
-                        }
-                        Box(
-                            Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(Felt.Lapis)
-                                .border(
-                                    width = if (acting) 2.dp else 1.dp,
-                                    color = Felt.Brass.copy(alpha = if (acting) 1f else 0.6f),
-                                    shape = CircleShape,
-                                ),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(name.take(1), color = tint, style = MaterialTheme.typography.titleMedium)
-                        }
-                        // Tile counts are public in Teera, so they sit on the seat itself.
-                        Box(
-                            Modifier
-                                .align(Alignment.BottomEnd)
-                                .offset(x = 10.dp, y = 4.dp)
-                                .clip(RoundedCornerShape(9.dp))
-                                .background(Felt.Rail)
-                                .border(1.dp, Felt.Brass.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
-                        ) {
-                            Text(
-                                "${view.handCounts.getOrElse(seat) { 0 }}",
-                                color = Felt.Parchment,
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(name, color = tint, style = MaterialTheme.typography.labelSmall)
-                    Text(
-                        when {
-                            dropped -> "انقطع"
-                            stuck -> "مسكّر عليه"
-                            partner -> "شريكك"
-                            else -> " "
-                        },
-                        color = if (stuck || dropped) Felt.Danger else Felt.Muted,
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
-                emotes.lastOrNull { it.seat == seat }?.let { EmoteBubble(it, Modifier.offset(y = 30.dp)) }
-            }
-        }
-    }
-}
-
 private fun Emote.words(): String = when (this) {
     Emote.GULP -> "ابلع!"
     Emote.DRUMROLL -> "طبول…"
     Emote.SAD -> "راحت عليك"
     Emote.SLAP -> "خذ!"
+    Emote.NO_WAY -> "بالله ما طيغ!"
+    Emote.CHAT -> "يلا شباب خلي نسولف"
+    Emote.SHEEL -> "شيل!"
 }
 
 /** A soundboard press, popping up over whoever pressed it. */
@@ -634,7 +568,7 @@ private fun Celebration(view: PlayerView, visible: Boolean, modifier: Modifier =
         matchOver -> if (weLost) "خسرنا" else "فزنا"
         result?.end == GameEnd.TEERA -> "طيرة!"
         result?.end == GameEnd.X -> "اكس!"
-        result?.end == GameEnd.BLOCKED -> "سدّ"
+        result?.end == GameEnd.BLOCKED -> "قفلت"
         else -> ""
     }
     val festive = (matchOver && !weLost) || (!matchOver && ourGame && result?.end != GameEnd.BLOCKED)
@@ -713,7 +647,7 @@ private fun Prompt(
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(
-                    "الطيرة تنهي الجيم بدون اكس" + if (view.handPips == 1) "، والواحد ينحسب عليكم" else "",
+                    "الطيرة تنهي الگيم بدون اكس" + if (view.handPips == 1) "، والواحد ينحسب عليكم" else "",
                     color = Felt.Parchment,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
@@ -730,7 +664,7 @@ private fun Prompt(
             }
 
             view.phase == Phase.REDEAL_OFFER && view.isYourMove -> Panel {
-                Text("بيدك أربع دبلات", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
+                Text("بيدك أربع چفتات", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
                 Text("تقدر تعيد الخلط، أو تكمّل بيدك", color = Felt.Parchment, style = MaterialTheme.typography.bodyMedium)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(
@@ -743,7 +677,7 @@ private fun Prompt(
 
             view.phase == Phase.RESCUE && view.isYourMove -> Panel {
                 val stuckName = view.stuckSeat?.let { view.seatInfo(it)?.name }.orEmpty()
-                Text("$stuckName مسكّر عليه", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
+                Text("$stuckName گلى", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
                 when (rescueMode) {
                     null -> {
                         Text("تلعب تنطي؟", color = Felt.Parchment, style = MaterialTheme.typography.bodyLarge)
@@ -752,9 +686,9 @@ private fun Prompt(
                                 onClick = { onRescueMode(RescueMode.PLAY_FOR) },
                                 enabled = view.legalMoves.any { it is Move.PlayFor },
                                 colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
-                            ) { Text("العب بداله") }
+                            ) { Text("العب بداله", maxLines = 1, softWrap = false) }
                             OutlinedButton(onClick = { onRescueMode(RescueMode.GIVE) }) {
-                                Text("انطيه بول", color = Felt.Parchment)
+                                Text("انطيه بول", color = Felt.Parchment, maxLines = 1, softWrap = false)
                             }
                         }
                     }
@@ -770,7 +704,7 @@ private fun Prompt(
             }
 
             view.phase == Phase.RESCUE && view.stuckSeat == view.yourSeat -> Panel {
-                Text("مسكّر عليك", color = Felt.Danger, style = MaterialTheme.typography.titleLarge)
+                Text("گليت", color = Felt.Danger, style = MaterialTheme.typography.titleLarge)
                 Text(
                     "$waitingOn إما ينطيك بول أو يلعب بدالك",
                     color = Felt.Parchment,
@@ -807,6 +741,7 @@ private fun Hand(
     onEmote: (Emote) -> Unit,
     talk: Talk? = null,
 ) {
+    var trayOpen by remember { mutableStateOf(false) }
     Box {
         WalnutSurface(Modifier.matchParentSize())
         HorizontalDivider(color = Felt.Brass.copy(alpha = 0.85f), thickness = 1.dp)
@@ -818,7 +753,7 @@ private fun Hand(
                 Text(
                     text = when {
                         view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
-                        view.isYourMove && view.board.isEmpty -> "افتح الجيم بدبل"
+                        view.isYourMove && view.board.isEmpty -> "افتح الگيم بچفت"
                         view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
                         view.isYourMove && view.phase == Phase.TEERA_OFFER -> "قرارك"
                         view.isYourMove && selected != null -> "دوس على الجهة اللي تريدها"
@@ -832,7 +767,14 @@ private fun Hand(
                     modifier = Modifier.weight(1f),
                 )
                 if (talk != null) MicButton(talk, size = 40.dp)
-                Soundboard(onEmote)
+                Spacer(Modifier.width(4.dp))
+                SoundboardButton(trayOpen) { trayOpen = !trayOpen }
+            }
+            AnimatedVisibility(trayOpen) {
+                SoundTray { emote ->
+                    onEmote(emote)
+                    trayOpen = false
+                }
             }
 
             Spacer(Modifier.height(6.dp))
@@ -907,25 +849,63 @@ private fun HandTile(
     )
 }
 
-/** Four buttons that everybody at the table hears. */
+/**
+ * The soundboard: a button that opens a tray of sounds everybody at the table hears.
+ * Six are too many to sit beside the mic all the time, so they come up when wanted.
+ */
 @Composable
-private fun Soundboard(onEmote: (Emote) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-        listOf(Emote.GULP to "ابلع", Emote.SLAP to "خذ", Emote.DRUMROLL to "طبل", Emote.SAD to "حسرة")
-            .forEach { (emote, label) ->
-                Box(
-                    Modifier
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFF120B05).copy(alpha = 0.5f))
-                        .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                        .clickable { onEmote(emote) }
-                        .padding(horizontal = 9.dp, vertical = 3.dp)
-                        .testTag("emote-${emote.name}"),
-                ) {
-                    Text(label, color = Felt.Parchment, style = MaterialTheme.typography.labelSmall)
-                }
-            }
+private fun SoundboardButton(open: Boolean, onToggle: () -> Unit) {
+    Box(
+        Modifier
+            .size(40.dp)
+            .clip(CircleShape)
+            .background(if (open) Felt.Brass else Color(0xFF120B05).copy(alpha = 0.5f))
+            .border(1.dp, Felt.Brass.copy(alpha = 0.7f), CircleShape)
+            .clickable(onClick = onToggle)
+            .testTag("soundboard"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            Icons.Rounded.Campaign,
+            contentDescription = "الأصوات",
+            tint = if (open) Felt.Ink else Felt.Brass,
+        )
     }
+}
+
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SoundTray(onEmote: (Emote) -> Unit) {
+    androidx.compose.foundation.layout.FlowRow(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Emote.BOARD.forEach { emote ->
+            Box(
+                Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFF120B05).copy(alpha = 0.55f))
+                    .border(1.dp, Felt.Brass.copy(alpha = 0.7f), RoundedCornerShape(14.dp))
+                    .clickable { onEmote(emote) }
+                    .padding(horizontal = 12.dp, vertical = 5.dp)
+                    .testTag("emote-${emote.name}"),
+            ) {
+                Text(emote.label(), color = Felt.Parchment, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+/** What a soundboard button says on it. */
+private fun Emote.label(): String = when (this) {
+    Emote.GULP -> "ابلع"
+    Emote.NO_WAY -> "بالله ما طيغ!"
+    Emote.SHEEL -> "شيل"
+    Emote.CHAT -> "يلا نسولف"
+    Emote.DRUMROLL -> "طبل"
+    Emote.SAD -> "حسرة"
+    Emote.SLAP -> "خذ"
 }
 
 // -- the sums -----------------------------------------------------------------
@@ -962,10 +942,10 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
                 when {
                     matchOver && weLost -> "خسرتوا المباراة"
                     matchOver -> "فزتوا بالمباراة"
-                    result?.end == GameEnd.BLOCKED -> "الجيم انسدّ"
+                    result?.end == GameEnd.BLOCKED -> "قفلت"
                     result?.end == GameEnd.TEERA -> "طيرة"
                     result?.winnerSeat == view.yourSeat -> "خلّصت — اكس"
-                    else -> "خلص الجيم"
+                    else -> "خلص الگيم"
                 },
                 color = Felt.Brass,
                 style = MaterialTheme.typography.displaySmall,
@@ -989,7 +969,7 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
             SumRow("", teams.map { Cell.Name(view.teamName(it)) })
             if (result != null) {
                 SumRow(
-                    "هذا الجيم",
+                    "هذا الگيم",
                     teams.map { team ->
                         val tookX = result.end == GameEnd.X && result.winnerSeat?.let(::teamOf) == team
                         if (tookX) Cell.X else Cell.Points(result.scored.getOrElse(team) { 0 }, signed = true)
@@ -1008,7 +988,7 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
                 colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (matchOver) "رجوع للقائمة" else "الجيم الجاي", style = MaterialTheme.typography.labelLarge)
+                Text(if (matchOver) "رجوع للقائمة" else "الگيم الجاي", style = MaterialTheme.typography.labelLarge)
             }
         }
     }

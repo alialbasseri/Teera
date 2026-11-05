@@ -95,8 +95,15 @@ class Screenshots {
     private fun d(a: Int, b: Int) = Domino.of(a, b)
 
     private val seats = listOf(
-        Seat(0, "me", "علي"), Seat(1, "p1", "سارة"), Seat(2, "p2", "عمر"), Seat(3, "p3", "نور"),
+        Seat(0, "me", "علي", avatar = "p:0"), Seat(1, "p1", "سارة", avatar = "p:6"),
+        Seat(2, "p2", "عمر", avatar = "p:2"), Seat(3, "p3", "نور", avatar = "p:3"),
     )
+
+    /** Seat pictures as the app draws them. */
+    private val pictures: @Composable (PlayerView, Int, androidx.compose.ui.unit.Dp) -> Unit = { view, seat, size ->
+        val info = view.seatInfo(seat)
+        com.teera.app.ui.Avatar(info?.avatar.orEmpty(), info?.name.orEmpty(), size)
+    }
 
     private fun midGame(): PlayerView {
         val board = Board().open(d(6, 6))
@@ -138,7 +145,13 @@ class Screenshots {
 
     @Test
     fun table() = shoot("table") {
-        TableScreen(midGame(), onMove = {}, onNextGame = {}, onLeave = {})
+        val v = midGame()
+        TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+    }
+
+    @Test
+    fun profile() = shoot("profile") {
+        com.teera.app.ui.ProfileScreen("علي", "p:1", null, {}, {}, {}, {})
     }
 
     @Test
@@ -215,14 +228,6 @@ class Screenshots {
     @Test
     fun rules() = shoot("rules") { com.teera.app.ui.RulesScreen(onClose = {}) }
 
-    /** The bottom of the menu, where the credits are. */
-    @Test
-    fun menuFoot() = shoot("menu-foot") {
-        val scroll = androidx.compose.foundation.rememberScrollState()
-        androidx.compose.runtime.LaunchedEffect(Unit) { scroll.scrollTo(Int.MAX_VALUE) }
-        MenuScreen("علي", {}, {}, {}, {}, connecting = false, hasInternetServer = true, scroll = scroll)
-    }
-
     @Test
     fun lobby() = shoot("lobby") {
         LobbyScreen(
@@ -234,6 +239,7 @@ class Screenshots {
             onTakeSeat = {}, onToggleBot = { _, _ -> }, onSetRules = {}, onStart = {}, onLeave = {},
             onShare = {},
             talk = com.teera.app.ui.Talk(speaking = setOf(1)),
+            avatarFor = { seat, size -> com.teera.app.ui.Avatar(seat?.avatar.orEmpty(), seat?.name.orEmpty(), size) },
         )
     }
 }

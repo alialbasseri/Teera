@@ -42,6 +42,7 @@ class Room(
         var ready: Boolean = false,
         /** When the connection dropped, so a bot only steps in once they are really gone. */
         var goneSince: Long? = null,
+        var avatar: String = "",
     )
 
     var rules: Rules = rules
@@ -71,7 +72,7 @@ class Room(
     private fun seatList(): List<Seat> = (0 until Pack.PLAYERS).map { seat ->
         val member = members.values.firstOrNull { it.seat == seat }
         when {
-            member != null -> Seat(seat, member.playerId, member.name, isBot = false, connected = member.connected)
+            member != null -> Seat(seat, member.playerId, member.name, isBot = false, connected = member.connected, avatar = member.avatar)
             bots.containsKey(seat) -> Seat(seat, "bot-$seat", "Bot ${seat + 1}", isBot = true)
             else -> Seat(seat, "", "", isBot = false, connected = false)
         }
@@ -86,17 +87,18 @@ class Room(
 
     fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId }
 
-    fun join(playerId: String, name: String): Output {
+    fun join(playerId: String, name: String, avatar: String = ""): Output {
         members[playerId]?.let { existing ->
             existing.connected = true
             existing.goneSince = null
             existing.name = name
+            existing.avatar = avatar
             return Output(roomChanged = true, viewChanged = isStarted)
         }
         if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "That match has already started")
 
         val seat = freeSeat() ?: return Output.error(playerId, ErrorCode.ROOM_FULL, "That room is full")
-        members[playerId] = Member(playerId, name, seat)
+        members[playerId] = Member(playerId, name, seat, avatar = avatar)
         return Output.ROOM
     }
 
@@ -260,7 +262,10 @@ class Room(
         val state = game ?: return null
         val seat = seatOf(playerId) ?: return null
         // The deal fixed who sits where; whether each of them is still connected is live.
-        val seats = state.seats.map { it.copy(connected = it.isBot || members[it.playerId]?.connected == true) }
+        val seats = state.seats.map { seat ->
+            val member = members[seat.playerId]
+            seat.copy(connected = seat.isBot || member?.connected == true, avatar = member?.avatar ?: seat.avatar)
+        }
         return state.viewFor(seat, code, turnDeadline).copy(seats = seats)
     }
 

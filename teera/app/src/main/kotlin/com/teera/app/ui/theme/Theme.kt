@@ -25,8 +25,10 @@ import androidx.compose.ui.unit.sp
  * Aref Ruqaa for the name of the game and its big moments: Ruq'ah is the hand people in
  * Iraq actually write in, so "طيرة" on the menu looks written, not typeset.
  *
- * Both ship with the app under the SIL Open Font Licence (assets/licenses). El Messiri is
- * cut to two static weights from its variable font, so every phone draws the same thing.
+ * Latin letters and digits - scores, room codes, the credits - are Readex Pro's, drawn
+ * into the same font by tools/fonts/merge_latin.py, because El Messiri's own Latin did
+ * not sit well beside its Arabic. All three ship under the SIL Open Font Licence
+ * (assets/licenses); the merged face is renamed, as that licence asks.
  */
 val Messiri = FontFamily(
     Font(com.teera.app.R.font.el_messiri_medium, FontWeight.Normal),
@@ -116,9 +118,15 @@ private val TeeraTypography = Typography(
 
 @Composable
 fun TeeraTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = if (dark) DarkScheme else LightScheme,
-        typography = TeeraTypography,
-        content = content,
-    )
+    // The game is Arabic through and through, so it reads right to left on every phone,
+    // whatever language the phone itself is set to.
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Rtl,
+    ) {
+        MaterialTheme(
+            colorScheme = if (dark) DarkScheme else LightScheme,
+            typography = TeeraTypography,
+            content = content,
+        )
+    }
 }

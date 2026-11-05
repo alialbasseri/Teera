@@ -245,3 +245,32 @@ class VoiceRelayTest {
         ali.close(); sara.close(); stranger.close()
     }
 }
+
+class AvatarTest {
+
+    @Test
+    fun `a player's own photo reaches whoever joins, once, and nobody has to send it again`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", avatar = "photo", photo = "QUxJ"))
+        ali.await<ServerMessage.Welcome>()
+        ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = ali.await<ServerMessage.RoomUpdate>().room.code
+
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara", avatar = "p:6"))
+        sara.await<ServerMessage.Welcome>()
+        sara.say(ClientMessage.JoinRoom(code))
+
+        // The seat first, then the picture to put on it.
+        val room = sara.await<ServerMessage.RoomUpdate> { it.room.seats.any { s -> s.name == "Sara" } }.room
+        val photo = sara.await<ServerMessage.Avatar>()
+        assertEquals("QUxJ", photo.photo)
+        assertEquals("photo", room.seats.first { it.name == "Ali" }.avatar)
+        assertEquals("p:6", room.seats.first { it.name == "Sara" }.avatar, "a drawn picture travels as its name")
+
+        ali.close(); sara.close()
+    }
+}

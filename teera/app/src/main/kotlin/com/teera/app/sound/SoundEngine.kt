@@ -13,7 +13,7 @@ import kotlin.random.Random
 /** Something the table wants heard. */
 enum class Cue {
     CLACK, SLIDE, KNOCK, YOUR_TURN, TEERA, X, BLOCKED, MATCH_WON, MATCH_LOST,
-    EMOTE_GULP, EMOTE_DRUMROLL, EMOTE_SAD, EMOTE_SLAP,
+    EMOTE_GULP, EMOTE_DRUMROLL, EMOTE_SAD, EMOTE_SLAP, EMOTE_NO_WAY, EMOTE_CLINK, EMOTE_WHOOSH,
 }
 
 /** Which of the two pieces of music suits the table right now. */
@@ -58,6 +58,9 @@ class SoundEngine(private val context: Context) {
         Cue.EMOTE_DRUMROLL to listOf(R.raw.emote_drumroll),
         Cue.EMOTE_SAD to listOf(R.raw.emote_sad),
         Cue.EMOTE_SLAP to listOf(R.raw.emote_slap),
+        Cue.EMOTE_NO_WAY to listOf(R.raw.emote_no_way),
+        Cue.EMOTE_CLINK to listOf(R.raw.emote_clink),
+        Cue.EMOTE_WHOOSH to listOf(R.raw.emote_whoosh),
     ).mapValues { (_, resources) -> resources.map { pool.load(context, it, 1) } }
 
     /** How loud each kind of sound sits in the mix, so a clack never drowns a teera. */

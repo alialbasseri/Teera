@@ -19,6 +19,9 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
         val lock = Mutex()
         val sessions = ConcurrentHashMap<String, WebSocketSession>()
 
+        /** Players' own pictures, by player id, handed to each newcomer once. */
+        val photos = ConcurrentHashMap<String, String>()
+
         @Volatile
         var lastActivity: Long = System.currentTimeMillis()
 

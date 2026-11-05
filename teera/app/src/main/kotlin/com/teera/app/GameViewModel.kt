@@ -2,6 +2,7 @@ package com.teera.app
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.teera.app.net.GameClient
@@ -40,7 +41,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table, Rules }
+enum class Screen { Menu, Lobby, Table, Rules, Profile }
 
 data class ChatLine(val name: String, val text: String)
 
@@ -67,6 +68,10 @@ data class UiState(
     val link: Link = Link.UP,
     /** The internet room this phone was last in, offered on the menu to go back to. */
     val lastRoom: String? = null,
+    /** This player's picture: "p:3", "photo" or empty (see [com.teera.core.Seat.avatar]). */
+    val avatar: String = "",
+    /** Pictures players chose themselves, by player id; this player's own included. */
+    val photos: Map<String, androidx.compose.ui.graphics.ImageBitmap> = emptyMap(),
 ) {
     /** Whether an internet server has actually been set up yet. */
     val hasInternetServer: Boolean get() = serverUrl.startsWith("ws")
@@ -114,6 +119,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             playerName = prefs.getString(KEY_NAME, null) ?: "Player",
             serverUrl = prefs.getString(KEY_SERVER, null) ?: DEFAULT_SERVER,
             lastRoom = prefs.getString(KEY_LAST_ROOM, null),
+            avatar = prefs.getString(KEY_AVATAR, null) ?: "p:${(UUID.randomUUID().hashCode() and 0x7) }",
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -225,7 +231,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val code = table.code ?: openRoomAt(table.host, table.port)
             if (code == null) {
-                _state.update { it.copy(notice = "الطاولة بدت أو انسدّت") }
+                _state.update { it.copy(notice = "الطاولة بدت أو تسكّرت") }
                 return@launch
             }
             connectTo("ws://${table.host}:${table.port}/ws")
@@ -264,7 +270,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** A table against bots, refereed in this process. */
     fun playOffline(difficulty: Difficulty = Difficulty.NORMAL) {
         val rules = _state.value.draftRules
-        attach(LocalGameClient(viewModelScope, playerId, _state.value.playerName, rules))
+        attach(LocalGameClient(viewModelScope, playerId, _state.value.playerName, rules, avatar = _state.value.avatar))
         _state.update { it.copy(offline = true, connecting = false) }
         for (seat in 1 until Pack.PLAYERS) {
             client?.send(ClientMessage.SetBot(seat, enabled = true, difficulty = difficulty))
@@ -280,6 +286,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 playerId = playerId,
                 playerName = _state.value.playerName,
                 wakeFirst = internet,
+                avatar = _state.value.avatar,
+                photo = if (_state.value.avatar == "photo") myPhotoBase64 else null,
             ),
         )
         onInternet = internet
@@ -351,6 +359,11 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false) }
             }
 
+            is ServerMessage.Avatar -> viewModelScope.launch(Dispatchers.Default) {
+                val picture = decodePhoto(message.photo) ?: return@launch
+                _state.update { it.copy(photos = it.photos + (message.playerId to picture)) }
+            }
+
             is ServerMessage.EmoteShown -> {
                 _reactions.tryEmit(react(message.emote))
                 val shown = ShownEmote(message.seat, message.emote, ++emoteCounter)
@@ -419,6 +432,69 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun showRules() = _state.update { it.copy(screen = Screen.Rules) }
 
+    // -- profile ---------------------------------------------------------------
+
+    private val photoFile = java.io.File(app.filesDir, "avatar.jpg")
+
+    /** This player's photo as it goes over the wire, read once. */
+    private var myPhotoBase64: String? = null
+
+    init {
+        // Everybody starts with one of the drawn pictures, kept from then on.
+        if (prefs.getString(KEY_AVATAR, null) == null) prefs.edit().putString(KEY_AVATAR, _state.value.avatar).apply()
+        // A photo chosen on an earlier run.
+        if (photoFile.exists()) {
+            viewModelScope.launch(Dispatchers.IO) {
+                val bytes = runCatching { photoFile.readBytes() }.getOrNull() ?: return@launch
+                myPhotoBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                decodePhoto(myPhotoBase64!!)?.let { picture ->
+                    _state.update { it.copy(photos = it.photos + (playerId to picture)) }
+                }
+            }
+        }
+    }
+
+    fun showProfile() = _state.update { it.copy(screen = Screen.Profile) }
+
+    fun closeProfile() = _state.update { if (it.screen == Screen.Profile) it.copy(screen = Screen.Menu) else it }
+
+    fun choosePreset(index: Int) {
+        val ref = "p:$index"
+        prefs.edit().putString(KEY_AVATAR, ref).apply()
+        _state.update { it.copy(avatar = ref) }
+    }
+
+    /**
+     * Takes a photo from the gallery: squared off from the middle, shrunk to 160 pixels
+     * and saved as a small JPEG, which is all a seat at the table needs.
+     */
+    fun choosePhoto(uri: android.net.Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val bitmap = runCatching {
+                app.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
+            }.getOrNull()
+            if (bitmap == null) {
+                _state.update { it.copy(notice = "ما قدرت أفتح الصورة") }
+                return@launch
+            }
+            val side = minOf(bitmap.width, bitmap.height)
+            val square = android.graphics.Bitmap.createBitmap(
+                bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side,
+            )
+            val small = android.graphics.Bitmap.createScaledBitmap(square, PHOTO_SIZE, PHOTO_SIZE, true)
+            val bytes = java.io.ByteArrayOutputStream().use { out ->
+                small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 78, out)
+                out.toByteArray()
+            }
+            photoFile.writeBytes(bytes)
+            myPhotoBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            prefs.edit().putString(KEY_AVATAR, "photo").apply()
+            val picture = small.asImageBitmapCompat()
+            _state.update { it.copy(avatar = "photo", photos = it.photos + (playerId to picture)) }
+        }
+    }
+
     fun closeRules() = _state.update { if (it.screen == Screen.Rules) it.copy(screen = Screen.Menu) else it }
 
     fun leave() {
@@ -445,6 +521,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         when (_state.value.screen) {
             Screen.Lobby, Screen.Table -> leave()
             Screen.Rules -> closeRules()
+            Screen.Profile -> closeProfile()
             Screen.Menu -> Unit
         }
     }
@@ -463,12 +540,22 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_NAME = "playerName"
         const val KEY_SERVER = "serverUrl"
         const val KEY_LAST_ROOM = "lastRoom"
+        const val KEY_AVATAR = "avatar"
+        const val PHOTO_SIZE = 160
     }
 }
 
+private fun android.graphics.Bitmap.asImageBitmapCompat() = asImageBitmap()
+
+/** A base64 JPEG from the wire, or null if it is not one. */
+private fun decodePhoto(base64: String): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmapCompat()
+}.getOrNull()
+
 /** The server writes its refusals in English for the logs; the table reads them in Arabic. */
 private fun ServerMessage.Failure.explain(): String = when (code) {
-    ErrorCode.ROOM_NOT_FOUND -> "ماكو غرفة بهذا الكود. يمكن خلصت أو انسدّت"
+    ErrorCode.ROOM_NOT_FOUND -> "ماكو غرفة بهذا الكود. يمكن خلصت أو تسكّرت"
     ErrorCode.ROOM_FULL -> "الغرفة مليانة"
     ErrorCode.ROOM_ALREADY_STARTED -> "اللعب بدأ بهذي الغرفة"
     ErrorCode.NOT_HOST -> "بس صاحب الغرفة يقدر يسويها"
@@ -482,9 +569,9 @@ private fun com.teera.core.Rejection.explain(): String = when (this) {
     com.teera.core.Rejection.NOT_YOUR_TURN -> "مو دورك"
     com.teera.core.Rejection.WRONG_PHASE -> "مو وقت هذي الحركة"
     com.teera.core.Rejection.TILE_NOT_IN_HAND -> "هذا البول مو بيدك"
-    com.teera.core.Rejection.MUST_OPEN_WITH_A_DOUBLE -> "الجيم يُفتح بدبل"
-    com.teera.core.Rejection.MUST_OPEN_WITH_THE_SIX -> "أول جيم يُفتح بالست ست"
-    com.teera.core.Rejection.MUST_OPEN_A_FRESH_SIDE -> "لازم تسكّر جهة جديدة من الدبل"
+    com.teera.core.Rejection.MUST_OPEN_WITH_A_DOUBLE -> "الگيم يُفتح بچفت"
+    com.teera.core.Rejection.MUST_OPEN_WITH_THE_SIX -> "أول گيم يُفتح بالست ست"
+    com.teera.core.Rejection.MUST_OPEN_A_FRESH_SIDE -> "لازم تسكّر جهة جديدة من الچفت"
     com.teera.core.Rejection.TILE_DOES_NOT_MATCH -> "البول ما يطابق الطرف"
     com.teera.core.Rejection.NO_ARM_GIVEN -> "اختر الجهة"
     com.teera.core.Rejection.MUST_PLAY_IF_ABLE -> "عندك بول تلعبه"

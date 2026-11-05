@@ -18,7 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -51,7 +51,7 @@ fun RulesScreen(onClose: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 IconButton(onClick = onClose) {
-                    Icon(Icons.AutoMirrored.Rounded.ArrowForward, contentDescription = "رجوع", tint = Felt.Brass)
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "رجوع", tint = Felt.Brass)
                 }
                 Spacer(Modifier.weight(1f))
             }
@@ -74,26 +74,26 @@ fun RulesScreen(onClose: () -> Unit) {
 
                 Section("الفكرة") {
                     Point("أربعة لاعبين، كل اثنين فريق، و**شريكك مقابيلك**.")
-                    Point("طقم دبل ست، **7 بولات لكل واحد**، وماكو بنك ولا سحب.")
+                    Point("طقم دومينا كامل (28 بول)، **7 بولات لكل واحد**، وماكو بنك ولا سحب.")
                     Point("النقاط عليك مو إلك: **الفريق اللي يوصل 201** (أو 251) **يخسر**.")
                     Point("الفرق تتبدّل بس لما تخلص المباراة.")
                 }
 
                 Section("الفتحة") {
                     Tiles(Domino(6, 6))
-                    Point("كل جيم **ينفتح بدبل**، بدون استثناء.")
-                    Point("أول جيم بالمباراة ينفتح **بالست ست**، ويفتحه اللي عنده.")
-                    Point("بعدها يفتح **اللي ربح الجيم اللي قبله**. إذا ما عنده دبل، تنتقل الفتحة للي وراه.")
+                    Point("كل گيم **ينفتح بچفت**، بدون استثناء.")
+                    Point("أول گيم بالمباراة ينفتح **بالست ست**، ويفتحه اللي عنده.")
+                    Point("بعدها يفتح **اللي ربح الگيم اللي قبله**. إذا ما عنده چفت، تنتقل الفتحة للي وراه.")
                 }
 
                 Section("الأربع جهات") {
-                    Point("الدبل الفاتح ينلعب عليه من **أربع جهات**، ولازم تتسكّر الأربعة قبل أي لعب ثاني:")
+                    Point("الچفت الفاتح ينلعب عليه من **أربع جهات**، ولازم تتسكّر الأربعة قبل أي لعب ثاني:")
                     Point("الثاني يلعب جهة، الثالث جهة، الرابع جهة، و**الفاتح يسكّر الرابعة**.", indent = true)
-                    Point("بعدها تبقى **أربع أطراف مفتوحة** لآخر الجيم.")
-                    Point("الدبل بنص الجيم ينحط بالعرض، **وينلعب عليه من جهة وحدة** بس.")
+                    Point("بعدها تبقى **أربع أطراف مفتوحة** لآخر الگيم.")
+                    Point("الچفت بنص الگيم ينحط بالعرض، **وينلعب عليه من جهة وحدة** بس.")
                 }
 
-                Section("إذا ما عندك تلعب") {
+                Section("إذا گليت") {
                     Point("ماكو سحب. **اللي قبلك** (ودايماً خصم) يختار:")
                     Point("**ينطيك بول** من عنده، **أو يلعب بدالك** من بولاته.", indent = true)
                     Point("وأنت **تخسر دورك** بالحالتين.")
@@ -101,21 +101,21 @@ fun RulesScreen(onClose: () -> Unit) {
                     Point("وإذا انطاك **آخر بول بإيده**، خلّص وياخذ **اكس**.")
                 }
 
-                Section("نهاية الجيم") {
+                Section("نهاية الگيم") {
                     Point("**اكس:** اللي يخلّص بولاته، فريقه ياخذ **ناقص 25**.")
                     Tiles(Domino(0, 0), Domino(0, 1))
-                    Point("**طيرة:** إذا لعبت وبقى بإيدك **مجموع صفر أو واحد** (يعني 0|0 أو 0|1)، تكدر تطيّر وتنهي الجيم.")
+                    Point("**طيرة:** إذا لعبت وبقى بإيدك **مجموع صفر أو واحد** (يعني 0|0 أو 0|1)، تكدر تطيّر وتنهي الگيم.")
                     Point("طرت بصفر = ما ينحسب عليك شي. طرت بواحد = **+1 على فريقك**.", indent = true)
                     Point("الطيرة **خيار**: تكدر تكمل إذا واثق تخلّص وتاخذ الاكس.", indent = true)
                     Point("بالاكس وبالطيرة، **الفريق الثاني** ينحسب عليه مجموع نقاط بولاتهم، وشريك اللي خلّص ما ينحسب عليه.")
-                    Point("**السدّ:** إذا انسدّ الجيم وماكو أحد يكدر يلعب، **ماكو نقاط**، ينعاد الجيم، **واللي سدّه يفتح**.")
+                    Point("**قفلت:** إذا قفلت الگيم وماكو أحد يكدر يلعب، **ماكو نقاط**، تنعاد الگيم، **واللي قفلها يفتح**.")
                     Example("فريقكم على 200 وطيّرت بواحد؟ صرتوا 201… **وخسرتوا بإيدكم**.")
                 }
 
                 Section("إعادة التوزيع") {
-                    Point("واحد بإيده **5 دبلات**، أو **6 بولات بنفس الرقم**: ينعاد التوزيع.")
-                    Point("الفريق الضد **كلهم ما عندهم رقم الدبل الفاتح**: ينعاد التوزيع.")
-                    Point("واحد بإيده **4 دبلات**: الخيار إله، يعيد أو يكمل.")
+                    Point("واحد بإيده **5 چفتات**، أو **6 بولات بنفس الرقم**: ينعاد التوزيع.")
+                    Point("الفريق الضد **كلهم ما عندهم رقم الچفت الفاتح**: ينعاد التوزيع.")
+                    Point("واحد بإيده **4 چفتات**: الخيار إله، يعيد أو يكمل.")
                 }
 
                 Section("الألرت") {
@@ -130,7 +130,7 @@ fun RulesScreen(onClose: () -> Unit) {
                     ScoreLine("اكس", "−25 لفريقه", "مجموع بولاتهم")
                     ScoreLine("طيرة بصفر", "0", "مجموع بولاتهم")
                     ScoreLine("طيرة بواحد", "+1 لفريقه", "مجموع بولاتهم")
-                    ScoreLine("سدّ", "ماكو نقاط", "ماكو نقاط")
+                    ScoreLine("قفلت", "ماكو نقاط", "ماكو نقاط")
                 }
 
                 Spacer(Modifier.height(8.dp))
