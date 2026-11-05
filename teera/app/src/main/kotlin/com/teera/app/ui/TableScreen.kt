@@ -39,6 +39,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.RecordVoiceOver
 import androidx.compose.material.icons.rounded.VoiceOverOff
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.MusicOff
 import androidx.compose.material.icons.rounded.VolumeOff
@@ -164,6 +165,7 @@ fun TableScreen(
     val selected = selectedState.value
     val rescueMode = rescueState.value
     var confirmLeave by remember { mutableStateOf(false) }
+    var showRules by remember { mutableStateOf(false) }
 
     // The game ends with a moment, and only then the sums.
     val over = view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER
@@ -178,7 +180,7 @@ fun TableScreen(
 
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
-        ScoreRail(view, sound, onLeave = { if (over) onLeave() else confirmLeave = true }, talk = talk)
+        ScoreRail(view, sound, onLeave = { if (over) onLeave() else confirmLeave = true }, talk = talk, onRules = { showRules = true })
         OpponentRow(view, emotes, talk?.speaking.orEmpty())
 
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -218,6 +220,16 @@ fun TableScreen(
     }
 
     if (over && showSummary) GameSummary(view, onNextGame, onLeave)
+
+    // The rules, over the table, without leaving it.
+    if (showRules) {
+        Dialog(
+            onDismissRequest = { showRules = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            RulesScreen(onClose = { showRules = false })
+        }
+    }
 
     if (confirmLeave) {
         Dialog(onDismissRequest = { confirmLeave = false }) {
@@ -341,7 +353,13 @@ internal fun spotOf(view: PlayerView, seat: Int): SeatSpot =
 // -- the rail ----------------------------------------------------------------
 
 @Composable
-private fun ScoreRail(view: PlayerView, sound: SoundSettings, onLeave: () -> Unit, talk: Talk? = null) {
+private fun ScoreRail(
+    view: PlayerView,
+    sound: SoundSettings,
+    onLeave: () -> Unit,
+    talk: Talk? = null,
+    onRules: () -> Unit = {},
+) {
     val us = view.scores.getOrElse(view.yourTeam) { 0 }
     val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
 
@@ -373,30 +391,38 @@ private fun ScoreRail(view: PlayerView, sound: SoundSettings, onLeave: () -> Uni
                     )
                 }
             }
+            // Four small switches in a square: music, effects, other players' voices, rules.
             Column {
-                IconButton(onClick = { sound.onMusic(!sound.musicOn) }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (sound.musicOn) Icons.Rounded.MusicNote else Icons.Rounded.MusicOff,
-                        contentDescription = "موسيقى",
-                        tint = if (sound.musicOn) Felt.Brass else Felt.Muted,
-                    )
+                Row {
+                    IconButton(onClick = { sound.onMusic(!sound.musicOn) }, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            if (sound.musicOn) Icons.Rounded.MusicNote else Icons.Rounded.MusicOff,
+                            contentDescription = "موسيقى",
+                            tint = if (sound.musicOn) Felt.Brass else Felt.Muted,
+                        )
+                    }
+                    IconButton(onClick = { sound.onEffects(!sound.effectsOn) }, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            if (sound.effectsOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
+                            contentDescription = "أصوات",
+                            tint = if (sound.effectsOn) Felt.Brass else Felt.Muted,
+                        )
+                    }
                 }
-                IconButton(onClick = { sound.onEffects(!sound.effectsOn) }, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (sound.effectsOn) Icons.Rounded.VolumeUp else Icons.Rounded.VolumeOff,
-                        contentDescription = "أصوات",
-                        tint = if (sound.effectsOn) Felt.Brass else Felt.Muted,
-                    )
-                }
-            }
-            if (talk != null) {
-                // Muting everybody else; your own mic is the button by your hand.
-                IconButton(onClick = talk.onHearing, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        if (talk.hearing) Icons.Rounded.RecordVoiceOver else Icons.Rounded.VoiceOverOff,
-                        contentDescription = if (talk.hearing) "اكتم أصوات اللاعبين" else "اسمع اللاعبين",
-                        tint = if (talk.hearing) Felt.Brass else Felt.Muted,
-                    )
+                Row {
+                    if (talk != null) {
+                        // Muting everybody else; your own mic is the button by your hand.
+                        IconButton(onClick = talk.onHearing, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                if (talk.hearing) Icons.Rounded.RecordVoiceOver else Icons.Rounded.VoiceOverOff,
+                                contentDescription = if (talk.hearing) "اكتم أصوات اللاعبين" else "اسمع اللاعبين",
+                                tint = if (talk.hearing) Felt.Brass else Felt.Muted,
+                            )
+                        }
+                    }
+                    IconButton(onClick = onRules, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.AutoMirrored.Rounded.MenuBook, contentDescription = "القوانين", tint = Felt.Brass)
+                    }
                 }
             }
             IconButton(onClick = onLeave) {
@@ -424,7 +450,8 @@ private fun ScorePlate(who: String, score: Int, leading: Boolean) {
     ) {
         Text(who, color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
         Text(
-            "$shown",
+            // A score can go below zero; isolated so the minus stays in front of it.
+            "\u2066$shown\u2069",
             color = if (leading) Felt.Playable else Felt.Behind,
             style = MaterialTheme.typography.titleLarge,
         )
@@ -969,7 +996,8 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
 
 @Composable
 private fun SumRow(label: String, us: Int, them: Int, signed: Boolean) {
-    fun show(n: Int) = if (signed && n > 0) "+$n" else "$n"
+    // Isolated left-to-right, or the bidi algorithm puts the sign after the digits: "25-".
+    fun show(n: Int) = "\u2066" + (if (signed && n > 0) "+$n" else if (n < 0) "−${-n}" else "$n") + "\u2069"
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, color = Felt.Muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
         Text("نحن ${show(us)}", color = Felt.Parchment, style = MaterialTheme.typography.titleMedium)

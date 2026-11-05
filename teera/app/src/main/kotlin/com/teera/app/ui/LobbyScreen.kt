@@ -85,7 +85,7 @@ fun LobbyScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("كود الغرفة", style = MaterialTheme.typography.labelSmall, color = Felt.Muted)
-                Text(room.code, fontSize = 40.sp, style = MaterialTheme.typography.displaySmall, color = Felt.Brass)
+                Text(room.code, fontSize = 40.sp, style = MaterialTheme.typography.headlineLarge, color = Felt.Brass)
             }
             Text(
                 when {

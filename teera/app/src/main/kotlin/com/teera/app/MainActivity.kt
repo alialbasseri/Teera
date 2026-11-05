@@ -42,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.teera.app.sound.SoundEngine
 import com.teera.app.ui.LobbyScreen
 import com.teera.app.ui.MenuScreen
+import com.teera.app.ui.RulesScreen
 import com.teera.app.ui.SoundSettings
 import com.teera.app.ui.Talk
 import com.teera.app.ui.TableScreen
@@ -165,7 +166,10 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onSetServer = viewModel::setServer,
                     waking = state.link == Link.WAKING,
                     lastRoom = state.lastRoom,
+                    onRules = viewModel::showRules,
                 )
+
+                Screen.Rules -> RulesScreen(onClose = viewModel::closeRules)
 
                 Screen.Lobby -> state.room?.let { room ->
                     LobbyScreen(

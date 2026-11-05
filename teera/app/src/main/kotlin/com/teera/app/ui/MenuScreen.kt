@@ -64,6 +64,8 @@ fun MenuScreen(
     waking: Boolean = false,
     /** The internet room this phone was last in, if any, to go straight back to. */
     lastRoom: String? = null,
+    onRules: () -> Unit = {},
+    scroll: androidx.compose.foundation.ScrollState = rememberScrollState(),
 ) {
     var code by remember { mutableStateOf("") }
     var address by remember { mutableStateOf("") }
@@ -73,7 +75,7 @@ fun MenuScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scroll)
                 .padding(horizontal = 26.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -107,6 +109,8 @@ fun MenuScreen(
 
             Spacer(Modifier.height(18.dp))
             GoldButton("العب ضد البوتات", onSolo)
+            Spacer(Modifier.height(10.dp))
+            BrassButton("قوانين اللعبة", onRules, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(16.dp))
             RosetteRule(Modifier.padding(horizontal = 50.dp))
             Spacer(Modifier.height(10.dp))
@@ -229,11 +233,15 @@ fun MenuScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(26.dp))
+            RosetteRule(Modifier.padding(horizontal = 80.dp))
+            Spacer(Modifier.height(10.dp))
+            Credits()
             Text(
                 "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.labelSmall,
                 color = Felt.Muted,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
     }
@@ -277,5 +285,38 @@ private fun Emblem() {
             Modifier.size(46.dp, 92.dp).offset(x = (44 * fan).dp, y = (6 * fan).dp).rotate(16f * fan),
         )
         DominoTile(Domino(0, 1), Modifier.size(48.dp, 96.dp).scale(0.9f + 0.1f * fan))
+    }
+}
+
+/** Who made the game, each name a link. */
+const val DESIGNER_URL = "https://www.linkedin.com/in/ali-albasseri"
+const val TECH_VISION_URL = "https://store.techvisi0n.com"
+
+@Composable
+private fun Credits() {
+    val links = androidx.compose.ui.platform.LocalUriHandler.current
+    // English lines read left to right, even inside the Arabic menu.
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            CreditLine("Designed by", "Ali Albasseri") { runCatching { links.openUri(DESIGNER_URL) } }
+            CreditLine("Powered by", "Tech Vision") { runCatching { links.openUri(TECH_VISION_URL) } }
+        }
+    }
+}
+
+@Composable
+private fun CreditLine(lead: String, name: String, open: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 1.dp)) {
+        Text("$lead ", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        Text(
+            name,
+            color = Felt.Brass,
+            style = MaterialTheme.typography.labelLarge.copy(
+                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
+            ),
+            modifier = Modifier.clickable(onClick = open).padding(vertical = 4.dp, horizontal = 2.dp),
+        )
     }
 }

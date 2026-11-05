@@ -18,12 +18,26 @@ import androidx.compose.ui.unit.sp
  * Everything on the table is drawn from these, so a change here restyles the game.
  */
 /**
- * Amiri, a classical naskh. A proper Arabic face is the single thing that most changes
- * how the game reads, and it ships with the app under the Open Font Licence.
+ * The game's two hands.
+ *
+ * El Messiri for everything that has to be read at a glance - buttons, names, scores:
+ * clear at small sizes, with enough of the pen in it to feel crafted rather than system.
+ * Aref Ruqaa for the name of the game and its big moments: Ruq'ah is the hand people in
+ * Iraq actually write in, so "طيرة" on the menu looks written, not typeset.
+ *
+ * Both ship with the app under the SIL Open Font Licence (assets/licenses). El Messiri is
+ * cut to two static weights from its variable font, so every phone draws the same thing.
  */
-val Amiri = FontFamily(
-    Font(com.teera.app.R.font.amiri_regular),
-    Font(com.teera.app.R.font.amiri_bold, androidx.compose.ui.text.font.FontWeight.Bold),
+val Messiri = FontFamily(
+    Font(com.teera.app.R.font.el_messiri_medium, FontWeight.Normal),
+    Font(com.teera.app.R.font.el_messiri_medium, FontWeight.Medium),
+    Font(com.teera.app.R.font.el_messiri_bold, FontWeight.SemiBold),
+    Font(com.teera.app.R.font.el_messiri_bold, FontWeight.Bold),
+)
+
+val Ruqaa = FontFamily(
+    Font(com.teera.app.R.font.aref_ruqaa_regular, FontWeight.Normal),
+    Font(com.teera.app.R.font.aref_ruqaa_bold, FontWeight.Bold),
 )
 
 object Felt {
@@ -86,14 +100,18 @@ private val LightScheme = lightColorScheme(
 )
 
 private val TeeraTypography = Typography(
-    displayLarge = TextStyle(fontFamily = Amiri, fontSize = 52.sp, fontWeight = FontWeight.Bold),
-    displaySmall = TextStyle(fontFamily = Amiri, fontSize = 38.sp, fontWeight = FontWeight.Bold),
-    titleLarge = TextStyle(fontFamily = Amiri, fontSize = 25.sp, fontWeight = FontWeight.Bold),
-    titleMedium = TextStyle(fontFamily = Amiri, fontSize = 20.sp, fontWeight = FontWeight.Bold),
-    bodyLarge = TextStyle(fontFamily = Amiri, fontSize = 18.sp),
-    bodyMedium = TextStyle(fontFamily = Amiri, fontSize = 16.sp),
-    labelLarge = TextStyle(fontFamily = Amiri, fontSize = 17.sp, fontWeight = FontWeight.Bold),
-    labelSmall = TextStyle(fontFamily = Amiri, fontSize = 13.sp),
+    // Written: the game's name, and the word thrown across the table when a game ends.
+    displayLarge = TextStyle(fontFamily = Ruqaa, fontSize = 56.sp, fontWeight = FontWeight.Bold),
+    displaySmall = TextStyle(fontFamily = Ruqaa, fontSize = 36.sp, fontWeight = FontWeight.Bold),
+    // Read: everything else.
+    headlineLarge = TextStyle(fontFamily = Messiri, fontSize = 34.sp, fontWeight = FontWeight.Bold),
+    headlineSmall = TextStyle(fontFamily = Messiri, fontSize = 24.sp, fontWeight = FontWeight.Bold),
+    titleLarge = TextStyle(fontFamily = Messiri, fontSize = 22.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontFamily = Messiri, fontSize = 18.sp, fontWeight = FontWeight.Bold),
+    bodyLarge = TextStyle(fontFamily = Messiri, fontSize = 17.sp, lineHeight = 27.sp),
+    bodyMedium = TextStyle(fontFamily = Messiri, fontSize = 15.sp, lineHeight = 24.sp),
+    labelLarge = TextStyle(fontFamily = Messiri, fontSize = 15.sp, fontWeight = FontWeight.Bold),
+    labelSmall = TextStyle(fontFamily = Messiri, fontSize = 12.sp),
 )
 
 @Composable

@@ -40,7 +40,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table }
+enum class Screen { Menu, Lobby, Table, Rules }
 
 data class ChatLine(val name: String, val text: String)
 
@@ -417,6 +417,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** The app has gone into the background: close the mic, nobody should be overheard. */
     fun pauseVoice() = voice.setMic(false)
 
+    fun showRules() = _state.update { it.copy(screen = Screen.Rules) }
+
+    fun closeRules() = _state.update { if (it.screen == Screen.Rules) it.copy(screen = Screen.Menu) else it }
+
     fun leave() {
         voice.stopAll()
         listening?.cancel()
@@ -440,6 +444,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun back() {
         when (_state.value.screen) {
             Screen.Lobby, Screen.Table -> leave()
+            Screen.Rules -> closeRules()
             Screen.Menu -> Unit
         }
     }

@@ -213,6 +213,17 @@ class Screenshots {
     }
 
     @Test
+    fun rules() = shoot("rules") { com.teera.app.ui.RulesScreen(onClose = {}) }
+
+    /** The bottom of the menu, where the credits are. */
+    @Test
+    fun menuFoot() = shoot("menu-foot") {
+        val scroll = androidx.compose.foundation.rememberScrollState()
+        androidx.compose.runtime.LaunchedEffect(Unit) { scroll.scrollTo(Int.MAX_VALUE) }
+        MenuScreen("علي", {}, {}, {}, {}, connecting = false, hasInternetServer = true, scroll = scroll)
+    }
+
+    @Test
     fun lobby() = shoot("lobby") {
         LobbyScreen(
             room = RoomInfo(
