@@ -75,6 +75,8 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
 
         // Rooms still waiting for players. A phone hosting on the Wi-Fi only ever has one,
         // so a friend who typed the host's address can find it without a code.
+        roomLinks()
+
         get("/rooms") {
             val open = registry.all().filter { !it.room.isStarted }.map { it.room.code }
             call.respondText(
@@ -132,6 +134,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             avatar = message.avatar.take(12).filter { it.isLetterOrDigit() || it == ':' }
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
+                            registry.arrived(playerId!!, name, avatar, this)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                         }
 
@@ -153,6 +156,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
 
                         is ClientMessage.JoinRoom -> {
                             val target = registry.find(message.code)
+                                ?: if (message.rejoin && registry.isCode(message.code)) registry.reopen(message.code, me!!) else null
                             if (target == null) {
                                 fail(ErrorCode.ROOM_NOT_FOUND, "No room with the code ${message.code.uppercase()}")
                                 return@consumeEach
@@ -167,6 +171,24 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                         // Answered anywhere, in a room or not: the app pings to keep a
                         // free host from putting the server to sleep mid-match.
                         ClientMessage.Ping -> send(Protocol.encode(ServerMessage.Pong))
+
+                        // Friends: who is around, who a code belongs to, and invitations.
+                        is ClientMessage.WhoIsOnline -> trySend(
+                            ServerMessage.Online(message.playerIds.take(200).filter { registry.online.containsKey(it) }),
+                        )
+                        is ClientMessage.FindPlayer -> {
+                            val found = registry.byShortCode(message.shortCode)
+                            trySend(
+                                if (found == null) ServerMessage.PlayerFound(message.shortCode.uppercase())
+                                else ServerMessage.PlayerFound(message.shortCode.uppercase(), found.first, found.second.name, found.second.avatar),
+                            )
+                        }
+                        is ClientMessage.Invite -> {
+                            val target = registry.online[message.playerId]
+                            val invite = ServerMessage.Invited(me!!, name, avatar, message.code.uppercase().take(8))
+                            target?.sessions?.forEach { it.trySend(invite) }
+                            trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null))
+                        }
 
                         else -> {
                             val current = holder
@@ -190,6 +212,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
             } catch (e: Exception) {
                 log.warn("socket failed", e)
             } finally {
+                playerId?.let { registry.left(it, this) }
                 val current = holder
                 val me = playerId
                 if (current != null && me != null) {
@@ -280,7 +303,8 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         }
         ClientMessage.Ping -> Room.Output(direct = listOf(playerId to ServerMessage.Pong))
         is ClientMessage.SendEmote -> room.emote(playerId, message.emote)
-        is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> null
+        is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
+        is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite -> null
     }
 }
 

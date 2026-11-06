@@ -120,7 +120,15 @@ sealed interface ClientMessage {
     data class CreateRoom(val rules: Rules = Rules.DEFAULT) : ClientMessage
 
     @Serializable @SerialName("joinRoom")
-    data class JoinRoom(val code: String) : ClientMessage
+    data class JoinRoom(
+        val code: String,
+        /**
+         * Coming back to a room this player was in, or arriving by its link: if the server
+         * has lost it (a restart), it is opened again under the same code, so everyone
+         * following the same link still ends up at the same table.
+         */
+        val rejoin: Boolean = false,
+    ) : ClientMessage
 
     @Serializable @SerialName("leaveRoom")
     data object LeaveRoom : ClientMessage
@@ -158,7 +166,23 @@ sealed interface ClientMessage {
     /** A button on the soundboard, heard by everybody at the table. */
     @Serializable @SerialName("emote")
     data class SendEmote(val emote: Emote) : ClientMessage
+
+    /** Which of these players have the app open right now. */
+    @Serializable @SerialName("whoIsOnline")
+    data class WhoIsOnline(val playerIds: List<String>) : ClientMessage
+
+    /** Looks a player up by the short code on their profile, to add them to your people. */
+    @Serializable @SerialName("findPlayer")
+    data class FindPlayer(val shortCode: String) : ClientMessage
+
+    /** Asks a player, wherever they are in the app, to come to a room. */
+    @Serializable @SerialName("invite")
+    data class Invite(val playerId: String, val code: String) : ClientMessage
 }
+
+/** A player's short code: what friends type to add them. Six letters and digits of their id. */
+fun shortCodeOf(playerId: String): String =
+    playerId.uppercase().filter { it.isLetterOrDigit() }.take(6)
 
 /**
  * The soundboard. Each one is a sound and, where it has one, a line said with it —
@@ -214,6 +238,22 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("emote")
     data class EmoteShown(val seat: Int, val emote: Emote) : ServerMessage
+
+    /** The players asked about in [ClientMessage.WhoIsOnline] who have the app open. */
+    @Serializable @SerialName("online")
+    data class Online(val playerIds: List<String>) : ServerMessage
+
+    /** Who a short code belongs to; null [playerId] if nobody with it is online. */
+    @Serializable @SerialName("found")
+    data class PlayerFound(val shortCode: String, val playerId: String? = null, val name: String = "", val avatar: String = "") : ServerMessage
+
+    /** Somebody wants you at their table. */
+    @Serializable @SerialName("invited")
+    data class Invited(val fromId: String, val fromName: String, val fromAvatar: String, val code: String) : ServerMessage
+
+    /** Whether an invite reached anyone: false when they do not have the app open. */
+    @Serializable @SerialName("inviteSent")
+    data class InviteSent(val playerId: String, val delivered: Boolean) : ServerMessage
 
     /** Somebody's own picture, sent once when either of you joins rather than with every view. */
     @Serializable @SerialName("avatar")

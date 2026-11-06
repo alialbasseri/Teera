@@ -160,4 +160,32 @@ class ConnectionTest {
         ali.client.close()
         sara.client.close()
     }
+
+    @Test
+    fun `a friend with the app open is seen online and gets the invitation`() = runBlocking {
+        serverUp()
+        val ali = Phone("Ali")
+        val sara = Phone("Sara")
+        until("both connected") { ali.client.link.value == Link.UP && sara.client.link.value == Link.UP }
+
+        // Sara adds Ali by the code on his profile.
+        sara.client.send(ClientMessage.FindPlayer(com.teera.core.shortCodeOf("id-Ali")))
+        until("Ali is found") { sara.heard.any { it is ServerMessage.PlayerFound && it.playerId == "id-Ali" } }
+
+        ali.client.send(ClientMessage.CreateRoom(Rules.DEFAULT))
+        until("room") { ali.room != null }
+        ali.client.send(ClientMessage.WhoIsOnline(listOf("id-Sara", "id-Nobody")))
+        until("Sara is online") { ali.heard.any { it is ServerMessage.Online && it.playerIds == listOf("id-Sara") } }
+
+        ali.client.send(ClientMessage.Invite("id-Sara", ali.room!!.code))
+        until("Sara is asked to the table") {
+            sara.heard.any { it is ServerMessage.Invited && it.code == ali.room!!.code && it.fromName == "Ali" }
+        }
+        until("Ali hears it got there") { ali.heard.any { it is ServerMessage.InviteSent && it.delivered } }
+
+        ali.client.send(ClientMessage.Invite("id-Nobody", ali.room!!.code))
+        until("and when it could not") { ali.heard.any { it is ServerMessage.InviteSent && !it.delivered } }
+        ali.client.close()
+        sara.client.close()
+    }
 }

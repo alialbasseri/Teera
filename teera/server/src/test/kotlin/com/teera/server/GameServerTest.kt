@@ -5,6 +5,7 @@ import com.teera.room.gameServer
 
 import com.teera.core.ClientMessage
 import com.teera.core.Difficulty
+import com.teera.core.ErrorCode
 import com.teera.core.GameEvent
 import com.teera.core.Move
 import com.teera.core.Pack
@@ -270,6 +271,43 @@ class AvatarTest {
         assertEquals("QUxJ", photo.photo)
         assertEquals("photo", room.seats.first { it.name == "Ali" }.avatar)
         assertEquals("p:6", room.seats.first { it.name == "Sara" }.avatar, "a drawn picture travels as its name")
+
+        ali.close(); sara.close()
+    }
+}
+
+class RoomLinkTest {
+
+    @Test
+    fun `a room link opens a page that hands the code to the app, and Android can check the app`() = testApplication {
+        application { gameServer() }
+        val page = client.get("/j/khan").bodyAsText()
+        assertTrue("intent://join/KHAN" in page, "the button opens the app on that room")
+        val links = client.get("/.well-known/assetlinks.json").bodyAsText()
+        assertTrue("com.teera.app" in links && "sha256_cert_fingerprints" in links)
+    }
+
+    @Test
+    fun `following a room's link after the server lost it puts everyone back at one table`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali"))
+        ali.await<ServerMessage.Welcome>()
+        ali.say(ClientMessage.JoinRoom("KHAN", rejoin = true))
+        assertEquals("KHAN", ali.await<ServerMessage.RoomUpdate>().room.code, "reopened under the same code")
+
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara"))
+        sara.await<ServerMessage.Welcome>()
+        sara.say(ClientMessage.JoinRoom("KHAN", rejoin = true))
+        val room = sara.await<ServerMessage.RoomUpdate> { it.room.seats.any { s -> s.name == "Sara" } }.room
+        assertTrue(room.seats.any { it.name == "Ali" }, "the same table, not a second one")
+
+        // A code typed by hand that is not a room is still refused, not opened.
+        sara.say(ClientMessage.JoinRoom("ZZZZ"))
+        assertEquals(ErrorCode.ROOM_NOT_FOUND, sara.await<ServerMessage.Failure>().code)
 
         ali.close(); sara.close()
     }

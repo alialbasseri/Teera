@@ -81,6 +81,10 @@ fun MenuScreen(
     lastRoom: String? = null,
     onRules: () -> Unit = {},
     onProfile: () -> Unit = {},
+    onRejoin: (String) -> Unit = onJoin,
+    onFriends: () -> Unit = {},
+    /** How many of this player's people have the app open, for the link's count. */
+    friendsOnline: Int = 0,
     avatar: @Composable (size: Dp) -> Unit = { size -> Initial(playerName, size) },
 ) {
     var code by remember { mutableStateOf("") }
@@ -149,7 +153,7 @@ fun MenuScreen(
                     Text("العب ويا جماعتك", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
                     if (lastRoom != null) {
-                        GoldButton("ارجع للغرفة $lastRoom", { onJoin(lastRoom) })
+                        GoldButton("ارجع للغرفة $lastRoom", { onRejoin(lastRoom) })
                         Spacer(Modifier.height(8.dp))
                     }
                     BrassButton(
@@ -197,10 +201,12 @@ fun MenuScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    SmallLink("قوانين اللعبة", onRules)
-                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 6.dp))
+                    SmallLink(if (friendsOnline > 0) "جماعتي ($friendsOnline)" else "جماعتي", onFriends, tag = "friends")
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    SmallLink("القوانين", onRules)
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
                     SmallLink(
-                        if (wifiTables.isEmpty()) "على نفس الواي فاي" else "على نفس الواي فاي (${wifiTables.size})",
+                        if (wifiTables.isEmpty()) "واي فاي" else "واي فاي (${wifiTables.size})",
                         { wifiOpen = true },
                         tag = "wifi",
                     )

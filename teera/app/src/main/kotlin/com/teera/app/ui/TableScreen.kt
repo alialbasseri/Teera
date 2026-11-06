@@ -779,10 +779,26 @@ private fun Hand(
                 Spacer(Modifier.width(4.dp))
                 SoundboardButton(trayOpen) { trayOpen = !trayOpen }
             }
-            AnimatedVisibility(trayOpen) {
-                SoundTray { emote ->
-                    onEmote(emote)
-                    trayOpen = false
+            // The tray floats above the hand rather than pushing it down, so the bones stay
+            // exactly where the thumb expects them.
+            if (trayOpen) {
+                androidx.compose.ui.window.Popup(
+                    popupPositionProvider = AboveAnchor,
+                    onDismissRequest = { trayOpen = false },
+                ) {
+                    Box(
+                        Modifier
+                            .padding(horizontal = 10.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Felt.Rail)
+                            .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(18.dp))
+                            .padding(vertical = 6.dp),
+                    ) {
+                        SoundTray { emote ->
+                            onEmote(emote)
+                            trayOpen = false
+                        }
+                    }
                 }
             }
 
@@ -904,6 +920,19 @@ private fun SoundTray(onEmote: (Emote) -> Unit) {
             }
         }
     }
+}
+
+/** Puts a popup just above whatever it is anchored to, centred across it. */
+private object AboveAnchor : androidx.compose.ui.window.PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: androidx.compose.ui.unit.IntRect,
+        windowSize: androidx.compose.ui.unit.IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: androidx.compose.ui.unit.IntSize,
+    ) = androidx.compose.ui.unit.IntOffset(
+        x = (anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2).coerceAtLeast(0),
+        y = (anchorBounds.top - popupContentSize.height).coerceAtLeast(0),
+    )
 }
 
 /** What a soundboard button says on it. */

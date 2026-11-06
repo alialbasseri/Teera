@@ -13,14 +13,27 @@ android {
         // 26: the room server a phone runs to host on the Wi-Fi needs java.time and NIO.
         minSdk = 26
         targetSdk = 34
-        versionCode = 13
-        versionName = "0.9.1"
+        versionCode = 14
+        versionName = "1.0.0"
 
         // Ali's server on Render (see DEPLOY.md); -Pteera.server=... points a build elsewhere.
         buildConfigField(
             "String", "SERVER_URL",
             "\"${project.findProperty("teera.server") ?: "wss://teera-xfvr.onrender.com/ws"}\"",
         )
+    }
+
+    // The key every build so far has been signed with, kept with the code: Android only
+    // installs an update over an app signed with the same key, so a build from a fresh
+    // machine must not mint a new one. A debug key, password "android"; publishing on
+    // Google Play will use a separate release key.
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("signing/teera-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
@@ -52,6 +65,9 @@ android {
         unitTests {
             isIncludeAndroidResources = true
             isReturnDefaultValues = true
+            // Screen tests must not reach the real internet server through the app's
+            // always-on connection (friends, invitations).
+            all { it.systemProperty("teera.noPresence", "true") }
         }
     }
 

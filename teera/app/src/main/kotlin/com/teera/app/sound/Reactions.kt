@@ -27,7 +27,17 @@ fun react(previous: PlayerView?, next: PlayerView): Reaction {
 
     for (event in next.events) {
         when (event) {
-            is GameEvent.Opened, is GameEvent.Played, is GameEvent.PlayedFor -> cues += Cue.CLACK
+            is GameEvent.Opened, is GameEvent.Played, is GameEvent.PlayedFor -> {
+                cues += Cue.CLACK
+                // The two tiles a teera is flown with: somebody just gave one up.
+                val laid = when (event) {
+                    is GameEvent.Opened -> event.domino
+                    is GameEvent.Played -> event.domino
+                    is GameEvent.PlayedFor -> event.domino
+                    else -> null
+                }
+                if (laid in TEERA_TILES) lines += Line("barto", "برطو")
+            }
             is GameEvent.Gave -> cues += Cue.SLIDE
             is GameEvent.Dealt, is GameEvent.Redealt -> cues += Cue.SLIDE
             // The stuck player knocks the table and asks the one before them which it is.
@@ -50,6 +60,11 @@ fun react(previous: PlayerView?, next: PlayerView): Reaction {
         }
     }
 
+    // Both of them on the table now: nobody can fly this game any more.
+    val bothDown = next.board.tiles().containsAll(TEERA_TILES)
+    val wereDown = previous?.takeIf { it.gameNumber == next.gameNumber }?.board?.tiles()?.containsAll(TEERA_TILES) == true
+    if (bothDown && !wereDown) lines += Line("hay_alzilim", "هاااي الزلم")
+
     // A chime when the table comes round to you, not every time you are shown it.
     if (next.isYourMove && previous?.isYourMove != true) cues += Cue.YOUR_TURN
 
@@ -67,6 +82,9 @@ fun moodOf(view: PlayerView): Mood {
 }
 
 private const val TENSE_MARGIN = 50
+
+/** Zero-zero and zero-one: the only tiles a hand can be left holding to call a teera. */
+private val TEERA_TILES = listOf(com.teera.core.Domino.of(0, 0), com.teera.core.Domino.of(0, 1))
 
 /** What an emote sounds like, and what is said with it. */
 fun react(emote: Emote): Reaction = when (emote) {

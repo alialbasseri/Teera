@@ -62,6 +62,19 @@ class MainActivity : ComponentActivity() {
                 TeeraApp(sound = sound)
             }
         }
+        // Opened from a room's link: but not again when the activity is merely recreated.
+        if (savedInstanceState == null) followLink(intent)
+    }
+
+    /** Already open, and a room's link is tapped in the chat: this activity is reused. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        followLink(intent)
+    }
+
+    private fun followLink(intent: Intent?) {
+        codeFromLink(intent?.dataString)?.let(model::openLink)
     }
 
     override fun onResume() {
@@ -75,9 +88,16 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    override fun onStart() {
+        super.onStart()
+        // While the app is open, friends can see it and invitations can reach it.
+        model.setForeground(true)
+    }
+
     override fun onStop() {
         // Out of sight, the mic closes: nobody at the table should overhear the room.
         model.pauseVoice()
+        model.setForeground(false)
         super.onStop()
     }
 
@@ -148,6 +168,9 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
 
     BackHandler(enabled = state.screen != Screen.Menu) { viewModel.back() }
 
+    var inviting by remember { mutableStateOf(false) }
+    LaunchedEffect(state.screen) { if (state.screen != Screen.Lobby) inviting = false }
+
     // The system photo picker: no permission needed, and the app only sees the one picked.
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         uri?.let(viewModel::choosePhoto)
@@ -181,12 +204,25 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     lastRoom = state.lastRoom,
                     onRules = viewModel::showRules,
                     onProfile = viewModel::showProfile,
+                    onRejoin = viewModel::rejoin,
+                    onFriends = viewModel::showFriends,
+                    friendsOnline = state.friends.count { it.id in state.online },
                     avatar = { size ->
                         com.teera.app.ui.Avatar(state.avatar, state.playerName, size, state.photos[state.myId])
                     },
                 )
 
                 Screen.Rules -> RulesScreen(onClose = viewModel::closeRules)
+
+                Screen.Friends -> com.teera.app.ui.FriendsScreen(
+                    myCode = state.myCode,
+                    friends = state.friends,
+                    online = state.online,
+                    onAdd = viewModel::addFriend,
+                    onForget = viewModel::forget,
+                    onShareCode = { shareText(context, "ضيفني بطاولة الدومينا، رمزي: ${state.myCode}") },
+                    onClose = viewModel::closeFriends,
+                )
 
                 Screen.Profile -> com.teera.app.ui.ProfileScreen(
                     name = state.playerName,
@@ -202,6 +238,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         )
                     },
                     onClose = viewModel::closeProfile,
+                    myCode = state.myCode,
                 )
 
                 Screen.Lobby -> state.room?.let { room ->
@@ -216,10 +253,21 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onSetRules = viewModel::setDraftRules,
                         onStart = viewModel::startMatch,
                         onLeave = viewModel::leave,
-                        onShare = { code -> shareRoomCode(context, code) },
+                        onShare = { code -> shareRoomCode(context, code, viewModel.linkFor(code)) },
                         talk = talk,
                         avatarFor = seatPicture,
+                        onInvite = { inviting = true },
                     )
+                    if (inviting) {
+                        com.teera.app.ui.InviteDialog(
+                            friends = state.friends,
+                            online = state.online,
+                            seated = room.seats.map { it.playerId }.toSet(),
+                            onInvite = { friend -> viewModel.invite(friend) },
+                            onShareLink = { shareRoomCode(context, room.code, viewModel.linkFor(room.code)) },
+                            onClose = { inviting = false },
+                        )
+                    }
                 }
 
                 Screen.Table -> state.view?.let { view ->
@@ -242,6 +290,11 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                 }
             }
 
+            // An invitation can arrive on any screen.
+            state.invite?.let { invite ->
+                com.teera.app.ui.InvitedDialog(invite, onAccept = viewModel::acceptInvite, onLater = viewModel::dismissInvite)
+            }
+
             // The server is holding the seat; say so, so nobody thinks the game froze.
             if (state.link == Link.LOST && state.screen != Screen.Menu) {
                 Text(
@@ -260,9 +313,18 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
     }
 }
 
-/** Hands the room code to WhatsApp, Telegram or whatever the phone offers. */
-private fun shareRoomCode(context: Context, code: String) {
-    val text = "تعال نلعب طيرة 🎲\nكود الغرفة: $code\nافتح التطبيق ← عبر الإنترنت ← اكتب الكود"
+private fun shareText(context: Context, text: String) {
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-    context.startActivity(Intent.createChooser(send, "دزّ الكود"))
+    context.startActivity(Intent.createChooser(send, null))
+}
+
+/** Hands the room's link to WhatsApp, Telegram or whatever the phone offers. */
+private fun shareRoomCode(context: Context, code: String, link: String?) {
+    val text = if (link != null) {
+        "تعال نلعب 🎲\nدوس هنا وتدخل الغرفة مباشرة:\n$link\n\n(أو افتح التطبيق واكتب الكود: $code)"
+    } else {
+        "تعال نلعب 🎲\nكود الغرفة: $code"
+    }
+    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
+    context.startActivity(Intent.createChooser(send, "دزّ اللنك"))
 }

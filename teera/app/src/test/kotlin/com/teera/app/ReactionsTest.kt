@@ -62,6 +62,21 @@ class ReactionsTest {
     }
 
     @Test
+    fun `a teera tile going down is called out, and both of them down gets the whole table`() {
+        val opened = Board().open(d(0, 0))
+        val first = react(view(board = Board().open(d(6, 6))), view(listOf(GameEvent.Opened(1, d(0, 0))), board = opened))
+        assertEquals(listOf("برطو"), first.lines.map { it.text })
+
+        val both = opened.place(d(0, 1), Arm.NORTH)
+        val second = react(view(board = opened), view(listOf(GameEvent.Played(2, d(1, 0), Arm.NORTH)), board = both))
+        assertEquals(listOf("برطو", "هاااي الزلم"), second.lines.map { it.text })
+
+        // Already down before this move: said once, not again with every tile after.
+        val later = both.place(d(0, 2), Arm.EAST)
+        assertTrue(react(view(board = both), view(listOf(GameEvent.Played(3, d(0, 2), Arm.EAST)), board = later)).lines.isEmpty())
+    }
+
+    @Test
     fun `a stuck seat knocks the table and asks the question out loud`() {
         val reaction = react(view(), view(listOf(GameEvent.Stuck(2, 1))))
         assertEquals(listOf(Cue.KNOCK), reaction.cues)

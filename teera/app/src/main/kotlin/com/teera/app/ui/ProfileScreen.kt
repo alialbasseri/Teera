@@ -47,6 +47,7 @@ fun ProfileScreen(
     onPreset: (Int) -> Unit,
     onPickPhoto: () -> Unit,
     onClose: () -> Unit,
+    myCode: String = "",
 ) {
     WalnutRoom {
         Column(Modifier.fillMaxSize()) {
@@ -65,7 +66,10 @@ fun ProfileScreen(
                     Modifier.size(128.dp).clip(CircleShape).border(2.dp, Felt.Brass, CircleShape),
                     contentAlignment = Alignment.Center,
                 ) { Avatar(avatar, name, 128.dp, photo) }
-                Spacer(Modifier.height(16.dp))
+                if (myCode.isNotEmpty()) {
+                    Text("رمزك: $myCode", color = Felt.Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 6.dp))
+                }
+                Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
                     value = name,
                     onValueChange = { onName(it.take(16)) },

@@ -67,6 +67,8 @@ fun LobbyScreen(
     /** Table talk; null when the other chairs can only hold bots. */
     talk: Talk? = null,
     avatarFor: @Composable (Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size -> Initial(seat?.name.orEmpty(), size) },
+    /** Opens the list of this player's people to call to the table; null hides it. */
+    onInvite: (() -> Unit)? = null,
 ) {
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
@@ -92,7 +94,7 @@ fun LobbyScreen(
                 when {
                     offline -> "لعب بدون إنترنت"
                     wifiAddress != null -> "أصحابك على نفس الواي فاي يشوفون الطاولة بالقائمة"
-                    else -> "أصحابك يكتبون الكود بـ «عبر الإنترنت» ويدخلون"
+                    else -> "دزّ اللنك لجماعتك: يدوسون عليه ويدخلون هنا مباشرة"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Felt.Muted,
@@ -110,7 +112,11 @@ fun LobbyScreen(
             val sharing = onShare != null && !offline && wifiAddress == null
             if (sharing || talk != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
-                    if (sharing) BrassButton("دزّ الكود لجماعتك", { onShare?.invoke(room.code) })
+                    if (sharing) BrassButton("دزّ اللنك", { onShare?.invoke(room.code) })
+                    if (sharing && onInvite != null) {
+                        Spacer(Modifier.width(8.dp))
+                        BrassButton("اعزم", onInvite)
+                    }
                     if (talk != null) {
                         Spacer(Modifier.width(10.dp))
                         MicButton(talk, size = 40.dp)

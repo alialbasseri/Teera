@@ -148,7 +148,9 @@ class WebSocketGameClient(
                         _link.value = Link.UP
                     }
                     is ServerMessage.RoomUpdate -> if (roomRequest != null) {
-                        roomRequest = ClientMessage.JoinRoom(message.room.code)
+                        // Coming back after a drop: if the server restarted meanwhile, the
+                        // room opens again under its code rather than leaving us stranded.
+                        roomRequest = ClientMessage.JoinRoom(message.room.code, rejoin = true)
                     }
                     // A room that has gone is gone: asking for it again on every reconnect
                     // would only repeat the same refusal.

@@ -41,7 +41,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table, Rules, Profile }
+enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends }
+
+/** Somebody this player knows: met at a table, or added by their code. */
+data class Friend(val id: String, val name: String, val avatar: String)
 
 data class ChatLine(val name: String, val text: String)
 
@@ -72,7 +75,15 @@ data class UiState(
     val avatar: String = "",
     /** Pictures players chose themselves, by player id; this player's own included. */
     val photos: Map<String, androidx.compose.ui.graphics.ImageBitmap> = emptyMap(),
+    /** This player's people, and which of them have the app open now. */
+    val friends: List<Friend> = emptyList(),
+    val online: Set<String> = emptySet(),
+    /** An invitation waiting for an answer. */
+    val invite: ServerMessage.Invited? = null,
 ) {
+    /** What friends type to add this player. */
+    val myCode: String get() = com.teera.core.shortCodeOf(myId)
+
     /** Whether an internet server has actually been set up yet. */
     val hasInternetServer: Boolean get() = serverUrl.startsWith("ws")
     val isHost: Boolean get() = room == null || room.hostId == myId
@@ -180,11 +191,29 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client?.send(ClientMessage.CreateRoom(_state.value.draftRules))
     }
 
-    fun join(code: String) {
+    /** [rejoin]: going back to a room, or by its link, which reopens it if the server lost it. */
+    fun join(code: String, rejoin: Boolean = false) {
         if (!_state.value.hasInternetServer) return noInternetServer()
         connectTo(_state.value.serverUrl, internet = true)
-        client?.send(ClientMessage.JoinRoom(code.trim().uppercase()))
+        client?.send(ClientMessage.JoinRoom(code.trim().uppercase(), rejoin))
     }
+
+    fun rejoin(code: String) = join(code, rejoin = true)
+
+    /**
+     * Somebody tapped a room's link. Straight in - unless this phone is already at that
+     * table, in which case there is nothing to do.
+     */
+    fun openLink(code: String) {
+        val wanted = code.trim().uppercase()
+        if (wanted.length != 4) return
+        if (_state.value.room?.code == wanted && _state.value.screen != Screen.Menu) return
+        if (_state.value.screen == Screen.Lobby || _state.value.screen == Screen.Table) leave()
+        rejoin(wanted)
+    }
+
+    /** The address a room's link points at: the internet server's, as a web page. */
+    fun linkFor(code: String): String? = roomLink(_state.value.serverUrl, code)
 
     private fun rememberRoom(code: String?) {
         prefs.edit().apply { if (code == null) remove(KEY_LAST_ROOM) else putString(KEY_LAST_ROOM, code) }.apply()
@@ -340,6 +369,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
             is ServerMessage.RoomUpdate -> {
                 announceIfHosting(message.room)
+                if (onInternet) metAt(message.room.seats)
                 if (onInternet && message.room.code != _state.value.lastRoom) rememberRoom(message.room.code)
                 // Once the deal is done nobody else can sit down, so stop advertising it.
                 if (message.room.started) beacon.stopAnnouncing()
@@ -390,6 +420,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             ServerMessage.Pong -> Unit
+
+            is ServerMessage.Online, is ServerMessage.PlayerFound,
+            is ServerMessage.Invited, is ServerMessage.InviteSent -> onPresence(message)
         }
     }
 
@@ -431,6 +464,144 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun pauseVoice() = voice.setMic(false)
 
     fun showRules() = _state.update { it.copy(screen = Screen.Rules) }
+
+    // -- people and invitations --------------------------------------------------
+
+    /**
+     * A quiet connection to the internet server held while the app is open, on any screen:
+     * it is how friends see this player online and how their invitations arrive. It also
+     * wakes a sleeping server before anybody asks it for a room.
+     */
+    private var presence: GameClient? = null
+    private var presencePump: Job? = null
+    private var onlinePoll: Job? = null
+
+    init {
+        _state.update { it.copy(friends = loadFriends()) }
+    }
+
+    fun setForeground(foreground: Boolean) {
+        if (foreground) startPresence() else stopPresence()
+    }
+
+    private fun startPresence() {
+        if (presence != null || !_state.value.hasInternetServer) return
+        if (System.getProperty("teera.noPresence") == "true") return
+        val link = WebSocketGameClient(
+            url = _state.value.serverUrl,
+            scope = viewModelScope,
+            playerId = playerId,
+            playerName = _state.value.playerName,
+            wakeFirst = true,
+            avatar = _state.value.avatar.takeIf { it != "photo" }.orEmpty(),
+        )
+        presence = link
+        presencePump = viewModelScope.launch { link.incoming.collect(::onPresence) }
+        onlinePoll = viewModelScope.launch {
+            while (true) {
+                askWhoIsOnline()
+                delay(ONLINE_POLL_MS)
+            }
+        }
+    }
+
+    private fun stopPresence() {
+        onlinePoll?.cancel()
+        presencePump?.cancel()
+        presence?.close()
+        presence = null
+    }
+
+    private fun askWhoIsOnline() {
+        val ids = _state.value.friends.map { it.id }
+        if (ids.isNotEmpty()) presence?.send(ClientMessage.WhoIsOnline(ids))
+    }
+
+    private fun onPresence(message: ServerMessage) {
+        when (message) {
+            is ServerMessage.Online -> _state.update { it.copy(online = message.playerIds.toSet()) }
+            is ServerMessage.PlayerFound -> {
+                val id = message.playerId
+                if (id == null || id == playerId) {
+                    _state.update { it.copy(notice = if (id == playerId) "هذا رمزك إنت" else "ماكو أحد فاتح التطبيق بهذا الرمز") }
+                } else {
+                    remember(Friend(id, message.name, message.avatar))
+                    _state.update { it.copy(notice = "انضاف ${message.name} لجماعتك", online = it.online + id) }
+                }
+            }
+            is ServerMessage.Invited -> _state.update {
+                // The same invitation can arrive on both connections; show it once.
+                if (it.invite == message || it.room?.code == message.code) it else it.copy(invite = message)
+            }
+            is ServerMessage.InviteSent -> if (!message.delivered) {
+                val name = _state.value.friends.firstOrNull { it.id == message.playerId }?.name ?: "صاحبك"
+                _state.update { it.copy(notice = "$name مو فاتح التطبيق هسه، دزله اللنك") }
+            } else {
+                _state.update { it.copy(notice = "انرسلت العزيمة") }
+            }
+            else -> Unit
+        }
+    }
+
+    fun showFriends() {
+        askWhoIsOnline()
+        _state.update { it.copy(screen = Screen.Friends) }
+    }
+
+    fun closeFriends() = _state.update { if (it.screen == Screen.Friends) it.copy(screen = Screen.Menu) else it }
+
+    fun addFriend(code: String) {
+        val clean = code.trim().uppercase().filter { it.isLetterOrDigit() }
+        if (clean.length != 6) return
+        if (presence == null) startPresence()
+        presence?.send(ClientMessage.FindPlayer(clean))
+    }
+
+    fun forget(friend: Friend) {
+        val next = _state.value.friends.filterNot { it.id == friend.id }
+        saveFriends(next)
+        _state.update { it.copy(friends = next) }
+    }
+
+    fun invite(friend: Friend) {
+        val code = _state.value.room?.code ?: return
+        if (presence == null) startPresence()
+        presence?.send(ClientMessage.Invite(friend.id, code))
+    }
+
+    fun acceptInvite() {
+        val invite = _state.value.invite ?: return
+        _state.update { it.copy(invite = null) }
+        openLink(invite.code)
+    }
+
+    fun dismissInvite() = _state.update { it.copy(invite = null) }
+
+    /** Everyone at an internet table becomes somebody this player knows. */
+    private fun metAt(seats: List<com.teera.core.Seat>) {
+        seats.filter { !it.isBot && it.playerId.isNotEmpty() && it.playerId != playerId }
+            .forEach { remember(Friend(it.playerId, it.name, it.avatar)) }
+    }
+
+    private fun remember(friend: Friend) {
+        val current = _state.value.friends
+        val known = current.firstOrNull { it.id == friend.id }
+        if (known == friend) return
+        val next = listOf(friend) + current.filterNot { it.id == friend.id }
+        saveFriends(next.take(MAX_FRIENDS))
+        _state.update { it.copy(friends = next.take(MAX_FRIENDS)) }
+    }
+
+    private fun loadFriends(): List<Friend> =
+        prefs.getString(KEY_FRIENDS, null).orEmpty().lines().mapNotNull { line ->
+            val parts = line.split('\t')
+            if (parts.size == 3) Friend(parts[0], parts[1], parts[2]) else null
+        }
+
+    private fun saveFriends(friends: List<Friend>) {
+        val text = friends.joinToString("\n") { listOf(it.id, it.name.replace('\t', ' ').replace('\n', ' '), it.avatar).joinToString("\t") }
+        prefs.edit().putString(KEY_FRIENDS, text).apply()
+    }
 
     // -- profile ---------------------------------------------------------------
 
@@ -522,11 +693,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             Screen.Lobby, Screen.Table -> leave()
             Screen.Rules -> closeRules()
             Screen.Profile -> closeProfile()
+            Screen.Friends -> closeFriends()
             Screen.Menu -> Unit
         }
     }
 
     override fun onCleared() {
+        stopPresence()
         voice.stopAll()
         client?.close()
         beacon.close()
@@ -541,11 +714,32 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_SERVER = "serverUrl"
         const val KEY_LAST_ROOM = "lastRoom"
         const val KEY_AVATAR = "avatar"
+        const val KEY_FRIENDS = "friends"
+        const val MAX_FRIENDS = 60
+        const val ONLINE_POLL_MS = 15_000L
         const val PHOTO_SIZE = 160
     }
 }
 
 private fun android.graphics.Bitmap.asImageBitmapCompat() = asImageBitmap()
+
+/** wss://host/ws and a code → https://host/j/CODE; null for a table on the Wi-Fi. */
+fun roomLink(serverUrl: String, code: String): String? {
+    if (!serverUrl.startsWith("wss://")) return null
+    val host = serverUrl.removePrefix("wss://").substringBefore('/')
+    return "https://$host/j/$code"
+}
+
+/** The room code in a link the app was opened with: https://host/j/CODE or teera://join/CODE. */
+fun codeFromLink(link: String?): String? {
+    val uri = link ?: return null
+    val code = when {
+        uri.startsWith("teera://join/") -> uri.removePrefix("teera://join/")
+        "/j/" in uri -> uri.substringAfter("/j/")
+        else -> return null
+    }.substringBefore('?').substringBefore('/').uppercase().filter { it.isLetterOrDigit() }
+    return code.takeIf { it.length == 4 }
+}
 
 /** A base64 JPEG from the wire, or null if it is not one. */
 private fun decodePhoto(base64: String): androidx.compose.ui.graphics.ImageBitmap? = runCatching {

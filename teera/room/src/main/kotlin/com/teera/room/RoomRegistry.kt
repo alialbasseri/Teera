@@ -32,6 +32,30 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
 
     private val rooms = ConcurrentHashMap<String, Holder>()
 
+    /** Somebody with the app open: in a room or just on the menu. */
+    class Present(val name: String, val avatar: String, val sessions: MutableSet<WebSocketSession>)
+
+    /** Everyone connected, by player id, so friends can find and invite each other. */
+    val online = ConcurrentHashMap<String, Present>()
+
+    fun arrived(playerId: String, name: String, avatar: String, session: WebSocketSession) {
+        online.compute(playerId) { _, was ->
+            val sessions = was?.sessions ?: java.util.Collections.newSetFromMap(ConcurrentHashMap<WebSocketSession, Boolean>())
+            sessions += session
+            Present(name, avatar, sessions)
+        }
+    }
+
+    fun left(playerId: String, session: WebSocketSession) {
+        online.computeIfPresent(playerId) { _, was ->
+            was.sessions -= session
+            if (was.sessions.isEmpty()) null else was
+        }
+    }
+
+    fun byShortCode(code: String): Pair<String, Present>? =
+        online.entries.firstOrNull { com.teera.core.shortCodeOf(it.key) == code.trim().uppercase() }?.toPair()
+
     fun create(hostId: String, rules: Rules): Holder {
         var code = newCode()
         while (rooms.containsKey(code)) code = newCode()
@@ -41,6 +65,16 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
     }
 
     fun find(code: String): Holder? = rooms[code.trim().uppercase()]
+
+    /** Opens a room under a code that is already known, for players following it back. */
+    fun reopen(code: String, hostId: String): Holder {
+        val key = code.trim().uppercase()
+        return rooms.computeIfAbsent(key) { Holder(Room(key, hostId, Rules.DEFAULT, clock)) }
+    }
+
+    /** Whether [code] could be one of ours, so a stray string never becomes a room. */
+    fun isCode(code: String): Boolean =
+        code.trim().length == CODE_LENGTH && code.trim().uppercase().all { it in ALPHABET }
 
     fun all(): Collection<Holder> = rooms.values
 

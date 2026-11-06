@@ -231,12 +231,12 @@ internal fun frameFor(
         (height - padding * 2) / (down + TARGET_REACH * 2),
     )
     val straight = fit(layout.width, layout.height)
-    val sideways = fit(layout.height, layout.width)
 
-    // Turn only for a clear gain, and turn back only for a clear loss, so a growing cross
-    // does not flip from one tile to the next.
-    val turned = if (wasTurned) sideways * TURN_GAIN >= straight else sideways >= straight * TURN_GAIN
-    val unit = (if (turned) sideways else straight)
+    // The table keeps still. Turning the cross a quarter round when it grew wide made more
+    // room, but players lost their place when the whole table swung mid-game; now it only
+    // shrinks to fit. Frame and [wasTurned] still carry the turn, for a setting one day.
+    val turned = false
+    val unit = straight
         .coerceAtMost(minOf(width, height) * MAX_UNIT_SHARE)
         .coerceAtLeast(4f)
 
