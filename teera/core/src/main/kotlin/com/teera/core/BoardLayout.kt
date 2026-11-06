@@ -36,6 +36,29 @@ object BoardLayout {
     ) {
         val width: Float get() = maxX - minX
         val height: Float get() = maxY - minY
+
+        /**
+         * The same table turned [quarterTurns] times clockwise, as seen from another chair.
+         * Each tile keeps which face points where along its arm; only where it sits and
+         * which way it lies turn with the table.
+         */
+        fun turned(quarterTurns: Int): Layout {
+            val k = ((quarterTurns % 4) + 4) % 4
+            if (k == 0) return this
+            var result = this
+            repeat(k) {
+                result = Layout(
+                    placements = result.placements.map {
+                        it.copy(centreX = -it.centreY, centreY = it.centreX, rotationDegrees = it.rotationDegrees + 90f)
+                    },
+                    minX = -result.maxY,
+                    minY = result.minX,
+                    maxX = -result.minY,
+                    maxY = result.maxX,
+                )
+            }
+            return result
+        }
     }
 
     private val EMPTY = Layout(emptyList(), 0f, 0f, 0f, 0f)
@@ -118,3 +141,15 @@ private val Arm.sign: Float
         Arm.EAST, Arm.SOUTH -> 1f
         Arm.WEST, Arm.NORTH -> -1f
     }
+
+/** A point on the table turned [quarterTurns] times clockwise, as [BoardLayout.Layout.turned] turns tiles. */
+fun turnPoint(x: Float, y: Float, quarterTurns: Int): Pair<Float, Float> {
+    var px = x
+    var py = y
+    repeat(((quarterTurns % 4) + 4) % 4) {
+        val nx = -py
+        py = px
+        px = nx
+    }
+    return px to py
+}

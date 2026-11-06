@@ -75,6 +75,10 @@ class LocalGameClient(
             ClientMessage.LeaveRoom -> room.leave(playerId)
             ClientMessage.Ping -> Room.Output(direct = listOf(playerId to ServerMessage.Pong))
             is ClientMessage.SendEmote -> room.emote(playerId, message.emote)
+            ClientMessage.RaiseAlert -> room.raiseAlert(playerId)
+            is ClientMessage.ShowHand -> room.showHand(playerId, message.shown)
+            is ClientMessage.Watch -> room.watch(playerId, message.seat)
+            is ClientMessage.VoteAlert -> room.voteAlert(playerId, message.yes)
             is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> Room.Output.ROOM
             // Friends and invitations live on the internet server, not at a table of bots.
             is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite -> Room.Output.NOTHING

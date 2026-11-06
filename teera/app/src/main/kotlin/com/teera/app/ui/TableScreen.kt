@@ -38,6 +38,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.Chat
+import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material.icons.rounded.MoreVert
@@ -130,6 +132,15 @@ fun TableScreen(
     sound: SoundSettings = SoundSettings(),
     /** Table talk; null at a table of bots, where there is nobody to talk to. */
     talk: Talk? = null,
+    /** Table chat, oldest first; null where there is nobody to write to (bots). */
+    chat: List<com.teera.app.ChatLine> = emptyList(),
+    onChat: ((String) -> Unit)? = null,
+    /** A player showing their tiles to the watchers; a watcher choosing whose. */
+    onShowHand: (Boolean) -> Unit = {},
+    onWatch: (Int) -> Unit = {},
+    /** "ناخذ خاوة" on the other team; null where there is nobody to vote (bots). */
+    onRaiseAlert: (() -> Unit)? = null,
+    onVoteAlert: (Boolean) -> Unit = {},
     /** Draws a seat's picture; by default the first letter of their name. */
     avatarFor: @Composable (seat: Int, size: androidx.compose.ui.unit.Dp) -> Unit =
         { seat, size -> Initial(view.seatInfo(seat)?.name.orEmpty(), size) },
@@ -176,6 +187,7 @@ fun TableScreen(
     val rescueMode = rescueState.value
     var confirmLeave by remember { mutableStateOf(false) }
     var showRules by remember { mutableStateOf(false) }
+    var askAlert by remember { mutableStateOf(false) }
 
     // The game ends with a moment, and only then the sums.
     val over = view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER
@@ -190,7 +202,23 @@ fun TableScreen(
 
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
-        ScoreRail(view, sound, onLeave = { if (over) onLeave() else confirmLeave = true }, talk = talk, onRules = { showRules = true })
+        // Watchers choose whose shoulder to look over; players choose whether to be looked at.
+        val options = if (view.spectating) {
+            view.showingHands.map { seat ->
+                MenuOption("تفرّج من ورا ${view.seatInfo(seat)?.name.orEmpty()}", lit = seat == view.yourSeat) { onWatch(seat) }
+            }
+        } else if (onChat != null) {
+            val showing = view.yourSeat in view.showingHands
+            listOf(
+                MenuOption(if (showing) "المتفرجين يشوفون حجاري" else "حجاري مخفية عن المتفرجين", lit = showing) { onShowHand(!showing) },
+            )
+        } else {
+            emptyList()
+        }
+        ScoreRail(
+            view, sound, onLeave = { if (over || view.spectating) onLeave() else confirmLeave = true },
+            talk = talk, onRules = { showRules = true }, options = options,
+        )
         // The other three where they sit: partner across the table, the two of the other
         // team either side. In right-to-left order the first in a row is on the right,
         // and play passes to the right, so the next player is there.
@@ -207,6 +235,7 @@ fun TableScreen(
             }
         }
         Seated(2, Side.TOP, Modifier.fillMaxWidth())
+        if (view.spectators.isNotEmpty()) Watchers(view, speaking)
 
         Row(Modifier.weight(1f).fillMaxWidth()) {
         Seated(1, Side.RIGHT, Modifier.fillMaxHeight())
@@ -217,6 +246,8 @@ fun TableScreen(
                 liveArms = selected?.let { armsFor(view, it).toSet() } ?: emptySet(),
                 onArmTapped = tapArm,
                 arrival = arrivalOf(view),
+                // Seen from this player's chair: their own side of the double faces them.
+                quarterTurns = view.yourSeat,
             )
 
             GivenTile(view)
@@ -234,6 +265,12 @@ fun TableScreen(
             emotes.lastOrNull { it.seat == view.yourSeat }?.let {
                 EmoteBubble(it, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
             }
+
+            if (onChat != null) ChatToast(chat, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))
+
+            view.alertVote?.let { vote ->
+                AlertVotePanel(view, vote, onVoteAlert, Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
+            }
         }
         Seated(3, Side.LEFT, Modifier.fillMaxHeight())
         }
@@ -242,10 +279,29 @@ fun TableScreen(
             view = view,
             selected = selected,
             playable = handHighlights(view, rescueMode),
-            onTap = tapTile,
+            onTap = { tile -> if (!view.spectating) tapTile(tile) },
             onEmote = onEmote,
             talk = talk,
+            chat = chat,
+            onChat = onChat,
+            onRaiseAlert = onRaiseAlert?.takeIf { view.alertVote == null && !over }?.let { raise -> { askAlert = true } },
         )
+
+    if (askAlert) {
+        Dialog(onDismissRequest = { askAlert = false }) {
+            Plaque {
+                Text("ناخذ خاوة؟", color = Felt.Brass, style = MaterialTheme.typography.displaySmall)
+                Text(
+                    "على ${view.teamName(1 - view.yourTeam)}. الطاولة تصوّت، وتنقبل إذا وافق أكثر من النص.",
+                    color = Felt.Parchment,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+                GoldButton("إي، ناخذها", { askAlert = false; onRaiseAlert?.invoke() })
+                TextButton(onClick = { askAlert = false }) { Text("لا، خليها", color = Felt.Muted) }
+            }
+        }
+    }
     }
 
     if (over && showSummary) GameSummary(view, onNextGame, onLeave)
@@ -388,6 +444,7 @@ private fun ScoreRail(
     onLeave: () -> Unit,
     talk: Talk? = null,
     onRules: () -> Unit = {},
+    options: List<MenuOption> = emptyList(),
 ) {
     val us = view.scores.getOrElse(view.yourTeam) { 0 }
     val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
@@ -443,6 +500,9 @@ private fun ScoreRail(
                             talk.hearing,
                         ) { talk.onHearing() }
                     }
+                    options.forEach { option ->
+                        Entry(option.label, Icons.Rounded.Visibility, option.lit) { menuOpen = false; option.action() }
+                    }
                     Entry("القوانين", Icons.AutoMirrored.Rounded.MenuBook) { menuOpen = false; onRules() }
                     HorizontalDivider(color = Felt.Brass.copy(alpha = 0.4f))
                     Entry("اطلع من الطاولة", Icons.AutoMirrored.Rounded.ExitToApp) { menuOpen = false; onLeave() }
@@ -451,7 +511,7 @@ private fun ScoreRail(
         }
         if (view.alerts.any { it > 0 }) {
             Text(
-                "ألرت ${view.alerts.getOrElse(view.yourTeam) { 0 }} · ${view.alerts.getOrElse(1 - view.yourTeam) { 0 }}",
+                "خاوة ${view.alerts.getOrElse(view.yourTeam) { 0 }} · ${view.alerts.getOrElse(1 - view.yourTeam) { 0 }}",
                 color = Felt.Danger,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp),
@@ -749,8 +809,15 @@ private fun Hand(
     onTap: (Domino) -> Unit,
     onEmote: (Emote) -> Unit,
     talk: Talk? = null,
+    onRaiseAlert: (() -> Unit)? = null,
+    chat: List<com.teera.app.ChatLine> = emptyList(),
+    onChat: ((String) -> Unit)? = null,
 ) {
     var trayOpen by remember { mutableStateOf(false) }
+    var chatOpen by remember { mutableStateOf(false) }
+    // Lines that arrived while the chat was closed.
+    var seenChat by remember { mutableStateOf(chat.size) }
+    if (chatOpen) seenChat = chat.size
     Box {
         WalnutSurface(Modifier.matchParentSize())
         HorizontalDivider(color = Felt.Brass.copy(alpha = 0.85f), thickness = 1.dp)
@@ -761,6 +828,8 @@ private fun Hand(
             ) {
                 Text(
                     text = when {
+                        view.spectating && view.hand.isNotEmpty() -> "تتفرّج من ورا ${view.seatInfo(view.yourSeat)?.name.orEmpty()}"
+                        view.spectating -> "تتفرّج — محد مخلّي حجاره تنشاف"
                         view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
                         view.isYourMove && view.board.isEmpty -> "افتح الگيم بچفت"
                         view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
@@ -775,9 +844,19 @@ private fun Hand(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f),
                 )
+                if (onRaiseAlert != null) {
+                    AlertButton(onRaiseAlert)
+                    Spacer(Modifier.width(4.dp))
+                }
                 if (talk != null) MicButton(talk, size = 40.dp)
-                Spacer(Modifier.width(4.dp))
-                SoundboardButton(trayOpen) { trayOpen = !trayOpen }
+                if (onChat != null) {
+                    Spacer(Modifier.width(4.dp))
+                    ChatButton(unread = (chat.size - seenChat).coerceAtLeast(0)) { chatOpen = true }
+                }
+                if (!view.spectating) {
+                    Spacer(Modifier.width(4.dp))
+                    SoundboardButton(trayOpen) { trayOpen = !trayOpen }
+                }
             }
             // The tray floats above the hand rather than pushing it down, so the bones stay
             // exactly where the thumb expects them.
@@ -800,6 +879,10 @@ private fun Hand(
                         }
                     }
                 }
+            }
+
+            if (chatOpen && onChat != null) {
+                ChatDialog(chat, onSend = onChat, onClose = { chatOpen = false })
             }
 
             Spacer(Modifier.height(6.dp))
@@ -917,6 +1000,211 @@ private fun SoundTray(onEmote: (Emote) -> Unit) {
                     .testTag("emote-${emote.name}"),
             ) {
                 Text(emote.label(), color = Felt.Parchment, style = MaterialTheme.typography.labelLarge)
+            }
+        }
+    }
+}
+
+/** One more line in the table's ⋮ menu. */
+data class MenuOption(val label: String, val lit: Boolean = true, val action: () -> Unit)
+
+/** Who is watching: small pictures under the partner's seat, ringed while they talk. */
+@Composable
+private fun Watchers(view: PlayerView, speaking: Set<Int>) {
+    Row(
+        Modifier.fillMaxWidth().padding(bottom = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("يتفرجون:", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        Spacer(Modifier.width(6.dp))
+        view.spectators.take(6).forEach { watcher ->
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(horizontal = 3.dp)) {
+                if (watcher.seat in speaking) SpeakingHalo(32.dp)
+                Box(Modifier.size(26.dp).clip(CircleShape).border(1.dp, Felt.Brass.copy(alpha = 0.6f), CircleShape)) {
+                    Avatar(watcher.avatar.takeIf { it != "photo" }.orEmpty(), watcher.name, 26.dp)
+                }
+            }
+        }
+    }
+}
+
+/** Opens the table's chat; a gold count of lines not read yet. */
+@Composable
+private fun ChatButton(unread: Int, onClick: () -> Unit) {
+    Box(contentAlignment = Alignment.TopEnd) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color(0xFF120B05).copy(alpha = 0.5f))
+                .border(1.dp, Felt.Brass.copy(alpha = 0.7f), CircleShape)
+                .clickable(onClick = onClick)
+                .testTag("chat"),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.AutoMirrored.Rounded.Chat, contentDescription = "الكتابة", tint = Felt.Brass)
+        }
+        if (unread > 0) {
+            Box(
+                Modifier.size(18.dp).clip(CircleShape).background(Felt.Danger),
+                contentAlignment = Alignment.Center,
+            ) { Text("${unread.coerceAtMost(9)}", color = Felt.Parchment, style = MaterialTheme.typography.labelSmall) }
+        }
+    }
+}
+
+/** The table's chat: what has been said, and a line to say more. */
+@Composable
+private fun ChatDialog(chat: List<com.teera.app.ChatLine>, onSend: (String) -> Unit, onClose: () -> Unit) {
+    var draft by remember { mutableStateOf("") }
+    Dialog(onDismissRequest = onClose) {
+        Plaque {
+            Text("السوالف", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
+            val list = androidx.compose.foundation.lazy.rememberLazyListState()
+            LaunchedEffect(chat.size) { if (chat.isNotEmpty()) list.scrollToItem(chat.size - 1) }
+            androidx.compose.foundation.lazy.LazyColumn(
+                state = list,
+                modifier = Modifier.fillMaxWidth().height(260.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                if (chat.isEmpty()) {
+                    item { Text("محد كتب شي بعد", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium) }
+                }
+                items(chat.size) { index ->
+                    val line = chat[index]
+                    Column {
+                        Text(line.name, color = if (line.seat >= 4) Felt.Muted else Felt.Brass, style = MaterialTheme.typography.labelSmall)
+                        Text(line.text, color = Felt.Parchment, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it.take(200) },
+                    placeholder = { Text("اكتب شي…", color = Felt.Muted) },
+                    singleLine = true,
+                    colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Felt.Brass,
+                        unfocusedBorderColor = Felt.Brass.copy(alpha = 0.5f),
+                        focusedTextColor = Felt.Parchment,
+                        unfocusedTextColor = Felt.Parchment,
+                        cursorColor = Felt.Brass,
+                    ),
+                    modifier = Modifier.weight(1f).testTag("chat-input"),
+                )
+                Spacer(Modifier.width(8.dp))
+                BrassButton("دزّ", { onSend(draft); draft = "" }, enabled = draft.isNotBlank())
+            }
+        }
+    }
+}
+
+/** The newest chat line, held over the table for a few seconds as it arrives. */
+@Composable
+private fun ChatToast(chat: List<com.teera.app.ChatLine>, modifier: Modifier) {
+    val last = chat.lastOrNull() ?: return
+    var shown by remember(last.id, last.text) { mutableStateOf(true) }
+    LaunchedEffect(last.id, last.text) {
+        delay(4_000)
+        shown = false
+    }
+    if (!shown) return
+    Row(
+        modifier
+            .padding(horizontal = 24.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xE6120B05))
+            .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(14.dp))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
+        Text("${last.name}: ", color = Felt.Brass, style = MaterialTheme.typography.labelLarge)
+        Text(last.text, color = Felt.Parchment, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+    }
+}
+
+/** The "خاوة" button: a red-edged plaque, so it is not pressed by mistake for a sound. */
+@Composable
+private fun AlertButton(onClick: () -> Unit) {
+    Box(
+        Modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xFF3A0E09))
+            .border(1.dp, Felt.Danger, RoundedCornerShape(20.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp)
+            .testTag("raise-alert"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("خاوة", color = Felt.Parchment, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
+ * The vote, over the top of the table: who raised it against whom, the clock running
+ * down, each voter's answer as it comes in, and this player's two buttons if they have
+ * not answered yet.
+ */
+@Composable
+private fun AlertVotePanel(view: PlayerView, vote: com.teera.core.AlertVote, onVote: (Boolean) -> Unit, modifier: Modifier) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(vote.deadlineEpochMs) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(500)
+        }
+    }
+    val left = ((vote.deadlineEpochMs - now) / 1000).coerceIn(0, 99)
+    val raiser = view.seatInfo(vote.raisedBy)?.name.orEmpty()
+    val mine = view.yourSeat
+    val waitingOnMe = mine in vote.voters && mine !in vote.yes && mine !in vote.no
+    Column(
+        modifier
+            .padding(horizontal = 12.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Felt.Rail)
+            .border(1.5.dp, Felt.Danger, RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("ناخذ خاوة!", color = Felt.Brass, style = MaterialTheme.typography.displaySmall, fontSize = 28.sp)
+        Text(
+            "$raiser يريد خاوة على ${view.teamName(vote.againstTeam)}",
+            color = Felt.Parchment,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+            vote.voters.forEach { seat ->
+                val answer = when (seat) {
+                    in vote.yes -> "✓"
+                    in vote.no -> "✗"
+                    else -> "…"
+                }
+                val colour = when (seat) {
+                    in vote.yes -> Felt.Playable
+                    in vote.no -> Felt.Danger
+                    else -> Felt.Muted
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(view.seatInfo(seat)?.name.orEmpty().take(6), color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+                    Text(answer, color = colour, style = MaterialTheme.typography.titleLarge)
+                }
+            }
+        }
+        Text("يحتاج ${vote.needed} · باقي $left ثانية", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        if (waitingOnMe) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                Button(
+                    onClick = { onVote(true) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
+                    modifier = Modifier.testTag("vote-yes"),
+                ) { Text("أوافق") }
+                OutlinedButton(onClick = { onVote(false) }, modifier = Modifier.testTag("vote-no")) {
+                    Text("لا", color = Felt.Parchment)
+                }
             }
         }
     }

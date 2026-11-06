@@ -54,7 +54,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
             for (holder in registry.all()) {
                 if (!holder.lock.tryLock()) continue
                 try {
-                    var output = holder.room.expireTurnIfDue()
+                    var output = holder.room.expireTurnIfDue() + holder.room.expireAlertIfDue()
                     if (holder.room.awaitingBot() && now >= holder.nextBotMoveAt) {
                         output += holder.room.stepBot()
                         holder.nextBotMoveAt = now + BOT_THINK_MS
@@ -274,7 +274,7 @@ private suspend fun relayVoice(
 ) {
     if (holder == null || playerId == null) return
     if (payload.isEmpty() || payload.size > MAX_VOICE_BYTES || !allowance.take()) return
-    val seat = holder.lock.withLock { holder.room.seatOf(playerId) } ?: return
+    val seat = holder.lock.withLock { holder.room.voiceSeatOf(playerId) } ?: return
     val relayed = ByteArray(payload.size + 1)
     relayed[0] = seat.toByte()
     payload.copyInto(relayed, 1)
@@ -303,6 +303,10 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         }
         ClientMessage.Ping -> Room.Output(direct = listOf(playerId to ServerMessage.Pong))
         is ClientMessage.SendEmote -> room.emote(playerId, message.emote)
+        ClientMessage.RaiseAlert -> room.raiseAlert(playerId)
+        is ClientMessage.ShowHand -> room.showHand(playerId, message.shown)
+        is ClientMessage.Watch -> room.watch(playerId, message.seat)
+        is ClientMessage.VoteAlert -> room.voteAlert(playerId, message.yes)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite -> null
     }

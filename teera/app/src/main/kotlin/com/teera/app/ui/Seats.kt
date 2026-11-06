@@ -72,7 +72,8 @@ fun SeatAtTable(
         dropped -> "انقطع"
         stuck -> "گلى"
         acting -> "دوره"
-        partner -> "شريكك"
+        // A watcher is nobody's partner: the one across the table is theirs.
+        partner -> if (view.spectating) "شريكه" else "شريكك"
         else -> ""
     }
     val statusColour = when {

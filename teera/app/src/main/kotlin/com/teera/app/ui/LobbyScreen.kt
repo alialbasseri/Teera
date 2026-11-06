@@ -108,6 +108,25 @@ fun LobbyScreen(
                     color = Felt.Brass,
                 )
             }
+            // A full table: newcomers watch, and can sit down if a chair comes free.
+            if (room.spectators.any { it.playerId == myId }) {
+                Text(
+                    "إنت تتفرّج: الكراسي مليانة. إذا فرغ كرسي دوس عليه وتگعد.",
+                    color = Felt.GoldLit,
+                    style = MaterialTheme.typography.labelLarge,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+            if (room.spectators.isNotEmpty()) {
+                Text(
+                    "يتفرجون: " + room.spectators.joinToString("، ") { it.name },
+                    color = Felt.Muted,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+
             // Sharing the code and opening the mic share one row: the chairs need the height.
             val sharing = onShare != null && !offline && wifiAddress == null
             if (sharing || talk != null) {

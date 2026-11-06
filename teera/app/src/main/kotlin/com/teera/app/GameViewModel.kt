@@ -17,6 +17,7 @@ import com.teera.app.net.WebSocketGameClient
 import com.teera.app.sound.Reaction
 import com.teera.app.sound.react
 import com.teera.app.voice.VoiceChat
+import com.teera.app.ui.teamName
 import com.teera.core.ClientMessage
 import com.teera.core.ErrorCode
 import com.teera.core.Difficulty
@@ -46,7 +47,8 @@ enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends }
 /** Somebody this player knows: met at a table, or added by their code. */
 data class Friend(val id: String, val name: String, val avatar: String)
 
-data class ChatLine(val name: String, val text: String)
+/** A line of table chat; [id] tells a new line from one already shown. */
+data class ChatLine(val name: String, val text: String, val seat: Int = 0, val id: Long = 0)
 
 data class UiState(
     val myId: String = "",
@@ -384,7 +386,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             is ServerMessage.GameUpdate -> {
-                _reactions.tryEmit(react(lastView, message.view))
+                // A view can be sent again with nothing played (somebody voting, or their
+                // line dropping); the tiles it reports were already heard.
+                val before = lastView
+                val repeat = before != null && before.events == message.view.events &&
+                    before.board == message.view.board && before.actingSeat == message.view.actingSeat &&
+                    before.phase == message.view.phase && before.gameNumber == message.view.gameNumber
+                if (!repeat) _reactions.tryEmit(react(before, message.view))
                 lastView = message.view
                 _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false) }
             }
@@ -416,10 +424,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             is ServerMessage.ChatMessage -> _state.update {
-                it.copy(chat = (it.chat + ChatLine(message.name, message.text)).takeLast(30))
+                it.copy(chat = (it.chat + ChatLine(message.name, message.text, message.seat, message.atEpochMs)).takeLast(60))
             }
 
             ServerMessage.Pong -> Unit
+
+            is ServerMessage.AlertResult -> {
+                val team = _state.value.view?.teamName(message.againstTeam) ?: "الفريق"
+                val text = when {
+                    !message.upheld -> "ما انقبلت الخاوة على $team (${message.yes} من ${message.needed})"
+                    message.penalty > 0 -> "انقبلت الخاوة على $team، وهاي الثالثة: +${message.penalty} عليهم"
+                    else -> "انقبلت الخاوة على $team (${message.count} من ${_state.value.view?.rules?.alertsPerPenalty ?: 3})"
+                }
+                _state.update { it.copy(notice = text) }
+            }
 
             is ServerMessage.Online, is ServerMessage.PlayerFound,
             is ServerMessage.Invited, is ServerMessage.InviteSent -> onPresence(message)
@@ -439,9 +457,21 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun takeSeat(seat: Int) = client?.send(ClientMessage.TakeSeat(seat))
 
-    fun chat(text: String) = client?.send(ClientMessage.Chat(text))
+    fun chat(text: String) {
+        if (text.isNotBlank()) client?.send(ClientMessage.Chat(text.trim().take(200)))
+    }
+
+    /** Let the watchers see this player's tiles, or stop. */
+    fun showHand(shown: Boolean) = client?.send(ClientMessage.ShowHand(shown))
+
+    /** A watcher moves to another player's shoulder. */
+    fun watch(seat: Int) = client?.send(ClientMessage.Watch(seat))
 
     fun sendEmote(emote: Emote) = client?.send(ClientMessage.SendEmote(emote))
+
+    fun raiseAlert() = client?.send(ClientMessage.RaiseAlert)
+
+    fun voteAlert(yes: Boolean) = client?.send(ClientMessage.VoteAlert(yes))
 
     // -- talking -----------------------------------------------------------------
 

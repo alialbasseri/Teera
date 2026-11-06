@@ -186,7 +186,7 @@ object Engine {
         val giving = state.handOf(rescuer).map { Move.Give(it) }
         val playing = playsFor(state, rescuer).mapNotNull { play ->
             play.arm?.let { Move.PlayFor(play.domino, it) }
-                ?: firstFreeArm(state.board)?.let { Move.PlayFor(play.domino, it) }
+                ?: openingArm(state.board, state.stuckSeat ?: rescuer)?.let { Move.PlayFor(play.domino, it) }
         }
         return playing + giving
     }
@@ -204,6 +204,22 @@ object Engine {
     }
 
     private fun firstFreeArm(board: Board): Arm? = Arm.ALL.firstOrNull { !board.isOpened(it) }
+
+    /**
+     * The side of the opening double that faces [seat]: south for seat 0, then round the
+     * table the way play goes (east, north, west). While the four sides are being closed,
+     * each player's tile goes down in front of them, as across a real table.
+     */
+    fun facing(seat: Int): Arm = when (((seat % 4) + 4) % 4) {
+        0 -> Arm.SOUTH
+        1 -> Arm.EAST
+        2 -> Arm.NORTH
+        else -> Arm.WEST
+    }
+
+    /** The side a tile laid by (or for) [seat] goes on while the four sides are open. */
+    private fun openingArm(board: Board, seat: Int): Arm? =
+        facing(seat).takeIf { !board.isOpened(it) } ?: firstFreeArm(board)
 
     // -- applying a move ---------------------------------------------------
 
@@ -282,9 +298,10 @@ object Engine {
             return MoveOutcome.Ok(afterShedding(opened, seat, nextSeat(seat)))
         }
 
-        // Rule 12: while the four sides are being closed, the tile goes on the next bare one.
+        // Rule 12: while the four sides are being closed, the tile goes on a bare one: the
+        // one in front of whoever lays it.
         val arm = if (state.board.inOpeningPhase) {
-            firstFreeArm(state.board) ?: return MoveOutcome.Rejected(Rejection.MUST_OPEN_A_FRESH_SIDE)
+            openingArm(state.board, seat) ?: return MoveOutcome.Rejected(Rejection.MUST_OPEN_A_FRESH_SIDE)
         } else {
             move.arm ?: return MoveOutcome.Rejected(Rejection.NO_ARM_GIVEN)
         }
@@ -328,8 +345,9 @@ object Engine {
         val hand = state.handOf(rescuer)
         if (move.domino !in hand) return MoveOutcome.Rejected(Rejection.TILE_NOT_IN_HAND)
 
+        // Laid for the stuck player, so in front of them.
         val arm = if (state.board.inOpeningPhase) {
-            firstFreeArm(state.board) ?: return MoveOutcome.Rejected(Rejection.MUST_OPEN_A_FRESH_SIDE)
+            openingArm(state.board, stuck) ?: return MoveOutcome.Rejected(Rejection.MUST_OPEN_A_FRESH_SIDE)
         } else {
             move.arm
         }
@@ -504,7 +522,8 @@ object Engine {
             scores = scores,
             losingTeam = loser,
             phase = if (loser != null) Phase.MATCH_OVER else state.phase,
-            events = state.events + events,
+            // Only what this changed: the tiles laid before it were already reported.
+            events = events,
         )
     }
 

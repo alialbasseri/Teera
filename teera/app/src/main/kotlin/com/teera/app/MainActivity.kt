@@ -286,6 +286,12 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         ),
                         talk = talk,
                         avatarFor = { seat, size -> seatPicture(view.seatInfo(seat), size) },
+                        onRaiseAlert = viewModel::raiseAlert.takeUnless { state.offline || view.spectating }?.let { raise -> { raise() } },
+                        chat = state.chat,
+                        onChat = viewModel::chat.takeUnless { state.offline }?.let { send -> { text: String -> send(text) } },
+                        onShowHand = viewModel::showHand,
+                        onWatch = viewModel::watch,
+                        onVoteAlert = { yes -> viewModel.voteAlert(yes) },
                     )
                 }
             }

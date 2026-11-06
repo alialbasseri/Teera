@@ -67,7 +67,40 @@ class Room(
         seats = seatList(),
         ready = members.values.filter { it.ready }.map { it.playerId },
         started = isStarted,
+        spectators = spectatorSeats(),
     )
+
+    // -- watchers ---------------------------------------------------------------
+
+    private class Watcher(val playerId: String, var name: String, var avatar: String, var watching: Int = 0)
+
+    /** People watching, in the order they came; their voice and chat carry seats 4 and up. */
+    private val watchers = LinkedHashMap<String, Watcher>()
+
+    private fun spectatorSeats(): List<Seat> = watchers.values.mapIndexed { index, w ->
+        Seat(WATCHER_SEAT_BASE + index, w.playerId, w.name, avatar = w.avatar)
+    }
+
+    fun isWatching(playerId: String): Boolean = watchers.containsKey(playerId)
+
+    /** The seat number a player's voice and chat go out under: theirs, or a watcher's. */
+    fun voiceSeatOf(playerId: String): Int? =
+        seatOf(playerId) ?: watchers.keys.indexOf(playerId).takeIf { it >= 0 }?.let { WATCHER_SEAT_BASE + it }
+
+    private val showingHands = HashSet<String>()
+
+    fun showHand(playerId: String, shown: Boolean): Output {
+        if (seatOf(playerId) == null) return Output.NOTHING
+        if (shown) showingHands += playerId else showingHands -= playerId
+        return Output.VIEW
+    }
+
+    fun watch(playerId: String, seat: Int): Output {
+        val watcher = watchers[playerId] ?: return Output.NOTHING
+        if (seat !in 0 until Pack.PLAYERS) return Output.NOTHING
+        watcher.watching = seat
+        return Output.VIEW
+    }
 
     private fun seatList(): List<Seat> = (0 until Pack.PLAYERS).map { seat ->
         val member = members.values.firstOrNull { it.seat == seat }
@@ -85,7 +118,8 @@ class Room(
 
     fun seatOf(playerId: String): Int? = members[playerId]?.seat
 
-    fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId }
+    /** Everybody who hears the table: the players with a connection, and the watchers. */
+    fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId } + watchers.keys
 
     fun join(playerId: String, name: String, avatar: String = ""): Output {
         members[playerId]?.let { existing ->
@@ -95,9 +129,17 @@ class Room(
             existing.avatar = avatar
             return Output(roomChanged = true, viewChanged = isStarted)
         }
-        if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "That match has already started")
-
-        val seat = freeSeat() ?: return Output.error(playerId, ErrorCode.ROOM_FULL, "That room is full")
+        watchers[playerId]?.let { existing ->
+            existing.name = name
+            existing.avatar = avatar
+            return Output(roomChanged = true, viewChanged = isStarted)
+        }
+        // A full table, or one already playing: come in and watch rather than be turned away.
+        val seat = freeSeat()
+        if (isStarted || seat == null) {
+            watchers[playerId] = Watcher(playerId, name, avatar, watching = firstShowingSeat() ?: 0)
+            return Output(roomChanged = true, viewChanged = isStarted)
+        }
         members[playerId] = Member(playerId, name, seat, avatar = avatar)
         return Output.ROOM
     }
@@ -111,6 +153,15 @@ class Room(
      * may only rearrange once a match is over.
      */
     fun takeSeat(playerId: String, seat: Int): Output {
+        // A watcher sits down in a chair that has come free, before the deal.
+        if (watchers.containsKey(playerId) && !isStarted && seat in 0 until Pack.PLAYERS &&
+            members.values.none { it.seat == seat }
+        ) {
+            val watcher = watchers.remove(playerId)!!
+            bots.remove(seat)
+            members[playerId] = Member(playerId, watcher.name, seat, avatar = watcher.avatar)
+            return Output.ROOM
+        }
         val member = members[playerId] ?: return Output.error(playerId, ErrorCode.NOT_IN_ROOM, "You are not in this room")
         if (isStarted) return Output.error(playerId, ErrorCode.ROOM_ALREADY_STARTED, "Seats are fixed until the match ends")
         if (seat !in 0 until Pack.PLAYERS) return Output.NOTHING
@@ -124,6 +175,7 @@ class Room(
     }
 
     fun disconnect(playerId: String): Output {
+        if (watchers.remove(playerId) != null) return Output(roomChanged = true, viewChanged = isStarted)
         val member = members[playerId] ?: return Output.NOTHING
         member.connected = false
         member.goneSince = clock()
@@ -136,6 +188,8 @@ class Room(
     }
 
     fun leave(playerId: String): Output {
+        if (watchers.remove(playerId) != null) return Output(roomChanged = true, viewChanged = isStarted)
+        showingHands -= playerId
         members.remove(playerId) ?: return Output.NOTHING
         if (hostId == playerId) hostId = members.keys.firstOrNull() ?: hostId
         return Output.ROOM
@@ -258,22 +312,106 @@ class Room(
         }
     }
 
+    // -- ناخذ خاوة ----------------------------------------------------------------
+
+    private var vote: AlertVote? = null
+
+    /** Somebody at the table says the other team broke the rules: the table votes. */
+    fun raiseAlert(playerId: String): Output {
+        val state = game ?: return Output.NOTHING
+        val seat = seatOf(playerId) ?: return Output.NOTHING
+        if (vote != null || state.phase == Phase.MATCH_OVER) return Output.NOTHING
+        val voters = members.values.filter { it.connected }.map { it.seat }.sorted()
+        vote = AlertVote(
+            raisedBy = seat,
+            againstTeam = 1 - teamOf(seat),
+            voters = voters,
+            yes = listOf(seat),
+            no = emptyList(),
+            deadlineEpochMs = clock() + rules.alertVoteSeconds * 1000L,
+        )
+        return settleVoteIfDecided() ?: Output.VIEW
+    }
+
+    fun voteAlert(playerId: String, yes: Boolean): Output {
+        val current = vote ?: return Output.NOTHING
+        val seat = seatOf(playerId) ?: return Output.NOTHING
+        if (seat !in current.voters || seat in current.yes || seat in current.no) return Output.NOTHING
+        vote = if (yes) current.copy(yes = current.yes + seat) else current.copy(no = current.no + seat)
+        return settleVoteIfDecided() ?: Output.VIEW
+    }
+
+    /** Thirty seconds and no answer counts as no. */
+    fun expireAlertIfDue(): Output {
+        val current = vote ?: return Output.NOTHING
+        if (clock() < current.deadlineEpochMs) return Output.NOTHING
+        return settle(current)
+    }
+
+    /** Settles as soon as the outcome can no longer change, rather than waiting the clock out. */
+    private fun settleVoteIfDecided(): Output? {
+        val current = vote ?: return null
+        val undecided = current.voters.size - current.yes.size - current.no.size
+        val decided = current.yes.size >= current.needed || current.yes.size + undecided < current.needed
+        return if (decided) settle(current) else null
+    }
+
+    private fun settle(current: AlertVote): Output {
+        vote = null
+        val upheld = current.yes.size >= current.needed
+        var count = game?.alerts?.getOrNull(current.againstTeam) ?: 0
+        var penalty = 0
+        if (upheld) {
+            game?.let { state ->
+                val after = Engine.upholdAlert(state, current.againstTeam)
+                game = after
+                count = after.alerts[current.againstTeam]
+                penalty = after.events.filterIsInstance<GameEvent.AlertUpheld>().lastOrNull()?.penalty ?: 0
+            }
+        }
+        val result = ServerMessage.AlertResult(current.againstTeam, upheld, current.yes.size, current.needed, count, penalty)
+        return Output(direct = humanIds().map { it to result }, viewChanged = true)
+    }
+
+    private fun showingSeats(): List<Int> =
+        members.values.filter { it.playerId in showingHands }.map { it.seat }.sorted()
+
+    private fun firstShowingSeat(): Int? = showingSeats().firstOrNull()
+
     fun viewFor(playerId: String): PlayerView? {
         val state = game ?: return null
-        val seat = seatOf(playerId) ?: return null
         // The deal fixed who sits where; whether each of them is still connected is live.
         val seats = state.seats.map { seat ->
             val member = members[seat.playerId]
             seat.copy(connected = seat.isBot || member?.connected == true, avatar = member?.avatar ?: seat.avatar)
         }
-        return state.viewFor(seat, code, turnDeadline).copy(seats = seats)
+        val shared = showingSeats()
+        val seat = seatOf(playerId)
+        if (seat != null) {
+            return state.viewFor(seat, code, turnDeadline)
+                .copy(seats = seats, alertVote = vote, spectators = spectatorSeats(), showingHands = shared)
+        }
+        // A watcher sees the table from a player's shoulder; their tiles only if that
+        // player chose to show them, and never a move to make.
+        val watcher = watchers[playerId] ?: return null
+        val from = watcher.watching
+        return state.viewFor(from, code, turnDeadline).copy(
+            seats = seats,
+            alertVote = vote,
+            hand = if (from in shared) state.handOf(from) else emptyList(),
+            legalMoves = emptyList(),
+            spectating = true,
+            spectators = spectatorSeats(),
+            showingHands = shared,
+        )
     }
 
     fun chat(playerId: String, text: String): ServerMessage.ChatMessage? {
-        val member = members[playerId] ?: return null
+        val seat = voiceSeatOf(playerId) ?: return null
+        val name = members[playerId]?.name ?: watchers[playerId]?.name ?: return null
         val trimmed = text.trim().take(200)
         if (trimmed.isEmpty()) return null
-        return ServerMessage.ChatMessage(member.seat, member.name, trimmed, clock())
+        return ServerMessage.ChatMessage(seat, name, trimmed, clock())
     }
 
     private val lastEmote = HashMap<String, Long>()
@@ -300,6 +438,9 @@ class Room(
 
     companion object {
         private const val EMOTE_GAP_MS = 1_800L
+
+        /** Watchers' seat numbers, for voice and chat, start after the four chairs. */
+        const val WATCHER_SEAT_BASE = 4
 
         /** How long the table waits for somebody whose connection dropped before covering for them. */
         const val RECONNECT_GRACE_MS = 25_000L

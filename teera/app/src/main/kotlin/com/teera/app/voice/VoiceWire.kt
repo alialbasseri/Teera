@@ -35,7 +35,7 @@ object VoiceWire {
         if (relayed.size < 4 + Adpcm.HEADER) return null
         if (relayed[1] != CODEC_ADPCM) return null // a codec from a newer app: skip it, do not crash
         val seat = relayed[0].toInt()
-        if (seat !in 0..3) return null
+        if (seat !in 0..7) return null // four chairs, then the watchers
         val seq = ((relayed[2].toInt() and 0xFF) shl 8) or (relayed[3].toInt() and 0xFF)
         val blockLength = relayed.size - 4
         val count = minOf(FRAME_SAMPLES, 1 + (blockLength - Adpcm.HEADER) * 2)

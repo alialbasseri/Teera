@@ -35,6 +35,8 @@ data class RoomInfo(
     val seats: List<Seat>,
     val ready: List<String> = emptyList(),
     val started: Boolean = false,
+    /** People watching rather than playing; their seat numbers start at 4. */
+    val spectators: List<Seat> = emptyList(),
 )
 
 /**
@@ -68,13 +70,41 @@ data class PlayerView(
     val losingTeam: Int? = null,
     val events: List<GameEvent> = emptyList(),
     val turnDeadlineEpochMs: Long? = null,
+    /** A "ناخذ خاوة" being voted on right now, if any. */
+    val alertVote: AlertVote? = null,
+    /**
+     * Watching, not playing: [yourSeat] is then the seat being watched from, and [hand]
+     * is that player's only if they chose to show it.
+     */
+    val spectating: Boolean = false,
+    val spectators: List<Seat> = emptyList(),
+    /** Seats whose players let the watchers see their tiles. */
+    val showingHands: List<Int> = emptyList(),
 ) {
     val yourTeam: Int get() = teamOf(yourSeat)
-    val isYourMove: Boolean get() = actingSeat == yourSeat
+    val isYourMove: Boolean get() = !spectating && actingSeat == yourSeat
     fun seatInfo(seat: Int): Seat? = seats.firstOrNull { it.seat == seat }
 
     /** The spots in your hand, which is what a teera is judged on. */
     val handPips: Int get() = hand.pipTotal()
+}
+
+/**
+ * "ناخذ خاوة": one seat says the other team broke the rules (a signal, a hint over the
+ * mic) and the table votes. Seats, not ids, so every phone can draw it.
+ */
+@Serializable
+data class AlertVote(
+    val raisedBy: Int,
+    val againstTeam: Int,
+    /** Who gets a say: the people at the table, not the bots. */
+    val voters: List<Int>,
+    val yes: List<Int>,
+    val no: List<Int>,
+    val deadlineEpochMs: Long,
+) {
+    /** Passes on more than half of the voters agreeing, so a team cannot carry it alone. */
+    val needed: Int get() = voters.size / 2 + 1
 }
 
 /** Builds the redacted view a seat is allowed to see. */
@@ -167,6 +197,21 @@ sealed interface ClientMessage {
     @Serializable @SerialName("emote")
     data class SendEmote(val emote: Emote) : ClientMessage
 
+    /** A player lets the watchers see their tiles, or stops. */
+    @Serializable @SerialName("showHand")
+    data class ShowHand(val shown: Boolean) : ClientMessage
+
+    /** A watcher moves to another player's shoulder. */
+    @Serializable @SerialName("watch")
+    data class Watch(val seat: Int) : ClientMessage
+
+    /** "ناخذ خاوة" on the other team. */
+    @Serializable @SerialName("raiseAlert")
+    data object RaiseAlert : ClientMessage
+
+    @Serializable @SerialName("voteAlert")
+    data class VoteAlert(val yes: Boolean) : ClientMessage
+
     /** Which of these players have the app open right now. */
     @Serializable @SerialName("whoIsOnline")
     data class WhoIsOnline(val playerIds: List<String>) : ClientMessage
@@ -250,6 +295,10 @@ sealed interface ServerMessage {
     /** Somebody wants you at their table. */
     @Serializable @SerialName("invited")
     data class Invited(val fromId: String, val fromName: String, val fromAvatar: String, val code: String) : ServerMessage
+
+    /** How a "ناخذ خاوة" vote ended. [count] is the team's total after it. */
+    @Serializable @SerialName("alertResult")
+    data class AlertResult(val againstTeam: Int, val upheld: Boolean, val yes: Int, val needed: Int, val count: Int, val penalty: Int) : ServerMessage
 
     /** Whether an invite reached anyone: false when they do not have the app open. */
     @Serializable @SerialName("inviteSent")

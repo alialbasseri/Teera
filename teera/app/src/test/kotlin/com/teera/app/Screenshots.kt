@@ -150,6 +150,49 @@ class Screenshots {
         MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "KHAN")
     }
 
+    /** A "ناخذ خاوة" being voted on, this player not having answered yet. */
+    @Test
+    fun alertVote() = shoot("alert-vote") {
+        val v = midGame().copy(
+            alertVote = com.teera.core.AlertVote(
+                raisedBy = 2, againstTeam = 1, voters = listOf(0, 1, 2, 3), yes = listOf(2), no = listOf(1),
+                deadlineEpochMs = System.currentTimeMillis() + 21_000,
+            ),
+        )
+        TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, onRaiseAlert = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+    }
+
+    /**
+     * The four sides being closed, seen from seat 1: seat 1 laid 6|2 on its own side, so
+     * from its chair that tile lies at the bottom, nearest the player.
+     */
+    @Test
+    fun openingFromSeatOne() = shoot("opening-seat-1") {
+        val board = Board().open(d(6, 6)).place(d(6, 3), Arm.SOUTH).place(d(6, 2), Arm.EAST)
+        val v = midGame().copy(
+            board = board, yourSeat = 1, actingSeat = 2, legalMoves = emptyList(),
+            events = listOf(GameEvent.Played(1, d(6, 2), Arm.EAST)),
+        )
+        TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+    }
+
+    /** Watching over Omar's shoulder, with a line of chat coming in. */
+    @Test
+    fun watching() = shoot("watching") {
+        val v = midGame().copy(
+            yourSeat = 2, spectating = true, hand = listOf(d(5, 5), d(2, 3), d(0, 6), d(4, 1), d(3, 3)),
+            legalMoves = emptyList(), showingHands = listOf(2), actingSeat = 3,
+            spectators = listOf(Seat(4, "w1", "حسن", avatar = "p:7"), Seat(5, "w2", "سيف", avatar = "p:5")),
+        )
+        TableScreen(
+            v, onMove = {}, onNextGame = {}, onLeave = {},
+            talk = com.teera.app.ui.Talk(speaking = setOf(4)),
+            chat = listOf(com.teera.app.ChatLine("حسن", "عمر لا تفتح الخمسة!", 4, 1)),
+            onChat = {},
+            avatarFor = { seat, size -> pictures(v, seat, size) },
+        )
+    }
+
     @Test
     fun table() = shoot("table") {
         val v = midGame()

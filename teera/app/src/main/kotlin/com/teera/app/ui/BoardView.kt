@@ -55,8 +55,14 @@ fun BoardView(
     onArmTapped: (Arm) -> Unit = {},
     /** The tile just laid, and where its player sits, so it can be seen arriving. */
     arrival: Arrival? = null,
+    /**
+     * Quarter turns clockwise, so this player's own side of the opening double points
+     * at them: each player sees the table from their own chair.
+     */
+    quarterTurns: Int = 0,
 ) {
-    val layout = BoardLayout.compute(board)
+    val untouched = BoardLayout.compute(board)
+    val layout = untouched.turned(quarterTurns)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     // Which way the cross was drawn last frame, so it only turns for a clear gain.
     val turnedLast = remember { mutableStateOf(false) }
@@ -160,7 +166,8 @@ fun BoardView(
 
         for (arm in liveArms) {
             val end = layout.placements.lastOrNull { it.arm == arm } ?: continue
-            val (x, y) = armTarget(layout, arm)
+            val (ax, ay) = armTarget(untouched, arm)
+            val (x, y) = com.teera.core.turnPoint(ax, ay, quarterTurns)
             val centre = frame.pointOf(x, y)
             val diameter = with(density) { (frame.unit * 1.05f).toDp() }.coerceAtLeast(44.dp)
 
