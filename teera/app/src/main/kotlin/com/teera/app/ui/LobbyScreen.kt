@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -67,17 +70,24 @@ fun LobbyScreen(
     /** Table talk; null when the other chairs can only hold bots. */
     talk: Talk? = null,
     avatarFor: @Composable (Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size -> Initial(seat?.name.orEmpty(), size) },
-    /** Opens the list of this player's people to call to the table; null hides it. */
-    onInvite: (() -> Unit)? = null,
 ) {
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
 
     WalnutRoom {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        // One screen when it fits; on a small phone or with large text it scrolls, rather
+        // than squeezing the chairs until the bottom one and its buttons are cut off.
         Column(
-            modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .heightIn(min = maxHeight)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween,
         ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
             // The code goes on a brass plate, big enough to read across a room.
             Column(
                 Modifier
@@ -94,7 +104,7 @@ fun LobbyScreen(
                 when {
                     offline -> "لعب بدون إنترنت"
                     wifiAddress != null -> "أصحابك على نفس الواي فاي يشوفون الطاولة بالقائمة"
-                    else -> "دزّ اللنك لجماعتك: يدوسون عليه ويدخلون هنا مباشرة"
+                    else -> "دزّ اللنك، يدوسون عليه ويدخلون"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Felt.Muted,
@@ -132,10 +142,6 @@ fun LobbyScreen(
             if (sharing || talk != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
                     if (sharing) BrassButton("دزّ اللنك", { onShare?.invoke(room.code) })
-                    if (sharing && onInvite != null) {
-                        Spacer(Modifier.width(8.dp))
-                        BrassButton("اعزم", onInvite)
-                    }
                     if (talk != null) {
                         Spacer(Modifier.width(10.dp))
                         MicButton(talk, size = 40.dp)
@@ -151,12 +157,12 @@ fun LobbyScreen(
                 }
             }
 
-            Spacer(Modifier.height(10.dp))
+          }
 
             // The table and its four chairs, laid out in rows so no chair can sit on the
             // table or run off the edge however narrow the phone.
             Column(
-                Modifier.fillMaxWidth().weight(1f),
+                Modifier.fillMaxWidth().padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -173,6 +179,7 @@ fun LobbyScreen(
                 SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
             }
 
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
             RosetteRule(Modifier.padding(horizontal = 40.dp, vertical = 6.dp))
 
             Text("المباراة لـ", style = MaterialTheme.typography.labelLarge, color = Felt.Brass)
@@ -215,6 +222,8 @@ fun LobbyScreen(
                 Text("ننتظر صاحب الغرفة يوزّع", color = Felt.Parchment, style = MaterialTheme.typography.bodyLarge)
             }
             TextButton(onClick = onLeave) { Text("اترك الطاولة", color = Felt.Muted) }
+          }
+        }
         }
     }
 }
@@ -258,7 +267,7 @@ private fun SeatChair(
 
     Column(
         modifier
-            .width(96.dp)
+            .width(104.dp)
             .clickable(enabled = empty) { onTakeSeat(seat) }
             .testTag("seat-$seat"),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -308,9 +317,10 @@ private fun SeatChair(
             maxLines = 1,
         )
         Text(
-            if (partnered) "فريقك" else "الفريق الثاني",
+            if (partnered) "فريقك" else "الخصم",
             color = if (partnered) Felt.Playable else Felt.Muted,
             style = MaterialTheme.typography.labelSmall,
+            maxLines = 1,
         )
         if (isHost && (empty || bot)) {
             Text(

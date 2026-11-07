@@ -82,6 +82,8 @@ data class UiState(
     val online: Set<String> = emptySet(),
     /** An invitation waiting for an answer. */
     val invite: ServerMessage.Invited? = null,
+    /** Everything that happened in the game on the table, in order, for the review after it. */
+    val steps: List<com.teera.core.GameEvent> = emptyList(),
 ) {
     /** What friends type to add this player. */
     val myCode: String get() = com.teera.core.shortCodeOf(myId)
@@ -102,6 +104,32 @@ fun normaliseServer(input: String): String {
         else -> "wss://$address"
     }
     return if (address.endsWith("/ws")) address else "$address/ws"
+}
+
+/**
+ * Adds what [next] says happened to the game's steps so far. A view carries only the
+ * latest move's events (sometimes with a call tacked on after it), so the new ones are
+ * whatever it has beyond the view before; a deal starts the list again.
+ */
+internal fun gatherSteps(
+    steps: List<com.teera.core.GameEvent>,
+    before: PlayerView?,
+    next: PlayerView,
+): List<com.teera.core.GameEvent> {
+    val old = before?.events.orEmpty()
+    val sameGame = before != null && before.gameNumber == next.gameNumber
+    val fresh = when {
+        !sameGame -> next.events
+        next.events == old -> emptyList()
+        next.events.size > old.size && next.events.subList(0, old.size) == old -> next.events.drop(old.size)
+        else -> next.events
+    }
+    val deal = fresh.indexOfLast { it is com.teera.core.GameEvent.Dealt || it is com.teera.core.GameEvent.Redealt }
+    return when {
+        deal >= 0 -> fresh.drop(deal)
+        !sameGame -> fresh
+        else -> steps + fresh
+    }
 }
 
 /** A soundboard press, shown as a bubble over the seat that sent it. */
@@ -394,7 +422,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     before.phase == message.view.phase && before.gameNumber == message.view.gameNumber
                 if (!repeat) _reactions.tryEmit(react(before, message.view))
                 lastView = message.view
-                _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false) }
+                val steps = gatherSteps(_state.value.steps, before, message.view)
+                _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false, steps = steps) }
             }
 
             is ServerMessage.Avatar -> viewModelScope.launch(Dispatchers.Default) {

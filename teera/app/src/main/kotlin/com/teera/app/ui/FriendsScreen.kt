@@ -184,7 +184,10 @@ fun FriendRow(friend: Friend, online: Boolean, action: @Composable () -> Unit) {
     }
 }
 
-/** From the lobby: everyone this player knows, with a button to call them to this table. */
+/**
+ * Sharing a room: WhatsApp first, and below it the friends who have the app open right
+ * now, each a tap away from an invitation that pops up on their phone.
+ */
 @Composable
 fun InviteDialog(
     friends: List<Friend>,
@@ -196,25 +199,17 @@ fun InviteDialog(
 ) {
     Dialog(onDismissRequest = onClose) {
         Plaque {
-            Text("اعزم جماعتك", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
-            val callable = friends.filterNot { it.id in seated }.sortedByDescending { it.id in online }
-            if (callable.isEmpty()) {
-                Text(
-                    "ماكو أحد بجماعتك بعد. دزّ اللنك، واللي يلعب وياك ينضاف لحاله.",
-                    color = Felt.Parchment,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.height((callable.size.coerceAtMost(5) * 66).dp)) {
-                callable.take(12).forEach { friend ->
-                    val on = friend.id in online
-                    FriendRow(friend, on) {
-                        BrassButton(if (on) "اعزم" else "دزّ اللنك", { if (on) onInvite(friend) else onShareLink() })
+            Text("دزّ اللنك", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
+            GoldButton("دزّه بالواتساب", { onClose(); onShareLink() })
+            val here = friends.filter { it.id in online && it.id !in seated }
+            if (here.isNotEmpty()) {
+                Text("أو اعزم اللي فاتحين اللعبة هسه:", color = Felt.Muted, style = MaterialTheme.typography.labelLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    here.take(8).forEach { friend ->
+                        FriendRow(friend, online = true) { BrassButton("اعزم", { onInvite(friend) }) }
                     }
                 }
             }
-            BrassButton("دزّ اللنك بالواتساب", onShareLink, Modifier.fillMaxWidth())
             Text(
                 "سكّر",
                 color = Felt.Muted,

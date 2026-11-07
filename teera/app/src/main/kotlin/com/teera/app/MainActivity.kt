@@ -253,10 +253,15 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onSetRules = viewModel::setDraftRules,
                         onStart = viewModel::startMatch,
                         onLeave = viewModel::leave,
-                        onShare = { code -> shareRoomCode(context, code, viewModel.linkFor(code)) },
+                        // One button. With friends who have the app open, it offers them first
+                        // as well as WhatsApp; otherwise it goes straight to sharing.
+                        onShare = { code ->
+                            val seated = room.seats.map { it.playerId }.toSet()
+                            if (state.friends.any { it.id in state.online && it.id !in seated }) inviting = true
+                            else shareRoomCode(context, code, viewModel.linkFor(code))
+                        },
                         talk = talk,
                         avatarFor = seatPicture,
-                        onInvite = { inviting = true },
                     )
                     if (inviting) {
                         com.teera.app.ui.InviteDialog(
@@ -292,6 +297,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onShowHand = viewModel::showHand,
                         onWatch = viewModel::watch,
                         onVoteAlert = { yes -> viewModel.voteAlert(yes) },
+                        steps = state.steps,
                     )
                 }
             }

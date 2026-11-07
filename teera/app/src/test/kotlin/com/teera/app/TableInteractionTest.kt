@@ -3,6 +3,7 @@ package com.teera.app
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.teera.app.ui.TableScreen
 import com.teera.core.Arm
 import com.teera.core.Board
@@ -107,5 +108,29 @@ class TableInteractionTest {
             ),
             0,
         ).isNotEmpty())
+    }
+
+    @Test
+    fun `a bone can be pressed, held and slid to a new place in the hand`() {
+        compose.setContent {
+            com.teera.app.ui.theme.TeeraTheme(dark = true) {
+                TableScreen(yourMove().copy(actingSeat = 1, legalMoves = emptyList()), onMove = {}, onNextGame = {}, onLeave = {})
+            }
+        }
+        fun left(tile: Domino) = compose.onNodeWithTag("hand-tile-$tile").fetchSemanticsNode().boundsInRoot.left
+        val first = d(3, 5)
+        val second = d(4, 4)
+        // Right to left: the first bone sits on the right, the second to its left.
+        assertTrue(left(first) > left(second))
+        val step = left(first) - left(second)
+
+        compose.onNodeWithTag("hand-tile-$first").performTouchInput {
+            down(center)
+            advanceEventTime(800)
+            moveBy(androidx.compose.ui.geometry.Offset(-step * 1.1f, 0f))
+            up()
+        }
+        compose.waitForIdle()
+        assertTrue(left(first) < left(second), "3|5 now sits to the left of 4|4")
     }
 }

@@ -18,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -71,6 +72,11 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -144,6 +150,8 @@ fun TableScreen(
     /** Draws a seat's picture; by default the first letter of their name. */
     avatarFor: @Composable (seat: Int, size: androidx.compose.ui.unit.Dp) -> Unit =
         { seat, size -> Initial(view.seatInfo(seat)?.name.orEmpty(), size) },
+    /** What happened this game, move by move; only shown once the game is over. */
+    steps: List<GameEvent> = emptyList(),
 ) {
     // These two state holders live for the whole table and are never swapped out. Keying
     // them on the board, as this screen once did, handed a fresh holder to each new frame
@@ -210,7 +218,7 @@ fun TableScreen(
         } else if (onChat != null) {
             val showing = view.yourSeat in view.showingHands
             listOf(
-                MenuOption(if (showing) "المتفرجين يشوفون حجاري" else "حجاري مخفية عن المتفرجين", lit = showing) { onShowHand(!showing) },
+                MenuOption(if (showing) "المتفرجين يشوفون بولاتي" else "بولاتي مخفية عن المتفرجين", lit = showing) { onShowHand(!showing) },
             )
         } else {
             emptyList()
@@ -304,7 +312,7 @@ fun TableScreen(
     }
     }
 
-    if (over && showSummary) GameSummary(view, onNextGame, onLeave)
+    if (over && showSummary) GameSummary(view, steps, onNextGame, onLeave)
 
     // The rules, over the table, without leaving it.
     if (showRules) {
@@ -829,7 +837,7 @@ private fun Hand(
                 Text(
                     text = when {
                         view.spectating && view.hand.isNotEmpty() -> "تتفرّج من ورا ${view.seatInfo(view.yourSeat)?.name.orEmpty()}"
-                        view.spectating -> "تتفرّج — محد مخلّي حجاره تنشاف"
+                        view.spectating -> "تتفرّج — محد مخلّي بولاته تنشاف"
                         view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
                         view.isYourMove && view.board.isEmpty -> "افتح الگيم بچفت"
                         view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
@@ -893,22 +901,81 @@ private fun Hand(
                 val count = view.hand.size.coerceAtLeast(1)
                 val gap = 5.dp
                 val tileWidth = ((maxWidth - gap * (count - 1)) / count).coerceIn(30.dp, 48.dp)
+
+                // The player's own arrangement of their bones: press, hold and slide one to
+                // move it. Kept for the whole game; tiles that arrive go on the end.
+                var order by remember(view.gameNumber) { mutableStateOf(listOf<Domino>()) }
+                val shown = order.filter { it in view.hand } + view.hand.filter { it !in order }
+                var dragging by remember { mutableStateOf<Domino?>(null) }
+                var dragX by remember { mutableStateOf(0f) }
+                val density = LocalDensity.current
+                val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+                val step = with(density) { (tileWidth + gap).toPx() }
+                val rowWidth = with(density) { maxWidth.toPx() }
+                val currentShown by rememberUpdatedState(shown)
+
                 Row(
-                    Modifier.fillMaxSize(),
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(step, rowWidth, rtl) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { at ->
+                                    val tiles = currentShown
+                                    val start = (rowWidth - (step * tiles.size - (step - with(density) { tileWidth.toPx() }))) / 2f
+                                    val fromLeft = ((at.x - start) / step).toInt().coerceIn(0, tiles.lastIndex.coerceAtLeast(0))
+                                    dragging = tiles.getOrNull(if (rtl) tiles.lastIndex - fromLeft else fromLeft)
+                                    dragX = 0f
+                                },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    val tile = dragging ?: return@detectDragGesturesAfterLongPress
+                                    dragX += amount.x
+                                    val shift = (dragX / step).let { if (it > 0.5f) 1 else if (it < -0.5f) -1 else 0 }
+                                    if (shift != 0) {
+                                        val tiles = currentShown.toMutableList()
+                                        val from = tiles.indexOf(tile)
+                                        // Right to left, the list runs from the right edge.
+                                        val to = (from + if (rtl) -shift else shift).coerceIn(0, tiles.lastIndex)
+                                        if (to != from) {
+                                            tiles.removeAt(from)
+                                            tiles.add(to, tile)
+                                            order = tiles
+                                        }
+                                        dragX -= shift * step
+                                    }
+                                },
+                                onDragEnd = { dragging = null; dragX = 0f },
+                                onDragCancel = { dragging = null; dragX = 0f },
+                            )
+                        },
                     horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    view.hand.forEachIndexed { index, tile ->
+                    shown.forEachIndexed { index, tile ->
                         key(view.gameNumber, tile) {
-                            HandTile(
-                                tile = tile,
-                                index = index,
-                                width = tileWidth,
-                                live = tile in playable,
-                                picked = selected == tile,
-                                faded = view.isYourMove && tile !in playable,
-                                onTap = onTap,
-                            )
+                            val lifted = tile == dragging
+                            Box(
+                                Modifier
+                                    .zIndex(if (lifted) 1f else 0f)
+                                    .graphicsLayer {
+                                        if (lifted) {
+                                            translationX = dragX
+                                            translationY = -14f
+                                            scaleX = 1.08f
+                                            scaleY = 1.08f
+                                        }
+                                    },
+                            ) {
+                                HandTile(
+                                    tile = tile,
+                                    index = index,
+                                    width = tileWidth,
+                                    live = tile in playable,
+                                    picked = selected == tile,
+                                    faded = view.isYourMove && tile !in playable,
+                                    onTap = onTap,
+                                )
+                            }
                         }
                     }
                 }
@@ -1254,8 +1321,10 @@ internal fun Plaque(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () -> Unit) {
+private fun GameSummary(view: PlayerView, steps: List<GameEvent>, onNextGame: () -> Unit, onLeave: () -> Unit) {
     val result = view.lastGame
+    var reviewing by remember { mutableStateOf(false) }
+    if (reviewing) StepsDialog(view, steps, onClose = { reviewing = false })
     val matchOver = view.phase == Phase.MATCH_OVER
     val weLost = view.losingTeam == view.yourTeam
 
@@ -1309,6 +1378,14 @@ private fun GameSummary(view: PlayerView, onNextGame: () -> Unit, onLeave: () ->
                 style = MaterialTheme.typography.labelSmall,
             )
             Spacer(Modifier.height(4.dp))
+            if (steps.isNotEmpty()) {
+                OutlinedButton(
+                    onClick = { reviewing = true },
+                    border = BorderStroke(1.dp, Felt.Brass.copy(alpha = 0.7f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Felt.Brass),
+                    modifier = Modifier.fillMaxWidth().testTag("reviewSteps"),
+                ) { Text("شوف خطوات الگيم", style = MaterialTheme.typography.labelLarge) }
+            }
             Button(
                 onClick = if (matchOver) onLeave else onNextGame,
                 colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),

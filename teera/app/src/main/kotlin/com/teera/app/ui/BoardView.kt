@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
@@ -106,8 +107,15 @@ fun BoardView(
         val density = LocalDensity.current
         val widthPx = with(density) { maxWidth.toPx() }
         val heightPx = with(density) { maxHeight.toPx() }
-        val frame = frameFor(layout, widthPx, heightPx, wasTurned = turnedLast.value)
-        SideEffect { turnedLast.value = frame.turned }
+        val target = frameFor(layout, widthPx, heightPx, wasTurned = turnedLast.value)
+        SideEffect { turnedLast.value = target.turned }
+        // When a new tile makes the table shrink or shift to fit, it glides there rather
+        // than jumping, so the eye can follow the line of play.
+        val glide = androidx.compose.animation.core.tween<Float>(520, easing = FastOutSlowInEasing)
+        val unit by androidx.compose.animation.core.animateFloatAsState(target.unit, glide, label = "unit")
+        val originX by androidx.compose.animation.core.animateFloatAsState(target.originX, glide, label = "x")
+        val originY by androidx.compose.animation.core.animateFloatAsState(target.originY, glide, label = "y")
+        val frame = Frame(unit, originX, originY, target.turned)
 
         Canvas(Modifier.fillMaxSize()) {
             // Felt laid inside the cabinet: the light falls in the middle and the

@@ -89,6 +89,7 @@ fun MenuScreen(
 ) {
     var code by remember { mutableStateOf("") }
     var wifiOpen by remember { mutableStateOf(false) }
+    var changelogOpen by remember { mutableStateOf(false) }
 
     CafeTable {
         BoxWithConstraints(Modifier.fillMaxSize()) {
@@ -212,15 +213,21 @@ fun MenuScreen(
                     )
                 }
                 Credits()
-                Text(
-                    "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Felt.Muted,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Felt.Muted,
+                    )
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    SmallLink("شنو الجديد", { changelogOpen = true }, tag = "changelogLink")
+                }
               }
             }
         }
     }
+
+    if (changelogOpen) ChangelogDialog(onClose = { changelogOpen = false })
 
     if (wifiOpen) {
         WifiDialog(

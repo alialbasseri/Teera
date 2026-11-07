@@ -244,6 +244,31 @@ class Screenshots {
         )
     }
 
+    /** A finished game told move by move, from the button on the sums. */
+    @Test
+    fun steps() = shoot("steps") {
+        val v = midGame().copy(phase = Phase.GAME_OVER, actingSeat = null, legalMoves = emptyList())
+        com.teera.app.ui.StepsDialog(v, sampleSteps(), onClose = {})
+    }
+
+    /** The updates page, from the menu's version line. */
+    @Test
+    fun changelog() = shoot("changelog") { com.teera.app.ui.ChangelogDialog(onClose = {}) }
+
+    private fun sampleSteps() = listOf(
+        GameEvent.Dealt(4, 0, null),
+        GameEvent.Opened(0, d(6, 6)),
+        GameEvent.Played(1, d(6, 3), Arm.NORTH),
+        GameEvent.Played(2, d(6, 2), Arm.EAST),
+        GameEvent.Stuck(3, 2),
+        GameEvent.Gave(2, 3),
+        GameEvent.Played(0, d(6, 1), Arm.SOUTH),
+        GameEvent.PlayedFor(0, 1, d(6, 0), Arm.WEST),
+        GameEvent.Played(2, d(3, 5), Arm.NORTH),
+        GameEvent.TeeraCalled(3, 1),
+        GameEvent.GameEnded(GameResult(4, GameEnd.X, 0, listOf(0, 9, 4, 12), listOf(-25, 21), 0)),
+    )
+
     /** The moment a game ends, before the sums come up. */
     @Test
     fun celebration() = shoot("celebration", settleMillis = 700) {
@@ -277,6 +302,21 @@ class Screenshots {
 
     @Test
     fun rules() = shoot("rules") { com.teera.app.ui.RulesScreen(onClose = {}) }
+
+    /** Ali's phone: an empty chair on the other team must still offer "حط بوت", and his own chair show. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h740dp-xxhdpi", fontScale = 1.15f)
+    fun lobbyLargeText() = shoot("lobby-large-text") {
+        LobbyScreen(
+            room = RoomInfo(
+                code = "RV4K", hostId = "me", rules = Rules.DEFAULT,
+                seats = listOf(seats[0], Seat(1, "bot-1", "Bot", isBot = true), Seat(2, "bot-2", "Bot", isBot = true), Seat(3, "", "")),
+            ),
+            myId = "me", isHost = true, offline = false,
+            onTakeSeat = {}, onToggleBot = { _, _ -> }, onSetRules = {}, onStart = {}, onLeave = {},
+            onShare = {}, talk = com.teera.app.ui.Talk(),
+        )
+    }
 
     @Test
     fun lobby() = shoot("lobby") {
