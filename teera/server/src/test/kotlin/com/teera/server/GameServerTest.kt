@@ -285,6 +285,18 @@ class RoomLinkTest {
         assertTrue("intent://join/KHAN" in page, "the button opens the app on that room")
         val links = client.get("/.well-known/assetlinks.json").bodyAsText()
         assertTrue("com.teera.app" in links && "sha256_cert_fingerprints" in links)
+        assertTrue("/download" in page, "a friend without the game is shown where to get it")
+    }
+
+    @Test
+    fun `the download page hands out the latest build`() = testApplication {
+        application { gameServer() }
+        val page = client.get("/download").bodyAsText()
+        assertTrue(com.teera.room.APK_URL in page && "نزّل اللعبة" in page)
+        val noFollow = createClient { followRedirects = false }
+        val apk = noFollow.get("/teera.apk")
+        assertEquals(302, apk.status.value)
+        assertEquals(com.teera.room.APK_URL, apk.headers["Location"])
     }
 
     @Test

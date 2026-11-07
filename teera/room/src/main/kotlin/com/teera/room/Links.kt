@@ -2,6 +2,7 @@ package com.teera.room
 
 import io.ktor.http.ContentType
 import io.ktor.server.application.call
+import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -17,6 +18,14 @@ import io.ktor.server.routing.get
 fun Route.roomLinks() {
     get("/.well-known/assetlinks.json") {
         call.respondText(ASSET_LINKS, ContentType.Application.Json)
+    }
+
+    // What friends are sent to get the game: a page with the button and how to install.
+    get("/download") {
+        call.respondText(DOWNLOAD_PAGE, ContentType.Text.Html)
+    }
+    get("/teera.apk") {
+        call.respondRedirect(APK_URL)
     }
 
     get("/j/{code}") {
@@ -66,8 +75,52 @@ private fun joinPage(code: String): String {
   <div class="code">$code</div>
   <a class="go" href="$intent">ادخل الغرفة</a>
   <p>إذا ما انفتح التطبيق: افتحه، ودوس «العب ويا جماعتك»، واكتب الكود.</p>
+  <p><a href="/download" style="color:#d9b166">ما عندك اللعبة؟ نزّلها من هنا</a></p>
 </div>
 <script>setTimeout(function(){location.href="$intent"},300)</script>
 </body>
 </html>"""
 }
+
+/**
+ * The latest build, kept in the repository at a fixed path so this address never changes:
+ * putting a new teera.apk there is all a release needs.
+ */
+const val APK_URL =
+    "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/teera.apk"
+
+private val DOWNLOAD_PAGE = """<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta property="og:title" content="طيرة — دومنة عراقية ويا جماعتك">
+<meta property="og:description" content="نزّل اللعبة والعب ويا جماعتك أونلاين">
+<title>نزّل طيرة</title>
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+       background:radial-gradient(circle at 50% 30%,#4a3020,#1e1309 70%);color:#fbf7ef;
+       font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;text-align:center}
+  .card{padding:28px 24px;max-width:380px}
+  h1{font-size:64px;color:#d9b166;margin:0 0 4px}
+  a.go{display:block;padding:16px;border-radius:16px;font-size:20px;font-weight:700;text-decoration:none;
+       color:#14110c;background:linear-gradient(#f0d79a,#d9b166,#a67c2e);margin:18px 0}
+  p,li{color:#a79274;line-height:1.8}
+  ol{text-align:right;padding-right:20px;margin:0}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>طيرة</h1>
+  <p>دومنة عراقية، أربعة لاعبين، فريقين. العب ويا جماعتك من كل مكان.</p>
+  <a class="go" href="$APK_URL">نزّل اللعبة</a>
+  <ol>
+    <li>دوس «نزّل اللعبة» وانتظر يخلص التنزيل.</li>
+    <li>افتح الملف <b>teera.apk</b> من الإشعارات أو من التنزيلات.</li>
+    <li>إذا سألك التليفون، اسمح بالتثبيت من هذا المصدر، وكمّل.</li>
+    <li>إذا عندك نسخة قديمة، تنزل فوگها وتبقى بياناتك.</li>
+  </ol>
+  <p>للأندرويد بس.</p>
+</div>
+</body>
+</html>"""
