@@ -48,6 +48,9 @@ fun ProfileScreen(
     onPickPhoto: () -> Unit,
     onClose: () -> Unit,
     myCode: String = "",
+    record: com.teera.core.PlayerRecord? = null,
+    recordLoading: Boolean = false,
+    recordKept: Boolean = true,
 ) {
     WalnutRoom {
         Column(Modifier.fillMaxSize()) {
@@ -86,6 +89,8 @@ fun ProfileScreen(
                     ),
                     modifier = Modifier.fillMaxWidth(),
                 )
+                Spacer(Modifier.height(14.dp))
+                RecordCard(record, recordLoading, recordKept)
                 Spacer(Modifier.height(18.dp))
                 Text("اختار صورتك", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))

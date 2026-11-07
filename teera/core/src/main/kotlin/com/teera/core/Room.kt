@@ -52,7 +52,45 @@ class Room(
     private val bots = HashMap<Int, Difficulty>()
 
     var game: GameState? = null
-        private set
+        private set(value) {
+            val before = field
+            field = value
+            if (value != null) note(before, value)
+        }
+
+    /** Something worth keeping a record of: a match starting, a game or a match ending. */
+    sealed interface Happening {
+        data class MatchStarted(val seats: List<Seat>, val rules: Rules) : Happening
+        data class GameFinished(val result: GameResult, val scores: List<Int>, val steps: List<GameEvent>) : Happening
+        data class MatchFinished(val losingTeam: Int, val scores: List<Int>, val games: Int) : Happening
+    }
+
+    private val happenings = ArrayList<Happening>()
+    private var steps: List<GameEvent> = emptyList()
+
+    /** What has happened since the last call, oldest first, for whoever keeps the records. */
+    fun takeHappenings(): List<Happening> {
+        if (happenings.isEmpty()) return emptyList()
+        return happenings.toList().also { happenings.clear() }
+    }
+
+    private fun note(before: GameState?, after: GameState) {
+        if (before == null) happenings += Happening.MatchStarted(after.seats, after.rules)
+        steps = gatherSteps(
+            steps, before?.events, before?.gameNumber, after.events, after.gameNumber,
+            sameList = before != null && before.events === after.events,
+        )
+        val result = after.lastGame
+        if (result != null && result.gameNumber != before?.lastGame?.gameNumber) {
+            happenings += Happening.GameFinished(result, after.scores, steps)
+        }
+        val loser = after.losingTeam
+        if (loser != null && before?.losingTeam == null) {
+            happenings += Happening.MatchFinished(loser, after.scores, after.gameNumber)
+        }
+        // A table nobody drains (a game against bots on the phone) must not grow forever.
+        while (happenings.size > MAX_HAPPENINGS) happenings.removeAt(0)
+    }
     private var turnDeadline: Long? = null
 
     val isStarted: Boolean get() = game != null
@@ -444,5 +482,6 @@ class Room(
 
         /** How long the table waits for somebody whose connection dropped before covering for them. */
         const val RECONNECT_GRACE_MS = 25_000L
+        private const val MAX_HAPPENINGS = 64
     }
 }

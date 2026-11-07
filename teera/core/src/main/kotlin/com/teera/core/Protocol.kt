@@ -223,6 +223,10 @@ sealed interface ClientMessage {
     /** Asks a player, wherever they are in the app, to come to a room. */
     @Serializable @SerialName("invite")
     data class Invite(val playerId: String, val code: String) : ClientMessage
+
+    /** This player's record from the server's books: totals and their latest matches. */
+    @Serializable @SerialName("myRecord")
+    data object MyRecord : ClientMessage
 }
 
 /** A player's short code: what friends type to add them. Six letters and digits of their id. */
@@ -307,4 +311,38 @@ sealed interface ServerMessage {
     /** Somebody's own picture, sent once when either of you joins rather than with every view. */
     @Serializable @SerialName("avatar")
     data class Avatar(val playerId: String, val photo: String) : ServerMessage
+
+    /** The answer to [ClientMessage.MyRecord]; null where the server keeps no books. */
+    @Serializable @SerialName("record")
+    data class Record(val record: PlayerRecord?) : ServerMessage
 }
+
+/** What the server's books say about one player. */
+@Serializable
+data class PlayerRecord(
+    /** Matches played to the end, and how they went. */
+    val matches: Int = 0,
+    val wins: Int = 0,
+    val losses: Int = 0,
+    /** Games finished in all, and how many this player ended themselves. */
+    val games: Int = 0,
+    val finishes: Int = 0,
+    val teeras: Int = 0,
+    val firstSeenEpochMs: Long? = null,
+    /** Their latest matches, newest first. */
+    val recent: List<MatchSummary> = emptyList(),
+)
+
+/** One match as this player saw it. */
+@Serializable
+data class MatchSummary(
+    val startedAtEpochMs: Long,
+    val roomCode: String,
+    /** Null while it is still being played, or if it was left unfinished. */
+    val won: Boolean?,
+    val partner: String,
+    val opponents: List<String>,
+    val ourScore: Int,
+    val theirScore: Int,
+    val games: Int,
+)

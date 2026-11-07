@@ -82,6 +82,12 @@ data class UiState(
     val online: Set<String> = emptySet(),
     /** An invitation waiting for an answer. */
     val invite: ServerMessage.Invited? = null,
+    /** This player's record from the server's books, once asked for. */
+    val record: com.teera.core.PlayerRecord? = null,
+    /** Asking for [record] and not yet answered. */
+    val recordLoading: Boolean = false,
+    /** False when the server answered that it keeps no books. */
+    val recordKept: Boolean = true,
     /** Everything that happened in the game on the table, in order, for the review after it. */
     val steps: List<com.teera.core.GameEvent> = emptyList(),
 ) {
@@ -106,31 +112,13 @@ fun normaliseServer(input: String): String {
     return if (address.endsWith("/ws")) address else "$address/ws"
 }
 
-/**
- * Adds what [next] says happened to the game's steps so far. A view carries only the
- * latest move's events (sometimes with a call tacked on after it), so the new ones are
- * whatever it has beyond the view before; a deal starts the list again.
- */
+/** Adds what [next] says happened to the game's steps so far (see [com.teera.core.gatherSteps]). */
 internal fun gatherSteps(
     steps: List<com.teera.core.GameEvent>,
     before: PlayerView?,
     next: PlayerView,
-): List<com.teera.core.GameEvent> {
-    val old = before?.events.orEmpty()
-    val sameGame = before != null && before.gameNumber == next.gameNumber
-    val fresh = when {
-        !sameGame -> next.events
-        next.events == old -> emptyList()
-        next.events.size > old.size && next.events.subList(0, old.size) == old -> next.events.drop(old.size)
-        else -> next.events
-    }
-    val deal = fresh.indexOfLast { it is com.teera.core.GameEvent.Dealt || it is com.teera.core.GameEvent.Redealt }
-    return when {
-        deal >= 0 -> fresh.drop(deal)
-        !sameGame -> fresh
-        else -> steps + fresh
-    }
-}
+): List<com.teera.core.GameEvent> =
+    com.teera.core.gatherSteps(steps, before?.events, before?.gameNumber, next.events, next.gameNumber)
 
 /** A soundboard press, shown as a bubble over the seat that sent it. */
 data class ShownEmote(val seat: Int, val emote: Emote, val id: Long)
@@ -469,7 +457,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             is ServerMessage.Online, is ServerMessage.PlayerFound,
-            is ServerMessage.Invited, is ServerMessage.InviteSent -> onPresence(message)
+            is ServerMessage.Invited, is ServerMessage.InviteSent, is ServerMessage.Record -> onPresence(message)
         }
     }
 
@@ -592,6 +580,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 // The same invitation can arrive on both connections; show it once.
                 if (it.invite == message || it.room?.code == message.code) it else it.copy(invite = message)
             }
+            is ServerMessage.Record -> _state.update {
+                it.copy(record = message.record ?: it.record, recordLoading = false, recordKept = message.record != null)
+            }
             is ServerMessage.InviteSent -> if (!message.delivered) {
                 val name = _state.value.friends.firstOrNull { it.id == message.playerId }?.name ?: "صاحبك"
                 _state.update { it.copy(notice = "$name مو فاتح التطبيق هسه، دزله اللنك") }
@@ -684,7 +675,24 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun showProfile() = _state.update { it.copy(screen = Screen.Profile) }
+    fun showProfile() {
+        _state.update { it.copy(screen = Screen.Profile) }
+        askForRecord()
+    }
+
+    /** Asks the server's books for this player's record; the answer lands in [UiState.record]. */
+    private fun askForRecord() {
+        if (!_state.value.hasInternetServer || System.getProperty("teera.noPresence") == "true") return
+        if (presence == null) startPresence()
+        val link = presence ?: return
+        _state.update { it.copy(recordLoading = true) }
+        link.send(ClientMessage.MyRecord)
+        // A sleeping server can take a while; stop the spinner rather than spin forever.
+        viewModelScope.launch {
+            delay(RECORD_WAIT_MS)
+            _state.update { if (it.recordLoading) it.copy(recordLoading = false) else it }
+        }
+    }
 
     fun closeProfile() = _state.update { if (it.screen == Screen.Profile) it.copy(screen = Screen.Menu) else it }
 
@@ -776,6 +784,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val KEY_FRIENDS = "friends"
         const val MAX_FRIENDS = 60
         const val ONLINE_POLL_MS = 15_000L
+        const val RECORD_WAIT_MS = 75_000L
         const val PHOTO_SIZE = 160
     }
 }

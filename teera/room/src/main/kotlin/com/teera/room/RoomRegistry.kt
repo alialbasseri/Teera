@@ -25,6 +25,10 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
         @Volatile
         var lastActivity: Long = System.currentTimeMillis()
 
+        /** The match being played here, as the books know it; set when it starts. */
+        @Volatile
+        var matchId: String? = null
+
         /** Bot moves are spaced out so the table reads at human speed. */
         @Volatile
         var nextBotMoveAt: Long = 0L

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import com.teera.app.ui.LobbyScreen
 import com.teera.app.ui.MenuScreen
 import com.teera.app.ui.TableScreen
+import androidx.compose.foundation.layout.padding
 import com.teera.app.ui.theme.TeeraTheme
 import com.teera.core.Arm
 import com.teera.core.Board
@@ -197,6 +198,32 @@ class Screenshots {
     fun table() = shoot("table") {
         val v = midGame()
         TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+    }
+
+    /** The profile's record, as the server's books tell it. */
+    @Test
+    fun record() = shoot("record") {
+        val day = 86_400_000L
+        val now = 1_762_500_000_000L
+        com.teera.app.ui.WalnutRoom {
+            androidx.compose.foundation.layout.Box(
+                androidx.compose.ui.Modifier.padding(androidx.compose.ui.unit.Dp(24f)),
+            ) {
+                com.teera.app.ui.RecordCard(
+                    com.teera.core.PlayerRecord(
+                        matches = 12, wins = 8, losses = 4, games = 97, finishes = 31, teeras = 6,
+                        firstSeenEpochMs = now - 3 * day,
+                        recent = listOf(
+                            com.teera.core.MatchSummary(now - 3_600_000, "KHAN", null, "عمر", listOf("سارة", "نور"), 88, 140, 7),
+                            com.teera.core.MatchSummary(now - 5 * 3_600_000, "KHAN", true, "عمر", listOf("سارة", "نور"), 96, 205, 11),
+                            com.teera.core.MatchSummary(now - day, "BGDD", false, "حسن", listOf("سيف", "بوت"), 212, 150, 13),
+                            com.teera.core.MatchSummary(now - 3 * day, "TEST", true, "بوت", listOf("بوت", "بوت"), -40, 201, 9),
+                        ),
+                    ),
+                    loading = false, kept = true, now = now,
+                )
+            }
+        }
     }
 
     @Test

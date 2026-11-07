@@ -39,7 +39,7 @@ private const val BOT_THINK_MS = 900L
 private const val TICK_MS = 250L
 private const val IDLE_ROOM_MS = 30 * 60 * 1000L
 
-fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
+fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Records = Records.NONE) {
     install(WebSockets) {
         pingPeriodMillis = 20_000
         timeoutMillis = 45_000
@@ -59,7 +59,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                         output += holder.room.stepBot()
                         holder.nextBotMoveAt = now + BOT_THINK_MS
                     }
-                    if (output != Room.Output.NOTHING) publish(holder, output)
+                    if (output != Room.Output.NOTHING) publish(holder, output, records)
                 } finally {
                     holder.lock.unlock()
                 }
@@ -135,6 +135,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
                             registry.arrived(playerId!!, name, avatar, this)
+                            records.playerSeen(playerId!!, name, avatar)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                         }
 
@@ -149,7 +150,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             holder = created
                             created.sessions[me] = this
                             created.lock.withLock {
-                                publish(created, created.room.join(me, name, avatar))
+                                publish(created, created.room.join(me, name, avatar), records)
                             }
                             swapPhotos(created, me, photo)
                         }
@@ -164,7 +165,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             holder?.let { detach(it, me!!) }
                             holder = target
                             target.sessions[me!!] = this
-                            target.lock.withLock { publish(target, target.room.join(me, name, avatar)) }
+                            target.lock.withLock { publish(target, target.room.join(me, name, avatar), records) }
                             swapPhotos(target, me!!, photo)
                         }
 
@@ -189,6 +190,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             target?.sessions?.forEach { it.trySend(invite) }
                             trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null))
                         }
+                        ClientMessage.MyRecord -> trySend(ServerMessage.Record(records.recordOf(me!!)))
 
                         else -> {
                             val current = holder
@@ -198,7 +200,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                             }
                             current.lastActivity = System.currentTimeMillis()
                             current.lock.withLock {
-                                handleInRoom(current, me!!, message)?.let { publish(current, it) }
+                                handleInRoom(current, me!!, message)?.let { publish(current, it, records) }
                             }
                             if (message is ClientMessage.LeaveRoom) {
                                 current.sessions.remove(me)
@@ -217,7 +219,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry()) {
                 val me = playerId
                 if (current != null && me != null) {
                     current.sessions.remove(me)
-                    current.lock.withLock { publish(current, current.room.disconnect(me)) }
+                    current.lock.withLock { publish(current, current.room.disconnect(me), records) }
                 }
             }
         }
@@ -308,7 +310,8 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.Watch -> room.watch(playerId, message.seat)
         is ClientMessage.VoteAlert -> room.voteAlert(playerId, message.yes)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
-        is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite -> null
+        is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
+        ClientMessage.MyRecord -> null
     }
 }
 
@@ -321,9 +324,13 @@ private suspend fun detach(holder: RoomRegistry.Holder, playerId: String) {
  * Puts a room's output on the wire. Views are built per player, so nobody is ever sent
  * a payload containing somebody else's hand.
  */
-private suspend fun publish(holder: RoomRegistry.Holder, output: Room.Output) {
-    if (output == Room.Output.NOTHING) return
+private suspend fun publish(holder: RoomRegistry.Holder, output: Room.Output, records: Records) {
     val room = holder.room
+    for (happening in room.takeHappenings()) {
+        if (happening is Room.Happening.MatchStarted) holder.matchId = UUID.randomUUID().toString()
+        holder.matchId?.let { records.happened(it, room.code, happening) }
+    }
+    if (output == Room.Output.NOTHING) return
 
     for ((target, message) in output.direct) {
         holder.sessions[target]?.trySend(message)

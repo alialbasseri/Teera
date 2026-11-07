@@ -239,6 +239,9 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     },
                     onClose = viewModel::closeProfile,
                     myCode = state.myCode,
+                    record = state.record,
+                    recordLoading = state.recordLoading,
+                    recordKept = state.recordKept,
                 )
 
                 Screen.Lobby -> state.room?.let { room ->
