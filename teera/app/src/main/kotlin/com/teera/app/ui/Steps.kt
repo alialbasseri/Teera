@@ -49,6 +49,16 @@ fun stepsOf(view: PlayerView, events: List<GameEvent>): List<Step> {
             else -> info.name.trim()
         }
     }
+    return stepsOf({ name(it) }, { view.teamName(it) }, events)
+}
+
+/** The same, for a match from the books: names by seat. */
+fun stepsOf(names: List<String>, events: List<GameEvent>): List<Step> {
+    fun name(seat: Int) = names.getOrNull(seat)?.trim().orEmpty().ifEmpty { "لاعب" }
+    return stepsOf({ name(it) }, { team -> (0 until 4).filter { com.teera.core.teamOf(it) == team }.joinToString("/") { name(it) } }, events)
+}
+
+private fun stepsOf(name: (Int) -> String, teamName: (Int) -> String, events: List<GameEvent>): List<Step> {
     return events.mapNotNull { event ->
         when (event) {
             is GameEvent.Dealt -> Step("توزّعت البولات — الفتحة على ${name(event.opener)}")
@@ -61,12 +71,12 @@ fun stepsOf(view: PlayerView, events: List<GameEvent>): List<Step> {
                 Step("${name(event.rescuer)} لعب بدال ${name(event.stuck)}", event.domino, event.rescuer)
             is GameEvent.TeeraCalled -> Step("${name(event.seat)} طيّر بـ ${event.pips}", seat = event.seat)
             is GameEvent.AlertUpheld -> Step(
-                "ناخذ خاوة على ${view.teamName(event.againstTeam)}" +
+                "ناخذ خاوة على ${teamName(event.againstTeam)}" +
                     if (event.penalty > 0) " (+${event.penalty})" else "",
             )
             is GameEvent.GameEnded -> Step(
                 when (event.result.end) {
-                    GameEnd.X -> "${event.result.winnerSeat?.let(::name) ?: "لاعب"} خلّص وأخذ اكس"
+                    GameEnd.X -> "${event.result.winnerSeat?.let { name(it) } ?: "لاعب"} خلّص وأخذ اكس"
                     GameEnd.TEERA -> "خلص الگيم بطيرة"
                     GameEnd.BLOCKED -> "قفلت"
                 },
@@ -78,11 +88,15 @@ fun stepsOf(view: PlayerView, events: List<GameEvent>): List<Step> {
 
 /** The review itself: numbered lines, a little bone on each move. */
 @Composable
-fun StepsDialog(view: PlayerView, events: List<GameEvent>, onClose: () -> Unit) {
-    val steps = stepsOf(view, events)
+fun StepsDialog(view: PlayerView, events: List<GameEvent>, onClose: () -> Unit) =
+    StepsDialog(stepsOf(view, events), view.yourTeam, onClose)
+
+/** The steps of a game from the books, seen from [yourTeam]'s side. */
+@Composable
+fun StepsDialog(steps: List<Step>, yourTeam: Int, onClose: () -> Unit, title: String = "خطوات الگيم") {
     Dialog(onDismissRequest = onClose) {
         Plaque {
-            Text("خطوات الگيم", color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
+            Text(title, color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
             if (steps.isEmpty()) {
                 Text(
                     "ما لحقنا نسجّل خطوات هذا الگيم",
@@ -94,7 +108,7 @@ fun StepsDialog(view: PlayerView, events: List<GameEvent>, onClose: () -> Unit) 
                 Modifier.fillMaxWidth().heightIn(max = 420.dp).testTag("steps"),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                itemsIndexed(steps) { index, step -> StepRow(index + 1, step, view) }
+                itemsIndexed(steps) { index, step -> StepRow(index + 1, step, yourTeam) }
             }
             Button(
                 onClick = onClose,
@@ -106,8 +120,8 @@ fun StepsDialog(view: PlayerView, events: List<GameEvent>, onClose: () -> Unit) 
 }
 
 @Composable
-private fun StepRow(number: Int, step: Step, view: PlayerView) {
-    val ours = step.seat != null && com.teera.core.teamOf(step.seat) == view.yourTeam
+private fun StepRow(number: Int, step: Step, yourTeam: Int) {
+    val ours = step.seat != null && com.teera.core.teamOf(step.seat) == yourTeam
     val tint = when {
         step.seat == null -> Felt.Muted
         ours -> Felt.Playable

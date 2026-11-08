@@ -27,17 +27,20 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.builtins.ListSerializer
 import org.h2.jdbcx.JdbcDataSource
 
-/** Plays [room] to the end, the human taking their first legal move, the bots their own. */
-private fun playOut(room: Room, human: String): List<Room.Happening> {
+/** Plays [room] to the end, each person taking their first legal move, the bots their own. */
+private fun playOut(room: Room, vararg humans: String): List<Room.Happening> {
     val seen = mutableListOf<Room.Happening>()
     repeat(20_000) {
         seen += room.takeHappenings()
         val game = room.game ?: return seen
         when {
             game.phase == Phase.MATCH_OVER -> return seen + room.takeHappenings()
-            game.phase == Phase.GAME_OVER -> room.nextGame(human)
+            game.phase == Phase.GAME_OVER -> room.nextGame(humans.first())
             room.awaitingBot() -> room.stepBot()
-            else -> room.move(human, room.viewFor(human)?.legalMoves?.firstOrNull() ?: return seen)
+            else -> {
+                val mover = humans.firstOrNull { room.viewFor(it)?.isYourMove == true } ?: return seen
+                room.move(mover, room.viewFor(mover)!!.legalMoves.first())
+            }
         }
     }
     return seen
@@ -111,6 +114,45 @@ class RecordsTest {
                     assertEquals(first.steps, steps)
                 }
             }
+        }
+    }
+
+    @Test
+    fun `matches between people rank them, and a match opens game by game with its steps`() {
+        for ((label, records) in databases()) {
+            val ali = "ali-" + UUID.randomUUID()
+            val sara = "sara-" + UUID.randomUUID()
+            records.playerSeen(ali, "Ali", "p:1")
+            records.playerSeen(sara, "Sara", "p:2")
+            val room = Room("RANK", ali, Rules(target = 60))
+            room.join(ali, "Ali")
+            room.join(sara, "Sara")
+            room.setBot(ali, 2, true, Difficulty.NORMAL)
+            room.setBot(ali, 3, true, Difficulty.NORMAL)
+            room.start(ali, seed = 11)
+            val happenings = playOut(room, ali, sara)
+            val id = UUID.randomUUID().toString()
+            happenings.forEach { records.happened(id, "RANK", it) }
+            records.flush()
+
+            val board = assertNotNull(runBlocking { records.leaderboard() }, label)
+            val loser = happenings.filterIsInstance<Room.Happening.MatchFinished>().single().losingTeam
+            val winner = if (loser == 0) sara else ali
+            val ranked = board.players.filter { it.playerId == ali || it.playerId == sara }
+            assertEquals(2, ranked.size, label)
+            assertEquals(winner, ranked.maxBy { it.rating }.playerId, label)
+            assertTrue(ranked.first { it.playerId == winner }.rating > com.teera.core.Ranking.START, label)
+
+            val record = assertNotNull(runBlocking { records.recordOf(winner) }, label)
+            assertNotNull(record.rank, label)
+            assertEquals(id, record.recent.first().id, label)
+
+            val detail = assertNotNull(runBlocking { records.matchDetail(id) }, label)
+            val games = happenings.filterIsInstance<Room.Happening.GameFinished>()
+            assertEquals(games.size, detail.games.size, label)
+            assertEquals(games.first().steps, detail.games.first().steps, label)
+            assertEquals(listOf("Ali", "Sara", "بوت", "بوت"), detail.names, label)
+            assertEquals(loser, detail.losingTeam, label)
         }
     }
 

@@ -1,6 +1,7 @@
 package com.teera.app.ui
 
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,6 +35,8 @@ fun RecordCard(
     kept: Boolean,
     modifier: Modifier = Modifier,
     now: Long = System.currentTimeMillis(),
+    onOpenMatch: (String, Int) -> Unit = { _, _ -> },
+    onRanking: () -> Unit = {},
 ) {
     Column(
         modifier
@@ -47,7 +50,7 @@ fun RecordCard(
     ) {
         Text("سجلّي", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
         when {
-            record != null -> Filled(record, now)
+            record != null -> Filled(record, now, onOpenMatch, onRanking)
             loading -> Note("دا نجيب سجلّك من السيرفر…")
             !kept -> Note("السيرفر بعد ما يحفظ الگيمات")
             else -> Note("سجلّك يبين هنا من تكون متصل بالنت")
@@ -60,7 +63,19 @@ private fun Note(text: String) =
     Text(text, color = Felt.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
 
 @Composable
-private fun Filled(record: PlayerRecord, now: Long) {
+private fun Filled(record: PlayerRecord, now: Long, onOpenMatch: (String, Int) -> Unit, onRanking: () -> Unit) {
+    // Their place in the ranking, which opens it.
+    Text(
+        if (record.rank != null) "المركز ${record.rank} · ${record.rating} نقطة" else "الترتيب",
+        color = Felt.GoldLit,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+            .clickable(onClick = onRanking)
+            .padding(horizontal = 14.dp, vertical = 6.dp)
+            .testTag("my-rank"),
+    )
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
         Stat("${record.matches}", "مباريات")
         Stat("${record.wins}", "فزت", Felt.Playable)
@@ -77,7 +92,7 @@ private fun Filled(record: PlayerRecord, now: Long) {
     }
     HorizontalDivider(color = Felt.Brass.copy(alpha = 0.3f))
     Text("آخر المباريات", color = Felt.Brass, style = MaterialTheme.typography.titleSmall)
-    record.recent.forEach { MatchLine(it, now) }
+    record.recent.forEach { match -> MatchLine(match, now) { onOpenMatch(match.id, match.seat) } }
 }
 
 @Composable
@@ -89,13 +104,16 @@ private fun Stat(value: String, label: String, colour: Color = Felt.Parchment) {
 }
 
 @Composable
-private fun MatchLine(match: MatchSummary, now: Long) {
+private fun MatchLine(match: MatchSummary, now: Long, onOpen: () -> Unit) {
     val (verdict, colour) = when (match.won) {
         true -> "فزتوا" to Felt.Playable
         false -> "خسرتوا" to Felt.Danger
         null -> "ما خلصت" to Felt.Muted
     }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable(enabled = match.id.isNotBlank(), onClick = onOpen),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
             Text(
                 "ويا ${match.partner.ifBlank { "؟" }} ضد ${match.opponents.joinToString(" و")}",

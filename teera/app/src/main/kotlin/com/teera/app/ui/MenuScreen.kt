@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
@@ -86,6 +87,8 @@ fun MenuScreen(
     /** The list of games being played that anyone may watch, and how many there are. */
     onLive: () -> Unit = {},
     liveCount: Int = 0,
+    /** The ranking, from the trophy in the corner. */
+    onRanking: () -> Unit = {},
     avatar: @Composable (size: Dp) -> Unit = { size -> Initial(playerName, size) },
 ) {
     var code by remember { mutableStateOf("") }
@@ -93,6 +96,25 @@ fun MenuScreen(
     var changelogOpen by remember { mutableStateOf(false) }
 
     CafeTable {
+        // The ranking sits in the corner, costing the menu no height.
+        Box(
+            Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(Color(0xCC120B05))
+                .border(1.dp, Felt.Brass, CircleShape)
+                .clickable(onClick = onRanking)
+                .testTag("ranking"),
+            contentAlignment = Alignment.Center,
+        ) {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Rounded.EmojiEvents,
+                contentDescription = "الترتيب",
+                tint = Felt.GoldLit,
+            )
+        }
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Smaller phones get a smaller emblem rather than a scrolling menu.
             val roomy = maxHeight > 720.dp

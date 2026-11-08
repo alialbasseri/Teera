@@ -109,4 +109,16 @@ class StepsTest {
         )
         assertEquals("انعاد الخلط: الخصم ما عنده رقم چفت الفتحة", explainDeal(before, redealt))
     }
+
+    @Test
+    fun `a game of an old match opens its steps, names and all`() {
+        val detail = com.teera.core.MatchDetail(
+            id = "m1", roomCode = "QCNU", startedAtEpochMs = 0, names = listOf("علي", "سارة", "عمر", "نور"),
+            scores = listOf(10, 20), target = 201, losingTeam = null,
+            games = listOf(com.teera.core.PlayedGame(1, GameEnd.X, 0, listOf(-25, 21), listOf(-25, 21), listOf(dealt, opened, played))),
+        )
+        compose.setContent { com.teera.app.ui.MatchScreen(detail, loading = false, mySeat = 0, onClose = {}) }
+        compose.onNodeWithTag("game-1").performClick()
+        compose.onNodeWithText("سارة لعب").assertIsDisplayed()
+    }
 }

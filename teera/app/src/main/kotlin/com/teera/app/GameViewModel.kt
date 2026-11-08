@@ -42,7 +42,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live }
+enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live, Ranking, Match }
 
 /** Somebody this player knows: met at a table, or added by their code. */
 data class Friend(val id: String, val name: String, val avatar: String)
@@ -88,6 +88,13 @@ data class UiState(
     val recordLoading: Boolean = false,
     /** False when the server answered that it keeps no books. */
     val recordKept: Boolean = true,
+    /** The ranking, once asked for; null until it comes (or where no books are kept). */
+    val leaderboard: com.teera.core.Leaderboard? = null,
+    val leaderboardLoading: Boolean = false,
+    /** A match from the books being looked at, and this player's chair in it. */
+    val match: com.teera.core.MatchDetail? = null,
+    val matchSeat: Int = 0,
+    val matchLoading: Boolean = false,
     /** Games being played that their players let anyone watch. */
     val liveGames: List<com.teera.core.LiveGame> = emptyList(),
     /** A newer app is out, and this player has not said "later" to it yet. */
@@ -496,6 +503,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
             is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
 
+            is ServerMessage.LeaderboardIs, is ServerMessage.MatchIs -> onPresence(message)
+
             is ServerMessage.TargetResult -> _state.update {
                 it.copy(
                     notice = if (message.passed) "وافق الكل: اللعبة صارت لـ ${message.target}"
@@ -550,6 +559,33 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putInt(KEY_UPDATE_LATER, update.versionCode).apply()
         _state.update { it.copy(update = null) }
     }
+
+    /** The ranking: players, and the strongest pairs. */
+    fun showRanking() {
+        if (presence == null) startPresence()
+        _state.update { it.copy(screen = Screen.Ranking, leaderboardLoading = true) }
+        presence?.send(ClientMessage.AskLeaderboard)
+        viewModelScope.launch {
+            delay(RECORD_WAIT_MS)
+            _state.update { if (it.leaderboardLoading) it.copy(leaderboardLoading = false) else it }
+        }
+    }
+
+    fun closeRanking() = _state.update { if (it.screen == Screen.Ranking) it.copy(screen = Screen.Menu) else it }
+
+    /** One of this player's matches, game by game. */
+    fun openMatch(matchId: String, seat: Int) {
+        if (matchId.isBlank()) return
+        if (presence == null) startPresence()
+        _state.update { it.copy(screen = Screen.Match, match = null, matchSeat = seat, matchLoading = true) }
+        presence?.send(ClientMessage.AskMatch(matchId))
+        viewModelScope.launch {
+            delay(RECORD_WAIT_MS)
+            _state.update { if (it.matchLoading) it.copy(matchLoading = false) else it }
+        }
+    }
+
+    fun closeMatch() = _state.update { if (it.screen == Screen.Match) it.copy(screen = Screen.Profile) else it }
 
     /** The list of games being played, kept fresh while it is open. */
     fun showLive() {
@@ -691,6 +727,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
             is ServerMessage.UpdateAvailable -> offerUpdate(message)
             is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
+            is ServerMessage.LeaderboardIs -> _state.update {
+                it.copy(leaderboard = message.board ?: it.leaderboard, leaderboardLoading = false, recordKept = message.board != null)
+            }
+            is ServerMessage.MatchIs -> _state.update {
+                if (it.screen != Screen.Match) it
+                else it.copy(match = message.detail, matchLoading = false, notice = if (message.detail == null) "ما لگيت هالمباراة" else it.notice)
+            }
             is ServerMessage.Record -> _state.update {
                 it.copy(record = message.record ?: it.record, recordLoading = false, recordKept = message.record != null)
             }
@@ -875,6 +918,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             Screen.Profile -> closeProfile()
             Screen.Friends -> closeFriends()
             Screen.Live -> closeLive()
+            Screen.Ranking -> closeRanking()
+            Screen.Match -> closeMatch()
             Screen.Menu -> Unit
         }
     }

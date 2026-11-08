@@ -239,6 +239,10 @@ fun Application.gameServer(
                             trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null))
                         }
                         ClientMessage.MyRecord -> trySend(ServerMessage.Record(records.recordOf(me!!)))
+                        ClientMessage.AskLeaderboard -> trySend(ServerMessage.LeaderboardIs(records.leaderboard()))
+                        is ClientMessage.AskMatch -> trySend(
+                            ServerMessage.MatchIs(message.matchId, records.matchDetail(message.matchId.take(36))),
+                        )
                         ClientMessage.ListLiveGames -> trySend(
                             ServerMessage.LiveGames(
                                 registry.all().mapNotNull { it.lock.withLock { it.room.liveGame() } }.take(50),
@@ -371,7 +375,8 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.SetListed -> room.setListed(playerId, message.listed)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
-        ClientMessage.MyRecord, ClientMessage.ListLiveGames -> null
+        ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
+        is ClientMessage.AskMatch -> null
     }
 }
 

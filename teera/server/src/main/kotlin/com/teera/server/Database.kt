@@ -1,7 +1,13 @@
 package com.teera.server
 
 import com.teera.core.GameEvent
+import com.teera.core.Leaderboard
+import com.teera.core.MatchDetail
 import com.teera.core.MatchSummary
+import com.teera.core.PlayedGame
+import com.teera.core.RankedPair
+import com.teera.core.RankedPlayer
+import com.teera.core.Ranking
 import com.teera.core.PlayerRecord
 import com.teera.core.Protocol
 import com.teera.core.Room
@@ -253,6 +259,8 @@ class SqlRecords(
                 startedAtEpochMs = match.started,
                 roomCode = match.code,
                 won = if (match.ended && match.losing != null) match.losing != team else null,
+                id = match.id,
+                seat = match.seat,
                 partner = seats[(match.seat + 2) % 4].orEmpty(),
                 opponents = listOfNotNull(seats[(match.seat + 1) % 4], seats[(match.seat + 3) % 4]),
                 ourScore = match.scores[team],
@@ -260,11 +268,134 @@ class SqlRecords(
                 games = match.games,
             )
         }
-        return PlayerRecord(matches, wins, losses, games, finishes, teeras, firstSeen, recent)
+        val board = readLeaderboard(db)
+        val place = board.players.indexOfFirst { it.playerId == playerId }
+        return PlayerRecord(
+            matches, wins, losses, games, finishes, teeras, firstSeen, recent,
+            rating = board.players.getOrNull(place)?.rating,
+            rank = if (place >= 0) place + 1 else null,
+        )
+    }
+
+    override suspend fun leaderboard(): Leaderboard? = withContext(Dispatchers.IO) {
+        try {
+            withConnection { db -> readLeaderboard(db) }
+        } catch (e: Exception) {
+            log.warn("could not read the ranking: {}", e.message)
+            null
+        }
+    }
+
+    /** Every finished match, oldest first, worked into ratings and pairs. */
+    private fun readLeaderboard(db: Connection): Leaderboard {
+        val seats = LinkedHashMap<String, Array<String?>>()
+        val losing = HashMap<String, Int>()
+        db.prepareStatement(
+            """SELECT m.id, m.losing_team, s.seat, s.player_id
+               FROM matches m JOIN match_seats s ON s.match_id = m.id
+               WHERE m.ended_at IS NOT NULL AND m.losing_team IS NOT NULL
+               ORDER BY m.ended_at, m.id, s.seat""",
+        ).use {
+            it.executeQuery().use { row ->
+                while (row.next()) {
+                    val id = row.getString(1)
+                    losing[id] = row.getInt(2)
+                    val seat = row.getInt(3)
+                    if (seat in 0 until 4) seats.getOrPut(id) { arrayOfNulls(4) }[seat] = row.getString(4)
+                }
+            }
+        }
+        val played = seats.map { (id, players) -> Ranking.Played(players.toList(), losing.getValue(id)) }
+        val standings = Ranking.standings(played)
+        val pairs = Ranking.pairs(played)
+
+        // Names and pictures as each player has them now.
+        val people = HashMap<String, Pair<String, String>>()
+        val ids = (standings.keys + pairs.keys.flatMap { listOf(it.first, it.second) }).toList()
+        ids.chunked(500).forEach { chunk ->
+            val marks = chunk.joinToString(",") { "?" }
+            db.prepareStatement("SELECT id, name, avatar FROM players WHERE id IN ($marks)").use {
+                chunk.forEachIndexed { index, id -> it.setString(index + 1, id) }
+                it.executeQuery().use { row -> while (row.next()) people[row.getString(1)] = row.getString(2) to row.getString(3) }
+            }
+        }
+        fun name(id: String) = people[id]?.first ?: "لاعب"
+        fun avatar(id: String) = people[id]?.second.orEmpty().takeIf { it != "photo" }.orEmpty()
+
+        return Leaderboard(
+            players = standings.entries
+                .sortedWith(compareByDescending<Map.Entry<String, Ranking.Standing>> { it.value.rating }.thenByDescending { it.value.wins })
+                .take(LEADERBOARD_SIZE)
+                .map { (id, s) -> RankedPlayer(id, name(id), avatar(id), Ranking.shown(s.rating), s.matches, s.wins) },
+            pairs = pairs.entries
+                .sortedWith(
+                    compareByDescending<Map.Entry<Pair<String, String>, Ranking.PairStanding>> { it.value.wins.toDouble() / it.value.matches }
+                        .thenByDescending { it.value.matches },
+                )
+                .take(LEADERBOARD_SIZE)
+                .map { (key, s) -> RankedPair(listOf(name(key.first), name(key.second)), listOf(avatar(key.first), avatar(key.second)), s.matches, s.wins) },
+        )
+    }
+
+    override suspend fun matchDetail(matchId: String): MatchDetail? = withContext(Dispatchers.IO) {
+        try {
+            withConnection { db -> readMatch(db, matchId) }
+        } catch (e: Exception) {
+            log.warn("could not read a match: {}", e.message)
+            null
+        }
+    }
+
+    private fun readMatch(db: Connection, matchId: String): MatchDetail? {
+        class Head(val code: String, val started: Long, val target: Int, val losing: Int?, val scores: List<Int>)
+        val head = db.prepareStatement(
+            "SELECT room_code, started_at, target, losing_team, score0, score1 FROM matches WHERE id = ?",
+        ).use {
+            it.setString(1, matchId)
+            it.executeQuery().use { row ->
+                if (!row.next()) return null
+                Head(row.getString(1), row.getLong(2), row.getInt(3), row.getInt(4).takeUnless { row.wasNull() }, listOf(row.getInt(5), row.getInt(6)))
+            }
+        }
+        val names = Array(4) { "" }
+        db.prepareStatement("SELECT seat, name, is_bot FROM match_seats WHERE match_id = ?").use {
+            it.setString(1, matchId)
+            it.executeQuery().use { row ->
+                while (row.next()) {
+                    val seat = row.getInt(1)
+                    if (seat in 0 until 4) names[seat] = if (row.getBoolean(3)) "بوت" else row.getString(2)
+                }
+            }
+        }
+        val games = db.prepareStatement(
+            """SELECT game_number, end_kind, winner_seat, scored0, scored1, score0, score1, steps
+               FROM games WHERE match_id = ? ORDER BY game_number""",
+        ).use {
+            it.setString(1, matchId)
+            it.executeQuery().use { row ->
+                buildList {
+                    while (row.next()) {
+                        val end = runCatching { com.teera.core.GameEnd.valueOf(row.getString(2)) }.getOrNull() ?: continue
+                        val winner = row.getInt(3).takeUnless { row.wasNull() }
+                        val steps = runCatching { Protocol.json.decodeFromString(STEPS, row.getString(8)) }.getOrDefault(emptyList())
+                        add(
+                            PlayedGame(
+                                gameNumber = row.getInt(1), end = end, winnerSeat = winner,
+                                scored = listOf(row.getInt(4), row.getInt(5)),
+                                scores = listOf(row.getInt(6), row.getInt(7)),
+                                steps = steps,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+        return MatchDetail(matchId, head.code, head.started, names.toList(), head.scores, head.target, head.losing, games)
     }
 
     companion object {
         private const val RECENT = 10
+        private const val LEADERBOARD_SIZE = 50
         private val STEPS = ListSerializer(GameEvent.serializer())
 
         /** The tables, made if they are not there yet. Plain SQL that Postgres and H2 both read. */

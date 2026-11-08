@@ -211,6 +211,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onRejoin = viewModel::rejoin,
                     onFriends = viewModel::showFriends,
                     onLive = viewModel::showLive,
+                    onRanking = viewModel::showRanking,
                     liveCount = state.liveGames.size,
                     friendsOnline = state.friends.count { it.id in state.online },
                     avatar = { size ->
@@ -219,6 +220,21 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                 )
 
                 Screen.Rules -> RulesScreen(onClose = viewModel::closeRules)
+
+                Screen.Ranking -> com.teera.app.ui.RankingScreen(
+                    board = state.leaderboard,
+                    loading = state.leaderboardLoading,
+                    kept = state.recordKept,
+                    myId = state.myId,
+                    onClose = viewModel::closeRanking,
+                )
+
+                Screen.Match -> com.teera.app.ui.MatchScreen(
+                    match = state.match,
+                    loading = state.matchLoading,
+                    mySeat = state.matchSeat,
+                    onClose = viewModel::closeMatch,
+                )
 
                 Screen.Live -> com.teera.app.ui.LiveGamesScreen(
                     games = state.liveGames,
@@ -254,6 +270,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     record = state.record,
                     recordLoading = state.recordLoading,
                     recordKept = state.recordKept,
+                    onOpenMatch = { id, seat -> viewModel.openMatch(id, seat) },
+                    onRanking = viewModel::showRanking,
                 )
 
                 Screen.Lobby -> state.room?.let { room ->

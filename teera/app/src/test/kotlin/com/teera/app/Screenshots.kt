@@ -151,6 +151,41 @@ class Screenshots {
         MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "KHAN")
     }
 
+    private val sampleBoard = com.teera.core.Leaderboard(
+        players = listOf(
+            com.teera.core.RankedPlayer("p1", "عبود نفط", "p:0", 1084, 14, 10),
+            com.teera.core.RankedPlayer("me", "علي", "p:1", 1047, 12, 8),
+            com.teera.core.RankedPlayer("p3", "حسن", "p:7", 1012, 9, 5),
+            com.teera.core.RankedPlayer("p4", "سيف", "p:5", 978, 11, 4),
+            com.teera.core.RankedPlayer("p5", "Player", "", 941, 6, 1),
+        ),
+        pairs = listOf(
+            com.teera.core.RankedPair(listOf("علي", "عبود نفط"), listOf("p:1", "p:0"), 8, 7),
+            com.teera.core.RankedPair(listOf("حسن", "سيف"), listOf("p:7", "p:5"), 6, 3),
+        ),
+    )
+
+    @Test
+    fun ranking() = shoot("ranking") {
+        com.teera.app.ui.RankingScreen(sampleBoard, loading = false, kept = true, myId = "me", onClose = {})
+    }
+
+    private val sampleMatch = com.teera.core.MatchDetail(
+        id = "m1", roomCode = "QCNU", startedAtEpochMs = System.currentTimeMillis() - 3_600_000,
+        names = listOf("علي", "حسن", "عبود نفط", "سيف"), scores = listOf(96, 205), target = 201, losingTeam = 1,
+        games = listOf(
+            com.teera.core.PlayedGame(1, GameEnd.X, 0, listOf(-25, 21), listOf(-25, 21), sampleSteps()),
+            com.teera.core.PlayedGame(2, GameEnd.TEERA, 3, listOf(14, 1), listOf(-11, 22), sampleSteps()),
+            com.teera.core.PlayedGame(3, GameEnd.BLOCKED, null, listOf(0, 0), listOf(-11, 22), sampleSteps()),
+            com.teera.core.PlayedGame(4, GameEnd.X, 1, listOf(30, -25), listOf(19, -3), sampleSteps()),
+        ),
+    )
+
+    @Test
+    fun match() = shoot("match") {
+        com.teera.app.ui.MatchScreen(sampleMatch, loading = false, mySeat = 0, onClose = {})
+    }
+
     /** The games being played that anyone may watch. */
     @Test
     fun liveGames() = shoot("live-games") {
@@ -275,7 +310,7 @@ class Screenshots {
             ) {
                 com.teera.app.ui.RecordCard(
                     com.teera.core.PlayerRecord(
-                        matches = 12, wins = 8, losses = 4, games = 97, finishes = 31, teeras = 6,
+                        matches = 12, wins = 8, losses = 4, games = 97, finishes = 31, teeras = 6, rating = 1047, rank = 2,
                         firstSeenEpochMs = now - 3 * day,
                         recent = listOf(
                             com.teera.core.MatchSummary(now - 3_600_000, "KHAN", null, "عمر", listOf("سارة", "نور"), 88, 140, 7),

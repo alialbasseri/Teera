@@ -51,6 +51,8 @@ fun ProfileScreen(
     record: com.teera.core.PlayerRecord? = null,
     recordLoading: Boolean = false,
     recordKept: Boolean = true,
+    onOpenMatch: (String, Int) -> Unit = { _, _ -> },
+    onRanking: () -> Unit = {},
 ) {
     WalnutRoom {
         Column(Modifier.fillMaxSize()) {
@@ -90,7 +92,7 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(14.dp))
-                RecordCard(record, recordLoading, recordKept)
+                RecordCard(record, recordLoading, recordKept, onOpenMatch = onOpenMatch, onRanking = onRanking)
                 Spacer(Modifier.height(18.dp))
                 Text("اختار صورتك", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(10.dp))

@@ -289,6 +289,14 @@ sealed interface ClientMessage {
     @Serializable @SerialName("setListed")
     data class SetListed(val listed: Boolean) : ClientMessage
 
+    /** The ranking. */
+    @Serializable @SerialName("leaderboard")
+    data object AskLeaderboard : ClientMessage
+
+    /** One match from the books, game by game. */
+    @Serializable @SerialName("match")
+    data class AskMatch(val matchId: String) : ClientMessage
+
     /** The games being played that anyone may watch. */
     @Serializable @SerialName("liveGames")
     data object ListLiveGames : ClientMessage
@@ -399,6 +407,14 @@ sealed interface ServerMessage {
     @Serializable @SerialName("liveGames")
     data class LiveGames(val games: List<LiveGame>) : ServerMessage
 
+    /** The ranking; null where the server keeps no books. */
+    @Serializable @SerialName("leaderboard")
+    data class LeaderboardIs(val board: Leaderboard?) : ServerMessage
+
+    /** A match from the books; null if there is no such match or no books. */
+    @Serializable @SerialName("match")
+    data class MatchIs(val matchId: String, val detail: MatchDetail?) : ServerMessage
+
     /** How a vote to change the target went. */
     @Serializable @SerialName("targetResult")
     data class TargetResult(val target: Int, val passed: Boolean) : ServerMessage
@@ -422,6 +438,61 @@ data class PlayerRecord(
     val firstSeenEpochMs: Long? = null,
     /** Their latest matches, newest first. */
     val recent: List<MatchSummary> = emptyList(),
+    /** Their place in the ranking, once they have a ranked match. */
+    val rating: Int? = null,
+    val rank: Int? = null,
+)
+
+/**
+ * The ranking. A player's rating starts at [Ranking.START] and moves after each match
+ * with people on both sides: more for beating a stronger pair, less for a weaker one.
+ */
+@Serializable
+data class Leaderboard(val players: List<RankedPlayer>, val pairs: List<RankedPair>)
+
+@Serializable
+data class RankedPlayer(
+    val playerId: String,
+    val name: String,
+    val avatar: String,
+    val rating: Int,
+    val matches: Int,
+    val wins: Int,
+)
+
+/** Two partners and how they have done together. */
+@Serializable
+data class RankedPair(
+    val names: List<String>,
+    val avatars: List<String>,
+    val matches: Int,
+    val wins: Int,
+)
+
+/** One match from the books, game by game, each with its steps. */
+@Serializable
+data class MatchDetail(
+    val id: String,
+    val roomCode: String,
+    val startedAtEpochMs: Long,
+    /** By seat: 0 and 2 against 1 and 3. */
+    val names: List<String>,
+    val scores: List<Int>,
+    val target: Int,
+    /** Null while it is being played, or if it was left unfinished. */
+    val losingTeam: Int?,
+    val games: List<PlayedGame>,
+)
+
+@Serializable
+data class PlayedGame(
+    val gameNumber: Int,
+    val end: GameEnd,
+    val winnerSeat: Int?,
+    /** What each team took from this game, and where the match stood after it. */
+    val scored: List<Int>,
+    val scores: List<Int>,
+    val steps: List<GameEvent>,
 )
 
 /** One match as this player saw it. */
@@ -436,4 +507,8 @@ data class MatchSummary(
     val ourScore: Int,
     val theirScore: Int,
     val games: Int,
+    /** For opening it game by game. */
+    val id: String = "",
+    /** Which chair this player had in it. */
+    val seat: Int = 0,
 )

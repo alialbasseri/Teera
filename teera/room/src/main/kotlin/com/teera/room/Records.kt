@@ -21,6 +21,12 @@ interface Records {
     /** What the books say about a player; null when none are kept. */
     suspend fun recordOf(playerId: String): PlayerRecord? = null
 
+    /** The ranking; null when no books are kept. */
+    suspend fun leaderboard(): com.teera.core.Leaderboard? = null
+
+    /** One match, game by game; null when there is no such match or no books. */
+    suspend fun matchDetail(matchId: String): com.teera.core.MatchDetail? = null
+
     companion object {
         val NONE = object : Records {}
     }
