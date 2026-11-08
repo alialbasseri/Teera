@@ -2,6 +2,7 @@ package com.teera.app
 
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -62,7 +63,7 @@ class FullFlowTest {
     private fun lay(tile: com.teera.core.Domino, arm: com.teera.core.Arm?) {
         compose.onNodeWithTag("hand-tile-$tile").performClick()
         pass(30)
-        if (arm != null && compose.onAllNodesWithText("دوس على الجهة اللي تريدها").fetchSemanticsNodes().isNotEmpty()) {
+        if (arm != null && compose.onAllNodesWithTag("arm-${arm.name}").fetchSemanticsNodes().isNotEmpty()) {
             compose.onNodeWithTag("arm-${arm.name}").performClick()
             pass(30)
         }

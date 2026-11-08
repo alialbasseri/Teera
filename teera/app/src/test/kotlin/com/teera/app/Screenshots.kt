@@ -163,6 +163,13 @@ class Screenshots {
         )
     }
 
+    /** Ali's phone, roughly, with a room to go back to and games to watch. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w392dp-h780dp-xxhdpi")
+    fun menuRejoin() = shoot("menu-rejoin") {
+        MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "QCNU", liveCount = 2, friendsOnline = 1)
+    }
+
     /** A short phone, text up a little, a room to go back to: still one screen, nothing scrolls. */
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h680dp-xxhdpi", fontScale = 1.15f)

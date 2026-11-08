@@ -921,6 +921,8 @@ private fun Hand(
                         }
                         view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
                         view.isYourMove && view.board.isEmpty -> "افتح الگيم بچفت"
+                        // A bone picked that fits two ends, playing for somebody stuck too.
+                        view.isYourMove && selected != null -> "دوس على الجهة اللي تريدها"
                         view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
                         view.isYourMove && view.phase == Phase.TEERA_OFFER -> "قرارك"
                         view.isYourMove && selected != null -> "دوس على الجهة اللي تريدها"

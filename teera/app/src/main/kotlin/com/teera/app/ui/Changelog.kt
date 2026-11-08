@@ -28,6 +28,14 @@ data class Release(val version: String, val date: String, val notes: List<String
 /** Everything each version brought. Add the new version at the top when bumping it. */
 val CHANGELOG = listOf(
     Release(
+        "1.5.1", "2026-11-09",
+        listOf(
+            "القائمة رجعت مرتبة: اسم اللعبة والرسمة بحجمهم الكامل",
+            "«ارجع» و«افتح غرفة» بنفس السطر، و«تفرّج» صار ويا الروابط اللي جوّا",
+            "من تلعب بدال واحد گالي والبول يركب بجهتين، يگلك «دوس على الجهة اللي تريدها»",
+        ),
+    ),
+    Release(
         "1.5.0", "2026-11-09",
         listOf(
             "اللعبات الماشية: تشوف منو دا يلعب وتدخل تتفرج",

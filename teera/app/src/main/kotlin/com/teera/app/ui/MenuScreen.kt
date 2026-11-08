@@ -179,20 +179,24 @@ fun MenuScreen(
                 ) {
                     Text("العب ويا جماعتك", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
                     Spacer(Modifier.height(8.dp))
-                    if (lastRoom != null) {
-                        GoldButton("ارجع للغرفة $lastRoom", { onRejoin(lastRoom) })
-                        Spacer(Modifier.height(8.dp))
+                    // Back to your room and a new one share a row, so the way back costs
+                    // the menu no height.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (lastRoom != null) {
+                            GoldButton("ارجع لـ $lastRoom", { onRejoin(lastRoom) }, Modifier.weight(1f))
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        BrassButton(
+                            when {
+                                connecting && waking -> "السيرفر يحمى…"
+                                connecting -> "يحاول يتصل…"
+                                else -> "افتح غرفة"
+                            },
+                            onHost,
+                            modifier = Modifier.weight(1f),
+                            enabled = !connecting && hasInternetServer,
+                        )
                     }
-                    BrassButton(
-                        when {
-                            connecting && waking -> "السيرفر يحمى…"
-                            connecting -> "يحاول يتصل…"
-                            else -> "افتح غرفة"
-                        },
-                        onHost,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !connecting && hasInternetServer,
-                    )
                     if (connecting && waking) {
                         Text(
                             "إذا محد لعب من فترة، السيرفر يگعد وياخذ تقريباً دقيقة حتى يحمى",
@@ -219,12 +223,7 @@ fun MenuScreen(
                         Spacer(Modifier.width(10.dp))
                         BrassButton("ادخل", { onJoin(code) }, enabled = code.length == 4 && !connecting)
                     }
-                    Spacer(Modifier.height(6.dp))
-                    SmallLink(
-                        if (liveCount > 0) "تفرّج على اللعبات الماشية ($liveCount)" else "تفرّج على اللعبات الماشية",
-                        onLive,
-                        tag = "live",
-                    )
+
                 }
 
               }
@@ -235,6 +234,9 @@ fun MenuScreen(
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     SmallLink(if (friendsOnline > 0) "جماعتي ($friendsOnline)" else "جماعتي", onFriends, tag = "friends")
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    // Games being played that anyone may watch.
+                    SmallLink(if (liveCount > 0) "تفرّج ($liveCount)" else "تفرّج", onLive, tag = "live")
                     Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
                     SmallLink("القوانين", onRules)
                     Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
