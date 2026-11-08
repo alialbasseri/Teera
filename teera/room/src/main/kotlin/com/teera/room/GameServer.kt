@@ -213,6 +213,11 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Rec
                             trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null))
                         }
                         ClientMessage.MyRecord -> trySend(ServerMessage.Record(records.recordOf(me!!)))
+                        ClientMessage.ListLiveGames -> trySend(
+                            ServerMessage.LiveGames(
+                                registry.all().mapNotNull { it.lock.withLock { it.room.liveGame() } }.take(50),
+                            ),
+                        )
 
                         else -> {
                             val current = holder
@@ -337,9 +342,10 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.ProposeTarget -> room.proposeTarget(playerId, message.target)
         ClientMessage.ScreenCaptured -> room.screenCaptured(playerId)
         is ClientMessage.VoteTarget -> room.voteTarget(playerId, message.yes)
+        is ClientMessage.SetListed -> room.setListed(playerId, message.listed)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
-        ClientMessage.MyRecord -> null
+        ClientMessage.MyRecord, ClientMessage.ListLiveGames -> null
     }
 }
 

@@ -42,7 +42,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends }
+enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live }
 
 /** Somebody this player knows: met at a table, or added by their code. */
 data class Friend(val id: String, val name: String, val avatar: String)
@@ -88,6 +88,8 @@ data class UiState(
     val recordLoading: Boolean = false,
     /** False when the server answered that it keeps no books. */
     val recordKept: Boolean = true,
+    /** Games being played that their players let anyone watch. */
+    val liveGames: List<com.teera.core.LiveGame> = emptyList(),
     /** A newer app is out, and this player has not said "later" to it yet. */
     val update: ServerMessage.UpdateAvailable? = null,
     /** Counts screenshots somebody else took of the table; the screen flashes on each. */
@@ -437,6 +439,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                     _reactions.tryEmit(react(before, message.view))
                     explainDeal(before, message.view)?.let { text -> _state.update { it.copy(notice = text) } }
                 }
+                // Everybody at the table hears when their game goes on or off the list.
+                if (before != null && before.listed != message.view.listed && !message.view.spectating) {
+                    val text = if (message.view.listed) "لعبتكم صارت تبين بـ«اللعبات الماشية»، أي واحد يگدر يتفرج"
+                    else "لعبتكم ما تبين بعد للكل"
+                    _state.update { it.copy(notice = text) }
+                }
                 lastView = message.view
                 val steps = gatherSteps(_state.value.steps, before, message.view)
                 _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false, steps = steps) }
@@ -485,6 +493,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             is ServerMessage.UpdateAvailable -> offerUpdate(message)
+
+            is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
 
             is ServerMessage.TargetResult -> _state.update {
                 it.copy(
@@ -540,6 +550,35 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         prefs.edit().putInt(KEY_UPDATE_LATER, update.versionCode).apply()
         _state.update { it.copy(update = null) }
     }
+
+    /** The list of games being played, kept fresh while it is open. */
+    fun showLive() {
+        if (presence == null) startPresence()
+        _state.update { it.copy(screen = Screen.Live) }
+        livePoll?.cancel()
+        livePoll = viewModelScope.launch {
+            while (_state.value.screen == Screen.Live) {
+                presence?.send(ClientMessage.ListLiveGames)
+                delay(LIVE_POLL_MS)
+            }
+        }
+    }
+
+    fun closeLive() {
+        livePoll?.cancel()
+        _state.update { if (it.screen == Screen.Live) it.copy(screen = Screen.Menu) else it }
+    }
+
+    /** Walks into a listed game; it is already being played, so they watch. */
+    fun watchLive(code: String) {
+        livePoll?.cancel()
+        join(code)
+    }
+
+    private var livePoll: Job? = null
+
+    /** Lets anyone watch this table from the list, or takes it off. */
+    fun setListed(listed: Boolean) = client?.send(ClientMessage.SetListed(listed))
 
     fun proposeTarget(target: Int) = client?.send(ClientMessage.ProposeTarget(target))
 
@@ -616,6 +655,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         onlinePoll = viewModelScope.launch {
             while (true) {
                 askWhoIsOnline()
+                presence?.send(ClientMessage.ListLiveGames)
                 delay(ONLINE_POLL_MS)
             }
         }
@@ -650,6 +690,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 if (it.invite == message || it.room?.code == message.code) it else it.copy(invite = message)
             }
             is ServerMessage.UpdateAvailable -> offerUpdate(message)
+            is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
             is ServerMessage.Record -> _state.update {
                 it.copy(record = message.record ?: it.record, recordLoading = false, recordKept = message.record != null)
             }
@@ -833,6 +874,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             Screen.Rules -> closeRules()
             Screen.Profile -> closeProfile()
             Screen.Friends -> closeFriends()
+            Screen.Live -> closeLive()
             Screen.Menu -> Unit
         }
     }
@@ -857,6 +899,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_FRIENDS = 60
         const val ONLINE_POLL_MS = 15_000L
         const val RECORD_WAIT_MS = 75_000L
+        const val LIVE_POLL_MS = 8_000L
         const val KEY_UPDATE_LATER = "updateLater"
         const val PHOTO_SIZE = 160
     }

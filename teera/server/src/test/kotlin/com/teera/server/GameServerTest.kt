@@ -339,6 +339,37 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `a listed game shows to anybody asking, and they can come in and watch it`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        val host = ws.webSocketSession("/ws")
+        host.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        host.await<ServerMessage.Welcome>()
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = host.await<ServerMessage.RoomUpdate>().room.code
+        (1..3).forEach { host.say(ClientMessage.SetBot(it, enabled = true, difficulty = Difficulty.NORMAL)) }
+        host.await<ServerMessage.RoomUpdate> { it.room.seats.count { s -> s.isBot } == 3 }
+        host.say(ClientMessage.StartMatch)
+        host.await<ServerMessage.GameUpdate>()
+
+        val passerBy = ws.webSocketSession("/ws")
+        passerBy.say(ClientMessage.Hello("Hassan", appVersion = 99))
+        passerBy.await<ServerMessage.Welcome>()
+        passerBy.say(ClientMessage.ListLiveGames)
+        assertTrue(passerBy.await<ServerMessage.LiveGames>().games.isEmpty(), "not listed yet")
+
+        host.say(ClientMessage.SetListed(true))
+        host.await<ServerMessage.GameUpdate> { it.view.listed }
+        passerBy.say(ClientMessage.ListLiveGames)
+        val listed = passerBy.await<ServerMessage.LiveGames>().games.single()
+        assertEquals(code, listed.code)
+
+        passerBy.say(ClientMessage.JoinRoom(listed.code))
+        assertTrue(passerBy.await<ServerMessage.GameUpdate>().view.spectating)
+    }
+
+    @Test
     fun `the download page hands out the latest build`() = testApplication {
         application { gameServer() }
         val page = client.get("/download").bodyAsText()

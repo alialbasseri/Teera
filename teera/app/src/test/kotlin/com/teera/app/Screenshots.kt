@@ -151,11 +151,23 @@ class Screenshots {
         MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "KHAN")
     }
 
+    /** The games being played that anyone may watch. */
+    @Test
+    fun liveGames() = shoot("live-games") {
+        com.teera.app.ui.LiveGamesScreen(
+            listOf(
+                com.teera.core.LiveGame("KHAN", listOf("علي", "سارة", "عمر", "نور"), listOf("p:0", "p:6", "p:2", "p:3"), listOf(88, 140), 201, 7, 2),
+                com.teera.core.LiveGame("BGDD", listOf("حسن", "سيف", "عبود", "بوت"), listOf("p:7", "p:5", "", ""), listOf(12, -25), 251, 2, 0),
+            ),
+            onWatch = {}, onClose = {},
+        )
+    }
+
     /** A short phone, text up a little, a room to go back to: still one screen, nothing scrolls. */
     @Test
     @Config(sdk = [34], qualifiers = "w360dp-h680dp-xxhdpi", fontScale = 1.15f)
     fun menuShortPhone() = shoot("menu-short-phone") {
-        MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "QCNU")
+        MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "QCNU", liveCount = 2)
     }
 
     /** A "ناخذ خاوة" being voted on, this player not having answered yet. */

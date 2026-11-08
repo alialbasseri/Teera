@@ -83,8 +83,8 @@ private fun joinPage(code: String): String {
 }
 
 /** The build at [APK_URL]: bump these with it, so older apps are told to update. */
-const val LATEST_APP_VERSION = 19
-const val LATEST_APP_NAME = "1.4.1"
+const val LATEST_APP_VERSION = 21
+const val LATEST_APP_NAME = "1.5.0"
 
 /** Apps older than this are told they must update, not just that they may. */
 const val MIN_APP_VERSION = 0

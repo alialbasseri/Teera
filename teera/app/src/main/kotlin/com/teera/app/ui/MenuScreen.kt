@@ -83,6 +83,9 @@ fun MenuScreen(
     onFriends: () -> Unit = {},
     /** How many of this player's people have the app open, for the link's count. */
     friendsOnline: Int = 0,
+    /** The list of games being played that anyone may watch, and how many there are. */
+    onLive: () -> Unit = {},
+    liveCount: Int = 0,
     avatar: @Composable (size: Dp) -> Unit = { size -> Initial(playerName, size) },
 ) {
     var code by remember { mutableStateOf("") }
@@ -116,12 +119,21 @@ fun MenuScreen(
                             Emblem(Modifier.wrapContentSize(unbounded = true).scale(k))
                         }
                     }
-                    Text(
-                        "طيرة",
-                        color = Felt.Brass,
-                        fontSize = if (room >= 250.dp && roomy) 62.sp else 52.sp,
-                        style = MaterialTheme.typography.displayLarge,
-                    )
+                    // The name shrinks last, and only goes when there is truly no room for it.
+                    if (room >= 44.dp) {
+                        Text(
+                            "طيرة",
+                            color = Felt.Brass,
+                            fontSize = when {
+                                room >= 250.dp && roomy -> 62.sp
+                                room >= 90.dp -> 52.sp
+                                room >= 64.dp -> 38.sp
+                                else -> 28.sp
+                            },
+                            style = MaterialTheme.typography.displayLarge,
+                            maxLines = 1,
+                        )
+                    }
                     if (roomy && room >= 300.dp) {
                         Text("دومينا عراقية · أربعة · فريقين", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium)
                     }
@@ -207,6 +219,12 @@ fun MenuScreen(
                         Spacer(Modifier.width(10.dp))
                         BrassButton("ادخل", { onJoin(code) }, enabled = code.length == 4 && !connecting)
                     }
+                    Spacer(Modifier.height(6.dp))
+                    SmallLink(
+                        if (liveCount > 0) "تفرّج على اللعبات الماشية ($liveCount)" else "تفرّج على اللعبات الماشية",
+                        onLive,
+                        tag = "live",
+                    )
                 }
 
               }

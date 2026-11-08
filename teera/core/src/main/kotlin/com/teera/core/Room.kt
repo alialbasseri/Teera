@@ -106,7 +106,37 @@ class Room(
         ready = members.values.filter { it.ready }.map { it.playerId },
         started = isStarted,
         spectators = spectatorSeats(),
+        listed = listed,
     )
+
+    // -- the list of games being played ------------------------------------------
+
+    /** Whether anyone may find this table in the list and watch it. Any one player may say so. */
+    var listed: Boolean = false
+        private set
+
+    fun setListed(playerId: String, listed: Boolean): Output {
+        if (members[playerId] == null && standIns.values.none { it == playerId }) return Output.NOTHING
+        if (this.listed == listed) return Output.NOTHING
+        this.listed = listed
+        return Output(roomChanged = true, viewChanged = isStarted)
+    }
+
+    /** How this table looks in the list; null when it is not in it. */
+    fun liveGame(): LiveGame? {
+        val state = game ?: return null
+        if (!listed || state.phase == Phase.MATCH_OVER || members.values.none { it.connected }) return null
+        val seats = seatList()
+        return LiveGame(
+            code = code,
+            names = seats.map { if (it.isBot) "بوت" else it.name },
+            avatars = seats.map { it.avatar },
+            scores = state.scores,
+            target = state.rules.target,
+            gameNumber = state.gameNumber,
+            watchers = watchers.size,
+        )
+    }
 
     // -- watchers ---------------------------------------------------------------
 
@@ -531,7 +561,7 @@ class Room(
         val seat = seatOf(playerId)
         if (seat != null) {
             return state.viewFor(seat, code, turnDeadline)
-                .copy(seats = seats, alertVote = vote, spectators = spectatorSeats(), showingHands = shared, targetVote = targetVote)
+                .copy(seats = seats, alertVote = vote, spectators = spectatorSeats(), showingHands = shared, targetVote = targetVote, listed = listed)
         }
         // A watcher sees the table from a player's shoulder; their tiles only if that
         // player chose to show them, and never a move to make.
@@ -547,6 +577,7 @@ class Room(
             showingHands = shared,
             revealedHands = (0 until Pack.PLAYERS).map { if (it in shared) state.handOf(it) else emptyList() },
             targetVote = targetVote,
+            listed = listed,
         )
     }
 

@@ -150,6 +150,8 @@ fun TableScreen(
     /** Asking the table to play to another score, and answering somebody who asked. */
     onProposeTarget: ((Int) -> Unit)? = null,
     onVoteTarget: (Boolean) -> Unit = {},
+    /** Lets anyone watch this table from the list of games being played; null with bots. */
+    onListed: ((Boolean) -> Unit)? = null,
     /** "ناخذ خاوة" on the other team; null where there is nobody to vote (bots). */
     onRaiseAlert: (() -> Unit)? = null,
     onVoteAlert: (Boolean) -> Unit = {},
@@ -242,6 +244,9 @@ fun TableScreen(
         } else {
             emptyList()
         } + listOfNotNull(
+            onListed?.takeIf { !view.spectating && onChat != null }?.let { set ->
+                MenuOption(if (view.listed) "لعبتنا تبين للكل" else "خلي لعبتنا تبين للكل", lit = view.listed) { set(!view.listed) }
+            },
             onProposeTarget?.takeIf { !view.spectating && !over && view.targetVote == null && view.targetChoices().isNotEmpty() }
                 ?.let { MenuOption("غيّر النقاط (هسه ${view.rules.target})") { askTarget = true } },
         )

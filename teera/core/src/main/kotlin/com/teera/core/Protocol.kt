@@ -37,6 +37,21 @@ data class RoomInfo(
     val started: Boolean = false,
     /** People watching rather than playing; their seat numbers start at 4. */
     val spectators: List<Seat> = emptyList(),
+    /** A player let the table show in the list of games being played, for anyone to watch. */
+    val listed: Boolean = false,
+)
+
+/** A game being played that its players let anyone watch, as the list shows it. */
+@Serializable
+data class LiveGame(
+    val code: String,
+    /** Names by seat: 0 and 2 against 1 and 3. */
+    val names: List<String>,
+    val avatars: List<String> = emptyList(),
+    val scores: List<Int>,
+    val target: Int,
+    val gameNumber: Int,
+    val watchers: Int,
 )
 
 /**
@@ -87,6 +102,8 @@ data class PlayerView(
     val revealedHands: List<List<Domino>> = emptyList(),
     /** A change of target being voted on right now, if any. */
     val targetVote: TargetVote? = null,
+    /** Whether the table shows in the list of games being played. */
+    val listed: Boolean = false,
 ) {
     /** A hand a watcher may see, at [seat]; empty when it is not shown. */
     fun revealedAt(seat: Int): List<Domino> = revealedHands.getOrElse(seat) { emptyList() }
@@ -268,6 +285,14 @@ sealed interface ClientMessage {
     @Serializable @SerialName("standIn")
     data class StandIn(val seat: Int?) : ClientMessage
 
+    /** Lets anyone watch this table from the list of games being played, or stops it. */
+    @Serializable @SerialName("setListed")
+    data class SetListed(val listed: Boolean) : ClientMessage
+
+    /** The games being played that anyone may watch. */
+    @Serializable @SerialName("liveGames")
+    data object ListLiveGames : ClientMessage
+
     /** This player's record from the server's books: totals and their latest matches. */
     @Serializable @SerialName("myRecord")
     data object MyRecord : ClientMessage
@@ -370,6 +395,9 @@ sealed interface ServerMessage {
      */
     @Serializable @SerialName("update")
     data class UpdateAvailable(val versionCode: Int, val versionName: String, val url: String, val required: Boolean = false) : ServerMessage
+
+    @Serializable @SerialName("liveGames")
+    data class LiveGames(val games: List<LiveGame>) : ServerMessage
 
     /** How a vote to change the target went. */
     @Serializable @SerialName("targetResult")

@@ -210,6 +210,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onProfile = viewModel::showProfile,
                     onRejoin = viewModel::rejoin,
                     onFriends = viewModel::showFriends,
+                    onLive = viewModel::showLive,
+                    liveCount = state.liveGames.size,
                     friendsOnline = state.friends.count { it.id in state.online },
                     avatar = { size ->
                         com.teera.app.ui.Avatar(state.avatar, state.playerName, size, state.photos[state.myId])
@@ -217,6 +219,12 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                 )
 
                 Screen.Rules -> RulesScreen(onClose = viewModel::closeRules)
+
+                Screen.Live -> com.teera.app.ui.LiveGamesScreen(
+                    games = state.liveGames,
+                    onWatch = viewModel::watchLive,
+                    onClose = viewModel::closeLive,
+                )
 
                 Screen.Friends -> com.teera.app.ui.FriendsScreen(
                     myCode = state.myCode,
@@ -305,6 +313,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onWatch = viewModel::watch,
                         onStandIn = { seat -> viewModel.standIn(seat) },
                         onProposeTarget = { target -> viewModel.proposeTarget(target) },
+                        onListed = { listed -> viewModel.setListed(listed) },
                         onVoteTarget = { yes -> viewModel.voteTarget(yes) },
                         onVoteAlert = { yes -> viewModel.voteAlert(yes) },
                         steps = state.steps,
