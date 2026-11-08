@@ -151,6 +151,13 @@ class Screenshots {
         MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "KHAN")
     }
 
+    /** A short phone, text up a little, a room to go back to: still one screen, nothing scrolls. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h680dp-xxhdpi", fontScale = 1.15f)
+    fun menuShortPhone() = shoot("menu-short-phone") {
+        MenuScreen("علي", {}, {}, {}, {}, connecting = false, lastRoom = "QCNU")
+    }
+
     /** A "ناخذ خاوة" being voted on, this player not having answered yet. */
     @Test
     fun alertVote() = shoot("alert-vote") {

@@ -13,8 +13,8 @@ android {
         // 26: the room server a phone runs to host on the Wi-Fi needs java.time and NIO.
         minSdk = 26
         targetSdk = 34
-        versionCode = 19
-        versionName = "1.4.1"
+        versionCode = 20
+        versionName = "1.4.2"
 
         // Ali's server on Render (see DEPLOY.md); -Pteera.server=... points a build elsewhere.
         buildConfigField(

@@ -16,14 +16,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -95,22 +93,38 @@ fun MenuScreen(
         BoxWithConstraints(Modifier.fillMaxSize()) {
             // Smaller phones get a smaller emblem rather than a scrolling menu.
             val roomy = maxHeight > 720.dp
-            // Laid out to fill exactly one screen; only if a small phone with large text
-            // cannot hold it all does it scroll, rather than cutting the bottom off.
+            // One screen, fixed: nothing scrolls. The emblem takes whatever height is left
+            // over and shrinks to fit it, so a "back to your room" button or a small phone
+            // makes the emblem smaller rather than the menu move.
             Column(
                 Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .heightIn(min = maxHeight)
+                    .fillMaxSize()
                     .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.SpaceBetween,
             ) {
-              Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Emblem(Modifier.scale(if (roomy) 1f else 0.78f))
-                Text("طيرة", color = Felt.Brass, fontSize = if (roomy) 62.sp else 52.sp, style = MaterialTheme.typography.displayLarge)
-                if (roomy) {
-                    Text("دومينا عراقية · أربعة · فريقين", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium)
+              BoxWithConstraints(
+                  Modifier.weight(1f).fillMaxWidth(),
+                  contentAlignment = Alignment.Center,
+              ) {
+                val room = maxHeight
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // The emblem is 140 high and the name about 80: shrink the emblem into
+                    // what is left, and leave it out when that would make it a crumb.
+                    val k = ((room - 84.dp) / 140.dp).coerceAtMost(1f)
+                    if (k >= 0.45f) {
+                        Box(Modifier.size(200.dp * k, 140.dp * k), contentAlignment = Alignment.Center) {
+                            Emblem(Modifier.wrapContentSize(unbounded = true).scale(k))
+                        }
+                    }
+                    Text(
+                        "طيرة",
+                        color = Felt.Brass,
+                        fontSize = if (room >= 250.dp && roomy) 62.sp else 52.sp,
+                        style = MaterialTheme.typography.displayLarge,
+                    )
+                    if (roomy && room >= 300.dp) {
+                        Text("دومينا عراقية · أربعة · فريقين", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
               }
               Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 12.dp)) {
