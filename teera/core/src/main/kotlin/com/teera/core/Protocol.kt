@@ -80,7 +80,17 @@ data class PlayerView(
     val spectators: List<Seat> = emptyList(),
     /** Seats whose players let the watchers see their tiles. */
     val showingHands: List<Int> = emptyList(),
+    /**
+     * For a watcher: every hand whose player lets it be seen, indexed by seat (empty for
+     * the rest), so they see all of them round the table and not only the one in front.
+     */
+    val revealedHands: List<List<Domino>> = emptyList(),
+    /** A change of target being voted on right now, if any. */
+    val targetVote: TargetVote? = null,
 ) {
+    /** A hand a watcher may see, at [seat]; empty when it is not shown. */
+    fun revealedAt(seat: Int): List<Domino> = revealedHands.getOrElse(seat) { emptyList() }
+
     val yourTeam: Int get() = teamOf(yourSeat)
     val isYourMove: Boolean get() = !spectating && actingSeat == yourSeat
     fun seatInfo(seat: Int): Seat? = seats.firstOrNull { it.seat == seat }
@@ -106,6 +116,23 @@ data class AlertVote(
     /** Passes on more than half of the voters agreeing, so a team cannot carry it alone. */
     val needed: Int get() = voters.size / 2 + 1
 }
+
+/**
+ * Changing what the match is played to, mid-match (201 to 251, say). Every person at the
+ * table has to agree: it changes the game for all of them.
+ */
+@Serializable
+data class TargetVote(
+    val proposedBy: Int,
+    val target: Int,
+    val voters: List<Int>,
+    val yes: List<Int>,
+    val no: List<Int>,
+    val deadlineEpochMs: Long,
+)
+
+/** Scores a match can be played to. */
+val TARGET_CHOICES = listOf(101, 151, 201, 251, 301, 351, 401)
 
 /** Builds the redacted view a seat is allowed to see. */
 fun GameState.viewFor(seat: Int, roomCode: String, turnDeadlineEpochMs: Long? = null) = PlayerView(
@@ -224,6 +251,21 @@ sealed interface ClientMessage {
     @Serializable @SerialName("invite")
     data class Invite(val playerId: String, val code: String) : ClientMessage
 
+    /** Asks the table to play the match to [target] instead. */
+    @Serializable @SerialName("proposeTarget")
+    data class ProposeTarget(val target: Int) : ClientMessage
+
+    @Serializable @SerialName("voteTarget")
+    data class VoteTarget(val yes: Boolean) : ClientMessage
+
+    /** This phone just took a screenshot of the table; everyone else is told. */
+    @Serializable @SerialName("screenCaptured")
+    data object ScreenCaptured : ClientMessage
+
+    /** A watcher plays a dropped player's (or a bot's) chair; null gives it back. */
+    @Serializable @SerialName("standIn")
+    data class StandIn(val seat: Int?) : ClientMessage
+
     /** This player's record from the server's books: totals and their latest matches. */
     @Serializable @SerialName("myRecord")
     data object MyRecord : ClientMessage
@@ -248,11 +290,15 @@ enum class Emote {
     CHAT,
     /** "شيل" */
     SHEEL,
+    /** "سبلوش!" */
+    SPLOOSH,
+    /** "والله دنيييكم" */
+    WALLAH,
     ;
 
     companion object {
         /** What the soundboard offers, in order. */
-        val BOARD = listOf(GULP, NO_WAY, SHEEL, CHAT, DRUMROLL, SAD)
+        val BOARD = listOf(GULP, NO_WAY, SHEEL, SPLOOSH, WALLAH, CHAT, DRUMROLL, SAD)
     }
 }
 
@@ -311,6 +357,14 @@ sealed interface ServerMessage {
     /** Somebody's own picture, sent once when either of you joins rather than with every view. */
     @Serializable @SerialName("avatar")
     data class Avatar(val playerId: String, val photo: String) : ServerMessage
+
+    /** Somebody at the table took a screenshot: [seat] as their voice and chat carry it. */
+    @Serializable @SerialName("screenshot")
+    data class ScreenshotTaken(val seat: Int, val name: String) : ServerMessage
+
+    /** How a vote to change the target went. */
+    @Serializable @SerialName("targetResult")
+    data class TargetResult(val target: Int, val passed: Boolean) : ServerMessage
 
     /** The answer to [ClientMessage.MyRecord]; null where the server keeps no books. */
     @Serializable @SerialName("record")

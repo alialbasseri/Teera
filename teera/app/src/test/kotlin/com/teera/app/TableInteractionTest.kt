@@ -1,6 +1,10 @@
 package com.teera.app
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.pinch
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -132,5 +136,33 @@ class TableInteractionTest {
         }
         compose.waitForIdle()
         assertTrue(left(first) < left(second), "3|5 now sits to the left of 4|4")
+    }
+
+    @Test
+    fun `two fingers zoom the table, one button puts it back, and the arms still take a tap`() {
+        var tapped: Arm? = null
+        compose.setContent {
+            com.teera.app.ui.BoardView(
+                board(),
+                modifier = androidx.compose.ui.Modifier
+                    .size(360.dp, 600.dp)
+                    .testTag("board"),
+                liveArms = setOf(Arm.NORTH),
+                onArmTapped = { tapped = it },
+            )
+        }
+        compose.onNodeWithTag("board").performTouchInput {
+            pinch(
+                start0 = center - androidx.compose.ui.geometry.Offset(20f, 0f),
+                end0 = center - androidx.compose.ui.geometry.Offset(160f, 0f),
+                start1 = center + androidx.compose.ui.geometry.Offset(20f, 0f),
+                end1 = center + androidx.compose.ui.geometry.Offset(160f, 0f),
+            )
+        }
+        compose.onNodeWithTag("zoom-reset").assertExists()
+        compose.onNodeWithTag("zoom-reset").performClick()
+        compose.onNodeWithTag("zoom-reset").assertDoesNotExist()
+        compose.onNodeWithTag("arm-NORTH").performClick()
+        assertEquals(Arm.NORTH, tapped)
     }
 }

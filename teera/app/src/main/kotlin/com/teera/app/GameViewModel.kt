@@ -88,6 +88,8 @@ data class UiState(
     val recordLoading: Boolean = false,
     /** False when the server answered that it keeps no books. */
     val recordKept: Boolean = true,
+    /** Counts screenshots somebody else took of the table; the screen flashes on each. */
+    val screenshots: Int = 0,
     /** Everything that happened in the game on the table, in order, for the review after it. */
     val steps: List<com.teera.core.GameEvent> = emptyList(),
 ) {
@@ -110,6 +112,27 @@ fun normaliseServer(input: String): String {
         else -> "wss://$address"
     }
     return if (address.endsWith("/ws")) address else "$address/ws"
+}
+
+/**
+ * Says why the bones were dealt again, or why the opening went to somebody other than
+ * who won the last game (they had no چفت), so nobody wonders what happened.
+ */
+internal fun explainDeal(before: PlayerView?, next: PlayerView): String? {
+    fun name(seat: Int?) = seat?.let { next.seatInfo(it)?.name?.trim() }.orEmpty().ifEmpty { "لاعب" }
+    val redealt = next.events.filterIsInstance<com.teera.core.GameEvent.Redealt>().lastOrNull()
+    if (redealt != null) {
+        return "انعاد الخلط: " + when (redealt.reason) {
+            com.teera.core.RedealReason.FIVE_DOUBLES -> "واحد طلعتله 5 چفتات"
+            com.teera.core.RedealReason.SIX_OF_A_NUMBER -> "واحد طلعتله 6 بولات بنفس الرقم"
+            com.teera.core.RedealReason.OPPONENTS_CANNOT_ANSWER -> "الخصم ما عنده رقم چفت الفتحة"
+            com.teera.core.RedealReason.FOUR_DOUBLES_BY_CHOICE -> "${name(redealt.seat)} عنده 4 چفتات وطلب يعيد"
+        }
+    }
+    val dealt = next.events.filterIsInstance<com.teera.core.GameEvent.Dealt>().lastOrNull() ?: return null
+    val due = before?.lastGame?.nextOpener ?: return null
+    if (dealt.gameNumber <= 1 || dealt.opener == due) return null
+    return "${name(due)} ما عنده چفت، فالفتحة صارت لـ ${name(dealt.opener)}"
 }
 
 /** Adds what [next] says happened to the game's steps so far (see [com.teera.core.gatherSteps]). */
@@ -408,7 +431,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 val repeat = before != null && before.events == message.view.events &&
                     before.board == message.view.board && before.actingSeat == message.view.actingSeat &&
                     before.phase == message.view.phase && before.gameNumber == message.view.gameNumber
-                if (!repeat) _reactions.tryEmit(react(before, message.view))
+                if (!repeat) {
+                    _reactions.tryEmit(react(before, message.view))
+                    explainDeal(before, message.view)?.let { text -> _state.update { it.copy(notice = text) } }
+                }
                 lastView = message.view
                 val steps = gatherSteps(_state.value.steps, before, message.view)
                 _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false, steps = steps) }
@@ -456,6 +482,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(notice = text) }
             }
 
+            is ServerMessage.TargetResult -> _state.update {
+                it.copy(
+                    notice = if (message.passed) "وافق الكل: اللعبة صارت لـ ${message.target}"
+                    else "ما وافقوا كلهم، اللعبة تبقى لـ ${it.view?.rules?.target ?: ""}",
+                )
+            }
+
+            is ServerMessage.ScreenshotTaken -> _state.update {
+                it.copy(notice = "📸 ${message.name} أخذ سكرين شوت", screenshots = it.screenshots + 1)
+            }
+
             is ServerMessage.Online, is ServerMessage.PlayerFound,
             is ServerMessage.Invited, is ServerMessage.InviteSent, is ServerMessage.Record -> onPresence(message)
         }
@@ -483,6 +520,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** A watcher moves to another player's shoulder. */
     fun watch(seat: Int) = client?.send(ClientMessage.Watch(seat))
+
+    fun proposeTarget(target: Int) = client?.send(ClientMessage.ProposeTarget(target))
+
+    fun voteTarget(yes: Boolean) = client?.send(ClientMessage.VoteTarget(yes))
+
+    /** This phone took a screenshot while at a table: the others are told. */
+    fun screenCaptured() {
+        if (_state.value.screen == Screen.Table) client?.send(ClientMessage.ScreenCaptured)
+    }
+
+    /** A watcher plays a dropped player's chair; null hands it back. */
+    fun standIn(seat: Int?) = client?.send(ClientMessage.StandIn(seat))
 
     fun sendEmote(emote: Emote) = client?.send(ClientMessage.SendEmote(emote))
 
@@ -736,6 +785,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     fun closeRules() = _state.update { if (it.screen == Screen.Rules) it.copy(screen = Screen.Menu) else it }
 
     fun leave() {
+        // Walking out of a match keeps the chair on the server; keep the way back to it too.
+        val keepSeat = _state.value.view?.let { !it.spectating && it.phase != com.teera.core.Phase.MATCH_OVER } == true
         voice.stopAll()
         listening?.cancel()
         client?.send(ClientMessage.LeaveRoom)
@@ -743,7 +794,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client = null
         pump?.cancel()
         linkWatch?.cancel()
-        if (onInternet) rememberRoom(null)
+        if (onInternet && !keepSeat) rememberRoom(null)
         onInternet = false
         lastView = null
         stopHosting()

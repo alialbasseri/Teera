@@ -30,11 +30,18 @@ import kotlin.math.min
 
 fun pipColour(value: Int): Color = Color(TileArt.colourOf(value) or 0xFF000000.toInt())
 
-private fun DrawScope.drawFace(value: Int, area: Rect) {
+/**
+ * The spots of one face. [TileArt] lays them out for a bone standing up; on a bone lying
+ * down they are turned with it, so the six's two rows of three always run along the
+ * bone's length, as on a real one.
+ */
+private fun DrawScope.drawFace(value: Int, area: Rect, standing: Boolean) {
     val radius = min(area.width, area.height) * 0.095f
     val colour = pipColour(value)
     for (pip in TileArt.pipsOf(value)) {
-        val centre = Offset(area.left + pip.x * area.width, area.top + pip.y * area.height)
+        val x = if (standing) pip.x else pip.y
+        val y = if (standing) pip.y else pip.x
+        val centre = Offset(area.left + x * area.width, area.top + y * area.height)
         // A drilled spot: its own shadow beneath, a touch of light on the top left.
         drawCircle(Felt.PipShadow, radius * 1.1f, centre.copy(y = centre.y + radius * 0.22f))
         drawCircle(colour, radius, centre)
@@ -126,8 +133,8 @@ fun DrawScope.drawDomino(
             strokeWidth = divider,
             cap = StrokeCap.Round,
         )
-        drawFace(faceA ?: 0, Rect(0f, 0f, width, height / 2f))
-        drawFace(faceB ?: 0, Rect(0f, height / 2f, width, height))
+        drawFace(faceA ?: 0, Rect(0f, 0f, width, height / 2f), standing = true)
+        drawFace(faceB ?: 0, Rect(0f, height / 2f, width, height), standing = true)
     } else {
         drawLine(
             color = Felt.BoneEdge.copy(alpha = 0.45f * alpha),
@@ -136,8 +143,8 @@ fun DrawScope.drawDomino(
             strokeWidth = divider,
             cap = StrokeCap.Round,
         )
-        drawFace(faceA ?: 0, Rect(0f, 0f, width / 2f, height))
-        drawFace(faceB ?: 0, Rect(width / 2f, 0f, width, height))
+        drawFace(faceA ?: 0, Rect(0f, 0f, width / 2f, height), standing = false)
+        drawFace(faceB ?: 0, Rect(width / 2f, 0f, width, height), standing = false)
     }
 
     if (highlight != null) {

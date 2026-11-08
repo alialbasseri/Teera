@@ -154,7 +154,36 @@ class Room(
         members.values.any { it.seat == seat } || bots.containsKey(seat)
     }
 
-    fun seatOf(playerId: String): Int? = members[playerId]?.seat
+    fun seatOf(playerId: String): Int? =
+        members[playerId]?.seat ?: standIns.entries.firstOrNull { it.value == playerId }?.key
+
+    /**
+     * Watchers playing a chair for somebody whose line dropped (or for a bot), by seat.
+     * The chair stays its owner's: when they come back, it is theirs again.
+     */
+    private val standIns = HashMap<Int, String>()
+
+    /** Who is standing in at [seat], if anyone. */
+    fun standInAt(seat: Int): String? = standIns[seat]
+
+    /**
+     * A watcher takes over a chair whose player has dropped, or a bot's, so a friend
+     * watching can keep the game going. [seat] null gives the chair back.
+     */
+    fun standIn(playerId: String, seat: Int?): Output {
+        if (!watchers.containsKey(playerId) || !isStarted) return Output.NOTHING
+        if (seat == null) {
+            return if (standIns.values.remove(playerId)) Output(roomChanged = true, viewChanged = true) else Output.NOTHING
+        }
+        if (seat !in 0 until Pack.PLAYERS || standIns.containsKey(seat) || standIns.containsValue(playerId)) {
+            return Output.NOTHING
+        }
+        val owner = members.values.firstOrNull { it.seat == seat }
+        val free = if (owner != null) !owner.connected else bots.containsKey(seat)
+        if (!free) return Output.NOTHING
+        standIns[seat] = playerId
+        return Output(roomChanged = true, viewChanged = true)
+    }
 
     /** Everybody who hears the table: the players with a connection, and the watchers. */
     fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId } + watchers.keys
@@ -165,6 +194,8 @@ class Room(
             existing.goneSince = null
             existing.name = name
             existing.avatar = avatar
+            // Back in their own chair: whoever stood in goes back to watching.
+            standIns.remove(existing.seat)
             return Output(roomChanged = true, viewChanged = isStarted)
         }
         watchers[playerId]?.let { existing ->
@@ -213,7 +244,10 @@ class Room(
     }
 
     fun disconnect(playerId: String): Output {
-        if (watchers.remove(playerId) != null) return Output(roomChanged = true, viewChanged = isStarted)
+        if (watchers.remove(playerId) != null) {
+            standIns.values.remove(playerId)
+            return Output(roomChanged = true, viewChanged = isStarted)
+        }
         val member = members[playerId] ?: return Output.NOTHING
         member.connected = false
         member.goneSince = clock()
@@ -226,7 +260,10 @@ class Room(
     }
 
     fun leave(playerId: String): Output {
-        if (watchers.remove(playerId) != null) return Output(roomChanged = true, viewChanged = isStarted)
+        if (watchers.containsKey(playerId)) return disconnect(playerId)
+        // Walking away mid-match keeps the chair, as a dropped line does: a bot covers it
+        // and they can come back to it. Only before the deal does leaving free the seat.
+        if (isStarted && members.containsKey(playerId)) return disconnect(playerId)
         showingHands -= playerId
         members.remove(playerId) ?: return Output.NOTHING
         if (hostId == playerId) hostId = members.keys.firstOrNull() ?: hostId
@@ -308,6 +345,7 @@ class Room(
     fun awaitingBot(): Boolean {
         val state = game ?: return false
         val seat = state.actingSeat ?: return false
+        if (standIns.containsKey(seat)) return false
         val member = members.values.firstOrNull { it.seat == seat } ?: return true
         if (member.connected) return false
         return clock() - (member.goneSince ?: Long.MIN_VALUE / 2) >= RECONNECT_GRACE_MS
@@ -379,11 +417,73 @@ class Room(
         return settleVoteIfDecided() ?: Output.VIEW
     }
 
-    /** Thirty seconds and no answer counts as no. */
+    /** Thirty seconds and no answer counts as no; for a change of target too. */
     fun expireAlertIfDue(): Output {
-        val current = vote ?: return Output.NOTHING
-        if (clock() < current.deadlineEpochMs) return Output.NOTHING
-        return settle(current)
+        var output = Output.NOTHING
+        val current = vote
+        if (current != null && clock() >= current.deadlineEpochMs) output += settle(current)
+        val change = targetVote
+        if (change != null && clock() >= change.deadlineEpochMs) output += settleTarget(change, passed = false)
+        return output
+    }
+
+    // -- changing the target -----------------------------------------------
+
+    private var targetVote: TargetVote? = null
+
+    /** The people at the table: players with a connection, and anyone standing in. */
+    private fun peopleSeats(): List<Int> =
+        (members.values.filter { it.connected }.map { it.seat } + standIns.keys).distinct().sorted()
+
+    /**
+     * Somebody asks to play the match to [target] instead (rule-of-the-house: only by
+     * everyone's agreement). Not below a score already reached, which would end it there.
+     */
+    fun proposeTarget(playerId: String, target: Int): Output {
+        val state = game ?: return Output.NOTHING
+        val seat = seatOf(playerId) ?: return Output.NOTHING
+        if (targetVote != null || state.phase == Phase.MATCH_OVER) return Output.NOTHING
+        if (target !in TARGET_CHOICES || target == state.rules.target || target <= state.scores.max()) {
+            return Output.NOTHING
+        }
+        targetVote = TargetVote(
+            proposedBy = seat,
+            target = target,
+            voters = peopleSeats(),
+            yes = listOf(seat),
+            no = emptyList(),
+            deadlineEpochMs = clock() + rules.alertVoteSeconds * 1000L,
+        )
+        return settleTargetIfDecided() ?: Output.VIEW
+    }
+
+    fun voteTarget(playerId: String, yes: Boolean): Output {
+        val current = targetVote ?: return Output.NOTHING
+        val seat = seatOf(playerId) ?: return Output.NOTHING
+        if (seat !in current.voters || seat in current.yes || seat in current.no) return Output.NOTHING
+        targetVote = if (yes) current.copy(yes = current.yes + seat) else current.copy(no = current.no + seat)
+        return settleTargetIfDecided() ?: Output.VIEW
+    }
+
+    /** Everyone yes passes it; a single no ends it. */
+    private fun settleTargetIfDecided(): Output? {
+        val current = targetVote ?: return null
+        return when {
+            current.no.isNotEmpty() -> settleTarget(current, passed = false)
+            current.voters.all { it in current.yes } -> settleTarget(current, passed = true)
+            else -> null
+        }
+    }
+
+    private fun settleTarget(current: TargetVote, passed: Boolean): Output {
+        targetVote = null
+        val state = game
+        if (passed && state != null && state.phase != Phase.MATCH_OVER) {
+            rules = rules.copy(target = current.target)
+            game = state.copy(rules = state.rules.copy(target = current.target))
+        }
+        val result = ServerMessage.TargetResult(current.target, passed)
+        return Output(direct = humanIds().map { it to result }, roomChanged = passed, viewChanged = true)
     }
 
     /** Settles as soon as the outcome can no longer change, rather than waiting the clock out. */
@@ -421,13 +521,17 @@ class Room(
         // The deal fixed who sits where; whether each of them is still connected is live.
         val seats = state.seats.map { seat ->
             val member = members[seat.playerId]
-            seat.copy(connected = seat.isBot || member?.connected == true, avatar = member?.avatar ?: seat.avatar)
+            seat.copy(
+                connected = seat.isBot || member?.connected == true,
+                avatar = member?.avatar ?: seat.avatar,
+                standIn = standIns[seat.seat]?.let { watchers[it]?.name },
+            )
         }
         val shared = showingSeats()
         val seat = seatOf(playerId)
         if (seat != null) {
             return state.viewFor(seat, code, turnDeadline)
-                .copy(seats = seats, alertVote = vote, spectators = spectatorSeats(), showingHands = shared)
+                .copy(seats = seats, alertVote = vote, spectators = spectatorSeats(), showingHands = shared, targetVote = targetVote)
         }
         // A watcher sees the table from a player's shoulder; their tiles only if that
         // player chose to show them, and never a move to make.
@@ -441,6 +545,8 @@ class Room(
             spectating = true,
             spectators = spectatorSeats(),
             showingHands = shared,
+            revealedHands = (0 until Pack.PLAYERS).map { if (it in shared) state.handOf(it) else emptyList() },
+            targetVote = targetVote,
         )
     }
 
@@ -452,6 +558,22 @@ class Room(
         return ServerMessage.ChatMessage(seat, name, trimmed, clock())
     }
 
+    private val lastScreenshot = HashMap<String, Long>()
+
+    /**
+     * Somebody's phone took a screenshot of the table: everybody else hears of it, since a
+     * picture of your bones can be passed on. Once every few seconds per person at most.
+     */
+    fun screenCaptured(playerId: String): Output {
+        val seat = voiceSeatOf(playerId) ?: return Output.NOTHING
+        val name = members[playerId]?.name ?: watchers[playerId]?.name ?: return Output.NOTHING
+        val now = clock()
+        if (now - (lastScreenshot[playerId] ?: Long.MIN_VALUE / 2) < EMOTE_GAP_MS) return Output.NOTHING
+        lastScreenshot[playerId] = now
+        val told = ServerMessage.ScreenshotTaken(seat, name)
+        return Output(direct = humanIds().filter { it != playerId }.map { it to told })
+    }
+
     private val lastEmote = HashMap<String, Long>()
 
     /**
@@ -459,11 +581,11 @@ class Room(
      * per player, so a held thumb cannot drown out the game.
      */
     fun emote(playerId: String, emote: Emote): Output {
-        val member = members[playerId] ?: return Output.NOTHING
+        val seat = seatOf(playerId) ?: return Output.NOTHING
         val now = clock()
         if (now - (lastEmote[playerId] ?: Long.MIN_VALUE / 2) < EMOTE_GAP_MS) return Output.NOTHING
         lastEmote[playerId] = now
-        val shown = ServerMessage.EmoteShown(member.seat, emote)
+        val shown = ServerMessage.EmoteShown(seat, emote)
         return Output(direct = humanIds().map { it to shown })
     }
 

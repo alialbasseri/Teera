@@ -90,6 +90,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -144,6 +145,11 @@ fun TableScreen(
     /** A player showing their tiles to the watchers; a watcher choosing whose. */
     onShowHand: (Boolean) -> Unit = {},
     onWatch: (Int) -> Unit = {},
+    /** A watcher playing a dropped player's chair; null hands it back. */
+    onStandIn: (Int?) -> Unit = {},
+    /** Asking the table to play to another score, and answering somebody who asked. */
+    onProposeTarget: ((Int) -> Unit)? = null,
+    onVoteTarget: (Boolean) -> Unit = {},
     /** "ناخذ خاوة" on the other team; null where there is nobody to vote (bots). */
     onRaiseAlert: (() -> Unit)? = null,
     onVoteAlert: (Boolean) -> Unit = {},
@@ -196,6 +202,7 @@ fun TableScreen(
     var confirmLeave by remember { mutableStateOf(false) }
     var showRules by remember { mutableStateOf(false) }
     var askAlert by remember { mutableStateOf(false) }
+    var askTarget by remember { mutableStateOf(false) }
 
     // The game ends with a moment, and only then the sums.
     val over = view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER
@@ -208,13 +215,25 @@ fun TableScreen(
         }
     }
 
+    // The phone's back gesture is easy to make by accident: ask, as the menu's button does.
+    androidx.activity.compose.BackHandler(enabled = !over && !view.spectating) { confirmLeave = true }
+
+    // A stand-in plays somebody else's chair; they can hand it back.
+    val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null
+
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
 
-        // Watchers choose whose shoulder to look over; players choose whether to be looked at.
+        // Watchers choose whose shoulder to look over, or take a dropped player's chair;
+        // players choose whether to be looked at.
         val options = if (view.spectating) {
-            view.showingHands.map { seat ->
-                MenuOption("تفرّج من ورا ${view.seatInfo(seat)?.name.orEmpty()}", lit = seat == view.yourSeat) { onWatch(seat) }
+            (0 until 4).map { seat ->
+                val showing = if (seat in view.showingHands) " (بولاته تنشاف)" else ""
+                MenuOption("تفرّج من ورا ${view.seatName(seat)}$showing", lit = seat == view.yourSeat) { onWatch(seat) }
+            } + view.openChairs().map { seat ->
+                MenuOption("العب بدال ${view.seatName(seat)}") { onStandIn(seat) }
             }
+        } else if (standingIn) {
+            listOf(MenuOption("رجّع الكرسي وارجع تفرّج") { onStandIn(null) })
         } else if (onChat != null) {
             val showing = view.yourSeat in view.showingHands
             listOf(
@@ -222,9 +241,12 @@ fun TableScreen(
             )
         } else {
             emptyList()
-        }
+        } + listOfNotNull(
+            onProposeTarget?.takeIf { !view.spectating && !over && view.targetVote == null && view.targetChoices().isNotEmpty() }
+                ?.let { MenuOption("غيّر النقاط (هسه ${view.rules.target})") { askTarget = true } },
+        )
         ScoreRail(
-            view, sound, onLeave = { if (over || view.spectating) onLeave() else confirmLeave = true },
+            view, sound, onLeave = { if (over || view.spectating || standingIn) onLeave() else confirmLeave = true },
             talk = talk, onRules = { showRules = true }, options = options,
         )
         // The other three where they sit: partner across the table, the two of the other
@@ -279,6 +301,9 @@ fun TableScreen(
             view.alertVote?.let { vote ->
                 AlertVotePanel(view, vote, onVoteAlert, Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
             }
+            view.targetVote?.takeIf { view.alertVote == null }?.let { vote ->
+                TargetVotePanel(view, vote, onVoteTarget, Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
+            }
         }
         Seated(3, Side.LEFT, Modifier.fillMaxHeight())
         }
@@ -293,7 +318,36 @@ fun TableScreen(
             chat = chat,
             onChat = onChat,
             onRaiseAlert = onRaiseAlert?.takeIf { view.alertVote == null && !over }?.let { raise -> { askAlert = true } },
+            onStandIn = onStandIn.takeIf { view.spectating && onChat != null && !over },
+            avatar = { size -> avatarFor(view.yourSeat, size) },
         )
+
+    if (askTarget) {
+        Dialog(onDismissRequest = { askTarget = false }) {
+            Plaque {
+                Text("غيّر النقاط", color = Felt.Brass, style = MaterialTheme.typography.displaySmall)
+                Text(
+                    "هسه اللعبة لـ ${view.rules.target}. تتغير إذا وافق كل اللي بالطاولة.",
+                    color = Felt.Parchment,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    view.targetChoices().forEach { target ->
+                        Button(
+                            onClick = { askTarget = false; onProposeTarget?.invoke(target) },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (target > view.rules.target) Felt.Brass else Felt.Rail,
+                                contentColor = if (target > view.rules.target) Felt.Ink else Felt.Parchment,
+                            ),
+                            modifier = Modifier.testTag("target-$target"),
+                        ) { Text("$target") }
+                    }
+                }
+                OutlinedButton(onClick = { askTarget = false }) { Text("رجوع", color = Felt.Parchment) }
+            }
+        }
+    }
 
     if (askAlert) {
         Dialog(onDismissRequest = { askAlert = false }) {
@@ -329,7 +383,11 @@ fun TableScreen(
             Plaque {
                 Text("تطلع من الطاولة؟", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "المباراة تضيع، وإذا أونلاين يكمل بوت بدالك",
+                    if (onChat != null) {
+                        "مكانك يبقى محفوظ: يلعب بوت بدالك لحد ما ترجع من «ارجع للطاولة» بالقائمة"
+                    } else {
+                        "الگيم ويا البوتات راح ينتهي"
+                    },
                     color = Felt.Parchment,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
@@ -578,6 +636,8 @@ private fun Emote.words(): String = when (this) {
     Emote.NO_WAY -> "بالله ما طيغ!"
     Emote.CHAT -> "يلا شباب خلي نسولف"
     Emote.SHEEL -> "شيل!"
+    Emote.SPLOOSH -> "سبلوش!"
+    Emote.WALLAH -> "والله دنيييكم"
 }
 
 /** A soundboard press, popping up over whoever pressed it. */
@@ -820,8 +880,12 @@ private fun Hand(
     onRaiseAlert: (() -> Unit)? = null,
     chat: List<com.teera.app.ChatLine> = emptyList(),
     onChat: ((String) -> Unit)? = null,
+    onStandIn: ((Int) -> Unit)? = null,
+    /** The watched player's picture, for a watcher: they sit where this player's own chair would be. */
+    avatar: (@Composable (Dp) -> Unit)? = null,
 ) {
     var trayOpen by remember { mutableStateOf(false) }
+    val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null
     var chatOpen by remember { mutableStateOf(false) }
     // Lines that arrived while the chat was closed.
     var seenChat by remember { mutableStateOf(chat.size) }
@@ -834,10 +898,22 @@ private fun Hand(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (view.spectating && avatar != null) {
+                    Box(
+                        Modifier.size(32.dp).clip(CircleShape).border(1.dp, Felt.Brass.copy(alpha = 0.7f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) { avatar(32.dp) }
+                    Spacer(Modifier.width(8.dp))
+                }
                 Text(
                     text = when {
-                        view.spectating && view.hand.isNotEmpty() -> "تتفرّج من ورا ${view.seatInfo(view.yourSeat)?.name.orEmpty()}"
-                        view.spectating -> "تتفرّج — محد مخلّي بولاته تنشاف"
+                        standingIn && !view.isYourMove -> "تلعب بدال ${view.seatInfo(view.yourSeat)?.name.orEmpty()}"
+                        view.spectating -> "تتفرّج من ورا ${view.seatName(view.yourSeat)}" + when {
+                            view.isDropped(view.yourSeat) -> " — انقطع"
+                            view.actingSeat == view.yourSeat -> " — دوره"
+                            view.hand.isEmpty() -> " — بولاته مخفية"
+                            else -> ""
+                        }
                         view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER -> " "
                         view.isYourMove && view.board.isEmpty -> "افتح الگيم بچفت"
                         view.isYourMove && view.phase == Phase.RESCUE -> "قرارك"
@@ -852,6 +928,12 @@ private fun Hand(
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f),
                 )
+                if (onStandIn != null) {
+                    view.openChairs().firstOrNull { view.isDropped(it) }?.let { seat ->
+                        StandInButton(view.seatName(seat)) { onStandIn(seat) }
+                        Spacer(Modifier.width(4.dp))
+                    }
+                }
                 if (onRaiseAlert != null) {
                     AlertButton(onRaiseAlert)
                     Spacer(Modifier.width(4.dp))
@@ -951,6 +1033,12 @@ private fun Hand(
                     horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.Bottom,
                 ) {
+                    // A watcher behind somebody who keeps their bones hidden sees their backs.
+                    if (view.spectating && shown.isEmpty()) {
+                        repeat(view.handCounts.getOrElse(view.yourSeat) { 0 }) {
+                            DominoTile(null, Modifier.size(tileWidth, tileWidth * 2), faceUp = false)
+                        }
+                    }
                     shown.forEachIndexed { index, tile ->
                         key(view.gameNumber, tile) {
                             val lifted = tile == dragging
@@ -1193,6 +1281,22 @@ private fun ChatToast(chat: List<com.teera.app.ChatLine>, modifier: Modifier) {
 
 /** The "خاوة" button: a red-edged plaque, so it is not pressed by mistake for a sound. */
 @Composable
+private fun StandInButton(name: String, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .height(40.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Felt.Brass)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp)
+            .testTag("stand-in"),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("العب بدال $name", color = Felt.Ink, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+    }
+}
+
+@Composable
 private fun AlertButton(onClick: () -> Unit) {
     Box(
         Modifier
@@ -1277,6 +1381,68 @@ private fun AlertVotePanel(view: PlayerView, vote: com.teera.core.AlertVote, onV
     }
 }
 
+/** Asking everyone at the table to play the match to another score. */
+@Composable
+private fun TargetVotePanel(view: PlayerView, vote: com.teera.core.TargetVote, onVote: (Boolean) -> Unit, modifier: Modifier) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(vote.deadlineEpochMs) {
+        while (true) {
+            now = System.currentTimeMillis()
+            delay(500)
+        }
+    }
+    val left = ((vote.deadlineEpochMs - now) / 1000).coerceIn(0, 99)
+    val mine = view.yourSeat
+    val waitingOnMe = !view.spectating && mine in vote.voters && mine !in vote.yes && mine !in vote.no
+    Column(
+        modifier
+            .padding(horizontal = 12.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Felt.Rail)
+            .border(1.5.dp, Felt.Brass, RoundedCornerShape(16.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("${view.rules.target} ← ${vote.target}", color = Felt.Brass, style = MaterialTheme.typography.displaySmall, fontSize = 28.sp)
+        Text(
+            "${view.seatName(vote.proposedBy)} يريد اللعبة لـ ${vote.target}",
+            color = Felt.Parchment,
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+            vote.voters.forEach { seat ->
+                val (answer, colour) = when (seat) {
+                    in vote.yes -> "✓" to Felt.Playable
+                    in vote.no -> "✗" to Felt.Danger
+                    else -> "…" to Felt.Muted
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(view.seatName(seat).take(6), color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+                    Text(answer, color = colour, style = MaterialTheme.typography.titleLarge)
+                }
+            }
+        }
+        Text("لازم الكل يوافق · باقي $left ثانية", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+        if (waitingOnMe) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 8.dp)) {
+                Button(
+                    onClick = { onVote(true) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
+                    modifier = Modifier.testTag("target-yes"),
+                ) { Text("أوافق") }
+                OutlinedButton(onClick = { onVote(false) }, modifier = Modifier.testTag("target-no")) {
+                    Text("لا", color = Felt.Parchment)
+                }
+            }
+        }
+    }
+}
+
+/** Scores the table could move to: off the list, not the current one, above both scores. */
+internal fun PlayerView.targetChoices(): List<Int> =
+    com.teera.core.TARGET_CHOICES.filter { it != rules.target && it > (scores.maxOrNull() ?: 0) && it in 151..301 }
+
 /** Puts a popup just above whatever it is anchored to, centred across it. */
 private object AboveAnchor : androidx.compose.ui.window.PopupPositionProvider {
     override fun calculatePosition(
@@ -1295,6 +1461,8 @@ private fun Emote.label(): String = when (this) {
     Emote.GULP -> "ابلع"
     Emote.NO_WAY -> "بالله ما طيغ!"
     Emote.SHEEL -> "شيل"
+    Emote.SPLOOSH -> "سبلوش"
+    Emote.WALLAH -> "والله دنيييكم"
     Emote.CHAT -> "يلا نسولف"
     Emote.DRUMROLL -> "طبل"
     Emote.SAD -> "حسرة"
@@ -1461,4 +1629,20 @@ internal fun PlayerView.teamName(team: Int): String =
 
 /** A person (not a bot) whose connection has dropped; the referee is holding their seat. */
 internal fun PlayerView.isDropped(seat: Int): Boolean =
-    seatInfo(seat)?.let { !it.isBot && it.playerId.isNotEmpty() && !it.connected } == true
+    seatInfo(seat)?.let { !it.isBot && it.playerId.isNotEmpty() && !it.connected && it.standIn == null } == true
+
+/** Chairs a watcher could play: a dropped player's or a bot's, with nobody standing in yet. */
+internal fun PlayerView.openChairs(): List<Int> = (0 until 4).filter { seat ->
+    val info = seatInfo(seat)
+    info != null && info.standIn == null && (info.isBot || isDropped(seat))
+}
+
+/** A chair's name as the table says it. */
+internal fun PlayerView.seatName(seat: Int): String {
+    val info = seatInfo(seat)
+    return when {
+        info == null || info.name.isBlank() -> "لاعب"
+        info.isBot -> "البوت"
+        else -> info.name.trim()
+    }
+}

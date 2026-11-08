@@ -15,6 +15,8 @@ data class Seat(
      * chose their own (sent separately, see [ServerMessage.Avatar]), empty for none.
      */
     val avatar: String = "",
+    /** A watcher playing this chair while its player is away, by name. */
+    val standIn: String? = null,
 )
 
 /** Everything a player can be asked to do. */

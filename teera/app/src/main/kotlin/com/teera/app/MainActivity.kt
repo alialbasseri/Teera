@@ -88,13 +88,17 @@ class MainActivity : ComponentActivity() {
         super.onPause()
     }
 
+    private val screenshots = ScreenshotWatch { model.screenCaptured() }
+
     override fun onStart() {
         super.onStart()
+        screenshots.start(this)
         // While the app is open, friends can see it and invitations can reach it.
         model.setForeground(true)
     }
 
     override fun onStop() {
+        screenshots.stop(this)
         // Out of sight, the mic closes: nobody at the table should overhear the room.
         model.pauseVoice()
         model.setForeground(false)
@@ -299,10 +303,25 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onChat = viewModel::chat.takeUnless { state.offline }?.let { send -> { text: String -> send(text) } },
                         onShowHand = viewModel::showHand,
                         onWatch = viewModel::watch,
+                        onStandIn = { seat -> viewModel.standIn(seat) },
+                        onProposeTarget = { target -> viewModel.proposeTarget(target) },
+                        onVoteTarget = { yes -> viewModel.voteTarget(yes) },
                         onVoteAlert = { yes -> viewModel.voteAlert(yes) },
                         steps = state.steps,
                     )
                 }
+            }
+
+            // Somebody else took a screenshot of the table: a camera's flash, briefly.
+            val flash = remember { androidx.compose.animation.core.Animatable(0f) }
+            LaunchedEffect(state.screenshots) {
+                if (state.screenshots > 0) {
+                    flash.snapTo(0.75f)
+                    flash.animateTo(0f, androidx.compose.animation.core.tween(700))
+                }
+            }
+            if (flash.value > 0f) {
+                Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = flash.value)))
             }
 
             // An invitation can arrive on any screen.

@@ -91,4 +91,22 @@ class StepsTest {
         compose.onNodeWithText("خطوات الگيم").assertIsDisplayed()
         compose.onNodeWithText("سارة لعب").assertIsDisplayed()
     }
+
+    @Test
+    fun `the table is told why the bones were dealt again, or why the opening moved`() {
+        val before = view(emptyList(), phase = Phase.GAME_OVER).copy(
+            lastGame = GameResult(1, GameEnd.X, 1, listOf(9, 0, 4, 12), listOf(21, -25), nextOpener = 1),
+        )
+        val moved = view(listOf(GameEvent.Dealt(2, 2, null)), game = 2)
+        assertEquals("سارة ما عنده چفت، فالفتحة صارت لـ عمر", explainDeal(before, moved))
+
+        val kept = view(listOf(GameEvent.Dealt(2, 1, null)), game = 2)
+        assertEquals(null, explainDeal(before, kept))
+
+        val redealt = view(
+            listOf(GameEvent.Opened(0, d(4, 4)), GameEvent.Redealt(com.teera.core.RedealReason.OPPONENTS_CANNOT_ANSWER, 0), GameEvent.Dealt(2, 0, null)),
+            game = 2,
+        )
+        assertEquals("انعاد الخلط: الخصم ما عنده رقم چفت الفتحة", explainDeal(before, redealt))
+    }
 }

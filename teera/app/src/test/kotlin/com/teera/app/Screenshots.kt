@@ -194,6 +194,35 @@ class Screenshots {
         )
     }
 
+    /** Somebody asked to play to 251: everyone has to agree. */
+    @Test
+    fun targetVote() = shoot("target-vote") {
+        val v = midGame().copy(
+            actingSeat = 1, legalMoves = emptyList(),
+            targetVote = com.teera.core.TargetVote(2, 251, listOf(0, 1, 2, 3), listOf(2, 1), emptyList(), System.currentTimeMillis() + 20_000),
+        )
+        TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+    }
+
+    /** Two players showing their bones, one of them dropped: the watcher sees both and can sit in. */
+    @Test
+    fun watchingAll() = shoot("watching-all") {
+        val hand0 = listOf(d(5, 4), d(4, 3), d(3, 3), d(2, 0), d(1, 5), d(0, 0))
+        val hand1 = listOf(d(6, 5), d(2, 2), d(1, 3), d(0, 5))
+        val v = midGame().copy(
+            yourSeat = 2, spectating = true, hand = emptyList(),
+            legalMoves = emptyList(), showingHands = listOf(0, 1), actingSeat = 0,
+            seats = midGame().seats.map { if (it.seat == 0) it.copy(connected = false) else it },
+            revealedHands = listOf(hand0, hand1, emptyList(), emptyList()),
+            spectators = listOf(Seat(4, "w1", "حسن", avatar = "p:7")),
+        )
+        TableScreen(
+            v, onMove = {}, onNextGame = {}, onLeave = {},
+            chat = emptyList(), onChat = {},
+            avatarFor = { seat, size -> pictures(v, seat, size) },
+        )
+    }
+
     @Test
     fun table() = shoot("table") {
         val v = midGame()

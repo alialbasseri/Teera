@@ -35,7 +35,12 @@ import org.slf4j.LoggerFactory
 private val log = LoggerFactory.getLogger("GameServer")
 
 /** How long a bot "thinks" before playing, so the table does not snap forward. */
-private const val BOT_THINK_MS = 900L
+private const val BOT_THINK_MS = 1_500L
+
+/** Up to this much longer on some turns, the way a person takes longer over some. */
+private const val BOT_THINK_SPREAD_MS = 700L
+
+private fun botThink(): Long = BOT_THINK_MS + kotlin.random.Random.nextLong(BOT_THINK_SPREAD_MS)
 private const val TICK_MS = 250L
 private const val IDLE_ROOM_MS = 30 * 60 * 1000L
 
@@ -57,7 +62,7 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Rec
                     var output = holder.room.expireTurnIfDue() + holder.room.expireAlertIfDue()
                     if (holder.room.awaitingBot() && now >= holder.nextBotMoveAt) {
                         output += holder.room.stepBot()
-                        holder.nextBotMoveAt = now + BOT_THINK_MS
+                        holder.nextBotMoveAt = now + botThink()
                     }
                     if (output != Room.Output.NOTHING) publish(holder, output, records)
                 } finally {
@@ -217,8 +222,10 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Rec
                 playerId?.let { registry.left(it, this) }
                 val current = holder
                 val me = playerId
-                if (current != null && me != null) {
-                    current.sessions.remove(me)
+                // A phone that reconnected has a new socket at the table by now; the old one
+                // closing late (a dead mobile line can take most of a minute to notice) must
+                // not mark them gone or take their new socket's place.
+                if (current != null && me != null && current.sessions.remove(me, this)) {
                     current.lock.withLock { publish(current, current.room.disconnect(me), records) }
                 }
             }
@@ -294,7 +301,7 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.Ready -> room.setReady(playerId, message.ready)
         is ClientMessage.TakeSeat -> room.takeSeat(playerId, message.seat)
         ClientMessage.StartMatch -> {
-            holder.nextBotMoveAt = System.currentTimeMillis() + BOT_THINK_MS
+            holder.nextBotMoveAt = System.currentTimeMillis() + botThink()
             room.start(playerId)
         }
         is ClientMessage.MakeMove -> room.move(playerId, message.move)
@@ -309,6 +316,10 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.ShowHand -> room.showHand(playerId, message.shown)
         is ClientMessage.Watch -> room.watch(playerId, message.seat)
         is ClientMessage.VoteAlert -> room.voteAlert(playerId, message.yes)
+        is ClientMessage.StandIn -> room.standIn(playerId, message.seat)
+        is ClientMessage.ProposeTarget -> room.proposeTarget(playerId, message.target)
+        ClientMessage.ScreenCaptured -> room.screenCaptured(playerId)
+        is ClientMessage.VoteTarget -> room.voteTarget(playerId, message.yes)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord -> null

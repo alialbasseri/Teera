@@ -1,5 +1,17 @@
 package com.teera.app.ui
 
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -78,7 +90,37 @@ fun BoardView(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.background(Felt.Rail)) {
+    // Two fingers pinch the table closer, as with a photo, when a long game has made the
+    // bones small; they also slide it about while it is close. One finger stays for play.
+    var zoom by remember { mutableStateOf(1f) }
+    var pan by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(board.isEmpty) { if (board.isEmpty) { zoom = 1f; pan = Offset.Zero } }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .background(Felt.Rail)
+            .clipToBounds()
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    do {
+                        val event = awaitPointerEvent()
+                        if (event.changes.count { it.pressed } >= 2) {
+                            val next = (zoom * event.calculateZoom()).coerceIn(1f, MAX_ZOOM)
+                            val centroid = event.calculateCentroid(useCurrent = true)
+                            // Keep the spot between the fingers where it is while zooming.
+                            val moved = centroid - (centroid - pan) * (next / zoom) + event.calculatePan()
+                            zoom = next
+                            pan = Offset(
+                                moved.x.coerceIn(size.width * (1f - zoom), 0f),
+                                moved.y.coerceIn(size.height * (1f - zoom), 0f),
+                            )
+                            event.changes.forEach { it.consume() }
+                        }
+                    } while (event.changes.any { it.pressed })
+                }
+            },
+    ) {
         if (board.isEmpty) {
             Canvas(Modifier.fillMaxSize()) {
                 val inset = 11f
@@ -117,6 +159,17 @@ fun BoardView(
         val originY by androidx.compose.animation.core.animateFloatAsState(target.originY, glide, label = "y")
         val frame = Frame(unit, originX, originY, target.turned)
 
+        Box(
+            Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+                    scaleX = zoom
+                    scaleY = zoom
+                    translationX = pan.x
+                    translationY = pan.y
+                },
+        ) {
         Canvas(Modifier.fillMaxSize()) {
             // Felt laid inside the cabinet: the light falls in the middle and the
             // corners drop away, so the eye goes to the line of play.
@@ -206,8 +259,28 @@ fun BoardView(
                 )
             }
         }
+        }
+
+        if (zoom > 1.01f) {
+            Text(
+                "رجّع الحجم",
+                color = Felt.Parchment,
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 16.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable { zoom = 1f; pan = Offset.Zero }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .testTag("zoom-reset"),
+            )
+        }
     }
 }
+
+/** How close two fingers may bring the table. */
+private const val MAX_ZOOM = 3f
 
 /**
  * How the table in tile units maps onto the pixels we have.

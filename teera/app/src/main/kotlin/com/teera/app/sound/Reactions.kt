@@ -95,4 +95,6 @@ fun react(emote: Emote): Reaction = when (emote) {
     Emote.NO_WAY -> Reaction(listOf(Cue.EMOTE_NO_WAY), listOf(Line("ma_teegh", "بالله ما طيغ!")))
     Emote.CHAT -> Reaction(listOf(Cue.EMOTE_CLINK), listOf(Line("nsoolif", "يلا شباب خلي نسولف")))
     Emote.SHEEL -> Reaction(listOf(Cue.EMOTE_WHOOSH), listOf(Line("sheel", "شيل")))
+    Emote.SPLOOSH -> Reaction(listOf(Cue.EMOTE_SLAP), listOf(Line("sploosh", "سبلوش")))
+    Emote.WALLAH -> Reaction(listOf(Cue.EMOTE_DRUMROLL), listOf(Line("wallah_dinyakum", "والله دنيييكم")))
 }

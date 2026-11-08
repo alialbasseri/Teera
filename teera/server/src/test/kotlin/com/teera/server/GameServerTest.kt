@@ -188,6 +188,38 @@ class GameServerTest {
 
 class OpenRoomsTest {
     @Test
+    fun `an old socket closing after the phone reconnected does not unseat it`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        val first = ws.webSocketSession("/ws")
+        first.say(ClientMessage.Hello("Ali", playerId = "ali"))
+        first.await<ServerMessage.Welcome>()
+        first.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = first.await<ServerMessage.RoomUpdate>().room.code
+        (1..3).forEach { first.say(ClientMessage.SetBot(it, enabled = true, difficulty = Difficulty.NORMAL)) }
+        first.await<ServerMessage.RoomUpdate> { it.room.seats.count { s -> s.isBot } == 3 }
+        first.say(ClientMessage.StartMatch)
+        first.await<ServerMessage.GameUpdate>()
+
+        // The phone's line changed: a new socket rejoins while the old one is still open.
+        val second = ws.webSocketSession("/ws")
+        second.say(ClientMessage.Hello("Ali", playerId = "ali"))
+        second.await<ServerMessage.Welcome>()
+        second.say(ClientMessage.JoinRoom(code, rejoin = true))
+        assertTrue(!second.await<ServerMessage.GameUpdate>().view.spectating)
+
+        first.close()
+        // The table still talks to the new socket, and still has them seated and present.
+        second.say(ClientMessage.Chat("hi"))
+        second.await<ServerMessage.ChatMessage>()
+        second.say(ClientMessage.ShowHand(true))
+        val view = second.await<ServerMessage.GameUpdate> { 0 in it.view.showingHands }.view
+        assertTrue(view.seatInfo(0)?.connected == true, "not marked gone by the old socket")
+        second.close()
+    }
+
+    @Test
     fun `waiting rooms are listed so a friend can find one by address alone`() = testApplication {
         application { gameServer() }
         assertEquals("[]", client.get("/rooms").bodyAsText())

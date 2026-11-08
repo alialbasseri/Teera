@@ -27,7 +27,7 @@ class LocalGameClient(
     private val playerId: String,
     private val playerName: String,
     rules: Rules = Rules.DEFAULT,
-    private val botThinkMillis: Long = 750L,
+    private val botThinkMillis: Long = 1_500L,
     private val avatar: String = "",
 ) : GameClient {
 
@@ -51,7 +51,8 @@ class LocalGameClient(
             while (isActive) {
                 delay(TICK_MS)
                 if (room.awaitingBot()) {
-                    delay(botThinkMillis)
+                    // A little longer some turns than others, the way a person thinks.
+                    delay(if (botThinkMillis > 0) botThinkMillis + kotlin.random.Random.nextLong(700) else 0)
                     publish(room.stepBot())
                     banter()
                 } else {
@@ -79,6 +80,10 @@ class LocalGameClient(
             is ClientMessage.ShowHand -> room.showHand(playerId, message.shown)
             is ClientMessage.Watch -> room.watch(playerId, message.seat)
             is ClientMessage.VoteAlert -> room.voteAlert(playerId, message.yes)
+            is ClientMessage.StandIn -> room.standIn(playerId, message.seat)
+            is ClientMessage.ProposeTarget -> room.proposeTarget(playerId, message.target)
+            ClientMessage.ScreenCaptured -> Room.Output.NOTHING
+            is ClientMessage.VoteTarget -> room.voteTarget(playerId, message.yes)
             is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> Room.Output.ROOM
             // Friends and invitations live on the internet server, not at a table of bots.
             is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,

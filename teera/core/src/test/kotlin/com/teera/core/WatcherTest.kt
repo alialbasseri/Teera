@@ -61,4 +61,30 @@ class WatcherTest {
         assertEquals(3, room.seatOf("w"))
         assertFalse(room.isWatching("w"))
     }
+
+    @Test
+    fun `a watcher sees every hand that is shown, and the players still see none but their own`() {
+        val room = dealt()
+        room.join("w", "Hassan")
+        val shown = listOf("a", "c").map { room.seatOf(it)!! }
+        room.showHand("a", true)
+        room.showHand("c", true)
+
+        val watching = room.viewFor("w")!!
+        for (seat in 0 until 4) {
+            val expected = if (seat in shown) room.game!!.handOf(seat) else emptyList()
+            assertEquals(expected, watching.revealedAt(seat), "seat $seat")
+        }
+        assertTrue(room.viewFor("b")!!.revealedHands.isEmpty(), "a player is never handed anybody else's tiles")
+    }
+
+    @Test
+    fun `a screenshot is told to everyone else at the table, watchers included, and not to whoever took it`() {
+        val room = dealt()
+        room.join("w", "Hassan")
+        val told = room.screenCaptured("b").direct
+        assertEquals(setOf("a", "c", "d", "w"), told.map { it.first }.toSet())
+        assertEquals(ServerMessage.ScreenshotTaken(room.seatOf("b")!!, "Sara"), told.first().second)
+        assertTrue(room.screenCaptured("b").direct.isEmpty(), "not again straight away")
+    }
 }

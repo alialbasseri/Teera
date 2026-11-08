@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -69,6 +70,7 @@ fun SeatAtTable(
     val dropped = view.isDropped(seat)
     val tiles = view.handCounts.getOrElse(seat) { 0 }
     val status = when {
+        info?.standIn != null -> "يلعب بداله ${info.standIn}"
         dropped -> "انقطع"
         stuck -> "گلى"
         acting -> "دوره"
@@ -122,7 +124,7 @@ fun SeatAtTable(
             Spacer(Modifier.width(8.dp))
             label(TextAlign.Start)
             Spacer(Modifier.width(12.dp))
-            TileBacks(tiles, lying = false)
+            SeatTiles(view, seat, tiles, lying = false)
         }
     } else {
         Column(
@@ -134,7 +136,33 @@ fun SeatAtTable(
             Spacer(Modifier.height(3.dp))
             label(TextAlign.Center)
             Spacer(Modifier.height(6.dp))
-            TileBacks(tiles, lying = true)
+            SeatTiles(view, seat, tiles, lying = true)
+        }
+    }
+}
+
+/**
+ * What lies in front of a seat: the backs of its bones, or, for a watcher, the bones
+ * themselves when that player lets them be seen.
+ */
+@Composable
+private fun SeatTiles(view: PlayerView, seat: Int, count: Int, lying: Boolean) {
+    val shown = if (view.spectating) view.revealedAt(seat) else emptyList()
+    if (shown.isEmpty()) TileBacks(count, lying) else FaceUpTiles(shown, lying)
+}
+
+/** A shown hand, small: a column of bones lying on their side, or a row standing up. */
+@Composable
+fun FaceUpTiles(tiles: List<com.teera.core.Domino>, lying: Boolean) {
+    val long = 26.dp
+    val short = 13.dp
+    if (lying) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.testTag("shown-hand")) {
+            tiles.forEach { DominoTile(it, Modifier.size(long, short), vertical = false) }
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.testTag("shown-hand")) {
+            tiles.forEach { DominoTile(it, Modifier.size(short, long)) }
         }
     }
 }
