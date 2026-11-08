@@ -22,7 +22,7 @@ fun Route.roomLinks() {
 
     // What friends are sent to get the game: a page with the button and how to install.
     get("/download") {
-        call.respondText(DOWNLOAD_PAGE, ContentType.Text.Html)
+        call.respondText(downloadPage(), ContentType.Text.Html)
     }
     get("/teera.apk") {
         call.respondRedirect(APK_URL)
@@ -82,9 +82,48 @@ private fun joinPage(code: String): String {
 </html>"""
 }
 
-/** The build at [APK_URL]: bump these with it, so older apps are told to update. */
-const val LATEST_APP_VERSION = 21
-const val LATEST_APP_NAME = "1.5.0"
+/**
+ * What the server knows of the newest build. It starts from the constants below and
+ * then reads [VERSION_URL] every few minutes, so putting a new teera.apk and its
+ * version.json in the repository is enough: no server restart, no closed rooms.
+ */
+object LatestApp {
+    @Volatile var code: Int = LATEST_APP_VERSION
+        private set
+    @Volatile var name: String = LATEST_APP_NAME
+        private set
+    @Volatile var minimum: Int = MIN_APP_VERSION
+        private set
+
+    @kotlinx.serialization.Serializable
+    private data class Build(val code: Int, val name: String, val min: Int = 0)
+
+    /** Takes in what version.json says; false if it could not be read. */
+    fun update(json: String): Boolean {
+        val build = runCatching { com.teera.core.Protocol.json.decodeFromString(Build.serializer(), json) }.getOrNull()
+            ?: return false
+        if (build.code <= 0 || build.name.isBlank() || build.name.length > 16) return false
+        code = build.code
+        name = build.name
+        minimum = build.min
+        return true
+    }
+
+    /** Back to the built-in values; for tests. */
+    fun reset() {
+        code = LATEST_APP_VERSION
+        name = LATEST_APP_NAME
+        minimum = MIN_APP_VERSION
+    }
+}
+
+/** The newest build's number and name, next to the build itself. */
+const val VERSION_URL =
+    "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/version.json"
+
+/** The build at [APK_URL] when the server was last deployed; [LatestApp] keeps up after that. */
+const val LATEST_APP_VERSION = 22
+const val LATEST_APP_NAME = "1.5.1"
 
 /** Apps older than this are told they must update, not just that they may. */
 const val MIN_APP_VERSION = 0
@@ -96,7 +135,7 @@ const val MIN_APP_VERSION = 0
 const val APK_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/teera.apk"
 
-private val DOWNLOAD_PAGE = """<!doctype html>
+private fun downloadPage() = """<!doctype html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
@@ -121,7 +160,7 @@ private val DOWNLOAD_PAGE = """<!doctype html>
   <h1>طيرة</h1>
   <p>دومنة عراقية، أربعة لاعبين، فريقين. العب ويا جماعتك من كل مكان.</p>
   <a class="go" href="$APK_URL">نزّل اللعبة</a>
-  <p>النسخة $LATEST_APP_NAME</p>
+  <p>النسخة ${LatestApp.name}</p>
   <ol>
     <li>دوس «نزّل اللعبة» وانتظر يخلص التنزيل.</li>
     <li>افتح الملف <b>teera.apk</b> من الإشعارات أو من التنزيلات.</li>

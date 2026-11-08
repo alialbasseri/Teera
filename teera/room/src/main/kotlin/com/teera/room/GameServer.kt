@@ -45,7 +45,33 @@ private fun botThink(): Long = BOT_THINK_MS + kotlin.random.Random.nextLong(BOT_
 private const val TICK_MS = 250L
 private const val IDLE_ROOM_MS = 30 * 60 * 1000L
 
-fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Records = Records.NONE) {
+/** How often the cloud server looks for a newer app. */
+private const val LATEST_CHECK_MS = 5 * 60 * 1000L
+
+fun Application.gameServer(
+    registry: RoomRegistry = RoomRegistry(),
+    records: Records = Records.NONE,
+    /** Where to check for the newest app (the cloud server); null keeps the built-in numbers. */
+    latestFrom: String? = null,
+) {
+    if (latestFrom != null) {
+        launch {
+            while (isActive) {
+                val text = runCatching {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val connection = java.net.URL(latestFrom).openConnection().apply {
+                            connectTimeout = 10_000
+                            readTimeout = 10_000
+                        }
+                        connection.getInputStream().use { it.readBytes().decodeToString() }
+                    }
+                }.getOrNull()
+                if (text != null && !LatestApp.update(text)) log.warn("could not read the newest version")
+                delay(LATEST_CHECK_MS)
+            }
+        }
+    }
+
     install(WebSockets) {
         pingPeriodMillis = 20_000
         timeoutMillis = 45_000
@@ -149,13 +175,13 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Rec
                                 message.appVersion == 0 -> trySend(
                                     ServerMessage.Failure(
                                         ErrorCode.INTERNAL,
-                                        "نزلت نسخة جديدة من طيرة ($LATEST_APP_NAME)! نزّلها من: ${call.request.host()}/download",
+                                        "نزلت نسخة جديدة من طيرة (${LatestApp.name})! نزّلها من: ${call.request.host()}/download",
                                     ),
                                 )
-                                message.appVersion < LATEST_APP_VERSION -> trySend(
+                                message.appVersion < LatestApp.code -> trySend(
                                     ServerMessage.UpdateAvailable(
-                                        LATEST_APP_VERSION, LATEST_APP_NAME, APK_URL,
-                                        required = message.appVersion < MIN_APP_VERSION,
+                                        LatestApp.code, LatestApp.name, APK_URL,
+                                        required = message.appVersion < LatestApp.minimum,
                                     ),
                                 )
                             }

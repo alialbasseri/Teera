@@ -107,3 +107,7 @@
 
 `https://teera-xfvr.onrender.com/download` صفحة بيها زر التنزيل وشلون تنصّب. والملف نفسه
 محطوط بالريبو بـ `teera/downloads/teera.apk`، فكل نسخة جديدة تنحط بنفس المكان واللنك ما يتغير.
+
+نسخة جديدة: حط `teera.apk` الجديد بـ `downloads/`، وحدّث `downloads/version.json` برقم النسخة
+(`code` = versionCode و `name` = versionName). السيرفر يقرا الملف كل ٥ دقايق، فيطلع إشعار التحديث
+للكل بدون ما ينعاد تشغيل السيرفر.

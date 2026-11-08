@@ -19,6 +19,6 @@ fun main() {
     } ?: Records.NONE
     LoggerFactory.getLogger("Main").info("records: {}", if (records === Records.NONE) "not kept" else "kept")
     embeddedServer(Netty, port = port, host = "0.0.0.0") {
-        gameServer(records = records)
+        gameServer(records = records, latestFrom = com.teera.room.VERSION_URL)
     }.start(wait = true)
 }

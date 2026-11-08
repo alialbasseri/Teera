@@ -329,12 +329,12 @@ class RoomLinkTest {
         old.say(ClientMessage.Hello("Ali"))
         val told = old.await<ServerMessage.Failure>()
         assertEquals(ErrorCode.INTERNAL, told.code, "a code old apps show the words of, without closing")
-        assertTrue("/download" in told.message && com.teera.room.LATEST_APP_NAME in told.message)
+        assertTrue("/download" in told.message && com.teera.room.LatestApp.name in told.message)
 
         val newer = ws.webSocketSession("/ws")
         newer.say(ClientMessage.Hello("Sara", appVersion = 1))
         val offer = newer.await<ServerMessage.UpdateAvailable>()
-        assertEquals(com.teera.room.LATEST_APP_VERSION, offer.versionCode)
+        assertEquals(com.teera.room.LatestApp.code, offer.versionCode)
         assertEquals(com.teera.room.APK_URL, offer.url)
     }
 
@@ -367,6 +367,24 @@ class RoomLinkTest {
 
         passerBy.say(ClientMessage.JoinRoom(listed.code))
         assertTrue(passerBy.await<ServerMessage.GameUpdate>().view.spectating)
+    }
+
+    @Test
+    fun `a newer build named in the repository is offered without a restart`() = testApplication {
+        try {
+            assertTrue(com.teera.room.LatestApp.update("""{"code": 9999, "name": "9.9.9"}"""))
+            assertTrue(!com.teera.room.LatestApp.update("not json"), "a broken file changes nothing")
+            application { gameServer() }
+            val ws = createClient { install(WebSockets) }
+            val app = ws.webSocketSession("/ws")
+            app.say(ClientMessage.Hello("Ali", appVersion = 22))
+            val offer = app.await<ServerMessage.UpdateAvailable>()
+            assertEquals(9999, offer.versionCode)
+            assertEquals("9.9.9", offer.versionName)
+            assertTrue("9.9.9" in client.get("/download").bodyAsText())
+        } finally {
+            com.teera.room.LatestApp.reset()
+        }
     }
 
     @Test
