@@ -122,7 +122,7 @@ class WebSocketGameClient(
         val fresh = http.newWebSocket(request, listener)
         // OkHttp queues anything sent before the socket opens, in order. The hello has to
         // be first in that queue: the server refuses everything until it has one.
-        fresh.send(encode(ClientMessage.Hello(playerName, playerId, avatar = avatar, photo = photo)))
+        fresh.send(encode(ClientMessage.Hello(playerName, playerId, avatar = avatar, photo = photo, appVersion = com.teera.app.BuildConfig.VERSION_CODE)))
         roomRequest?.let { fresh.send(encode(it)) }
         pending.forEach { fresh.send(it) }
         pending.clear()

@@ -194,6 +194,15 @@ class Screenshots {
         )
     }
 
+    /** A newer app is out. */
+    @Test
+    fun update() = shoot("update") {
+        com.teera.app.ui.UpdateDialog(
+            com.teera.core.ServerMessage.UpdateAvailable(20, "1.4.2", "https://example.com/teera.apk"),
+            onDownload = {}, onLater = {},
+        )
+    }
+
     /** Somebody asked to play to 251: everyone has to agree. */
     @Test
     fun targetVote() = shoot("target-vote") {

@@ -324,6 +324,18 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                 Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = flash.value)))
             }
 
+            // A newer app is out: one press downloads it.
+            state.update?.let { update ->
+                val context = LocalContext.current
+                com.teera.app.ui.UpdateDialog(
+                    update,
+                    onDownload = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(update.url)))
+                    },
+                    onLater = viewModel::updateLater,
+                )
+            }
+
             // An invitation can arrive on any screen.
             state.invite?.let { invite ->
                 com.teera.app.ui.InvitedDialog(invite, onAccept = viewModel::acceptInvite, onLater = viewModel::dismissInvite)

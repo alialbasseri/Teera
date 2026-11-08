@@ -82,6 +82,13 @@ private fun joinPage(code: String): String {
 </html>"""
 }
 
+/** The build at [APK_URL]: bump these with it, so older apps are told to update. */
+const val LATEST_APP_VERSION = 19
+const val LATEST_APP_NAME = "1.4.1"
+
+/** Apps older than this are told they must update, not just that they may. */
+const val MIN_APP_VERSION = 0
+
 /**
  * The latest build, kept in the repository at a fixed path so this address never changes:
  * putting a new teera.apk there is all a release needs.
@@ -114,6 +121,7 @@ private val DOWNLOAD_PAGE = """<!doctype html>
   <h1>طيرة</h1>
   <p>دومنة عراقية، أربعة لاعبين، فريقين. العب ويا جماعتك من كل مكان.</p>
   <a class="go" href="$APK_URL">نزّل اللعبة</a>
+  <p>النسخة $LATEST_APP_NAME</p>
   <ol>
     <li>دوس «نزّل اللعبة» وانتظر يخلص التنزيل.</li>
     <li>افتح الملف <b>teera.apk</b> من الإشعارات أو من التنزيلات.</li>

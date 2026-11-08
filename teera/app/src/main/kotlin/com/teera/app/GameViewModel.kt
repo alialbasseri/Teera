@@ -88,6 +88,8 @@ data class UiState(
     val recordLoading: Boolean = false,
     /** False when the server answered that it keeps no books. */
     val recordKept: Boolean = true,
+    /** A newer app is out, and this player has not said "later" to it yet. */
+    val update: ServerMessage.UpdateAvailable? = null,
     /** Counts screenshots somebody else took of the table; the screen flashes on each. */
     val screenshots: Int = 0,
     /** Everything that happened in the game on the table, in order, for the review after it. */
@@ -482,6 +484,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 _state.update { it.copy(notice = text) }
             }
 
+            is ServerMessage.UpdateAvailable -> offerUpdate(message)
+
             is ServerMessage.TargetResult -> _state.update {
                 it.copy(
                     notice = if (message.passed) "وافق الكل: اللعبة صارت لـ ${message.target}"
@@ -520,6 +524,22 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** A watcher moves to another player's shoulder. */
     fun watch(seat: Int) = client?.send(ClientMessage.Watch(seat))
+
+    /** Shows the update window, unless this player already put this version off. */
+    private fun offerUpdate(update: ServerMessage.UpdateAvailable) {
+        if (update.versionCode <= com.teera.app.BuildConfig.VERSION_CODE) return
+        val putOff = prefs.getInt(KEY_UPDATE_LATER, 0)
+        if (!update.required && putOff >= update.versionCode) return
+        _state.update { if (it.update == update) it else it.copy(update = update) }
+    }
+
+    /** "Later": not asked again about this version. */
+    fun updateLater() {
+        val update = _state.value.update ?: return
+        if (update.required) return
+        prefs.edit().putInt(KEY_UPDATE_LATER, update.versionCode).apply()
+        _state.update { it.copy(update = null) }
+    }
 
     fun proposeTarget(target: Int) = client?.send(ClientMessage.ProposeTarget(target))
 
@@ -629,6 +649,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 // The same invitation can arrive on both connections; show it once.
                 if (it.invite == message || it.room?.code == message.code) it else it.copy(invite = message)
             }
+            is ServerMessage.UpdateAvailable -> offerUpdate(message)
             is ServerMessage.Record -> _state.update {
                 it.copy(record = message.record ?: it.record, recordLoading = false, recordKept = message.record != null)
             }
@@ -836,6 +857,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val MAX_FRIENDS = 60
         const val ONLINE_POLL_MS = 15_000L
         const val RECORD_WAIT_MS = 75_000L
+        const val KEY_UPDATE_LATER = "updateLater"
         const val PHOTO_SIZE = 160
     }
 }

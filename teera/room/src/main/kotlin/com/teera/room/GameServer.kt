@@ -10,6 +10,7 @@ import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.application.install
+import io.ktor.server.request.host
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
@@ -142,6 +143,22 @@ fun Application.gameServer(registry: RoomRegistry = RoomRegistry(), records: Rec
                             registry.arrived(playerId!!, name, avatar, this)
                             records.playerSeen(playerId!!, name, avatar)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
+                            when {
+                                // Apps before 1.4.1 cannot show an update window, but they do
+                                // show the words of an error: that is how they hear of it.
+                                message.appVersion == 0 -> trySend(
+                                    ServerMessage.Failure(
+                                        ErrorCode.INTERNAL,
+                                        "نزلت نسخة جديدة من طيرة ($LATEST_APP_NAME)! نزّلها من: ${call.request.host()}/download",
+                                    ),
+                                )
+                                message.appVersion < LATEST_APP_VERSION -> trySend(
+                                    ServerMessage.UpdateAvailable(
+                                        LATEST_APP_VERSION, LATEST_APP_NAME, APK_URL,
+                                        required = message.appVersion < MIN_APP_VERSION,
+                                    ),
+                                )
+                            }
                         }
 
                         is ClientMessage.CreateRoom -> {

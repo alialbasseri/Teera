@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -236,6 +237,48 @@ fun InvitedDialog(invite: ServerMessage.Invited, onAccept: () -> Unit, onLater: 
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onLater).padding(8.dp),
             )
+        }
+    }
+}
+
+/**
+ * A newer app is out. The button downloads it straight away; the phone then offers to
+ * install it over this one, keeping everything (same key, same name).
+ */
+@Composable
+fun UpdateDialog(update: ServerMessage.UpdateAvailable, onDownload: () -> Unit, onLater: () -> Unit) {
+    Dialog(
+        onDismissRequest = { if (!update.required) onLater() },
+        properties = androidx.compose.ui.window.DialogProperties(
+            dismissOnBackPress = !update.required,
+            dismissOnClickOutside = !update.required,
+        ),
+    ) {
+        Plaque {
+            Text("نسخة جديدة!", color = Felt.Brass, style = MaterialTheme.typography.displaySmall)
+            Text(
+                "طيرة ${update.versionName} نزلت" +
+                    if (update.required) ". لازم تحدّث حتى تكمل تلعب ويا جماعتك." else ". حدّث حتى تلعب ويا جماعتك بدون مشاكل.",
+                color = Felt.Parchment,
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                "دوس «نزّلها هسه»، ومن يخلص التنزيل افتح الملف ودوس تثبيت. بياناتك تبقى.",
+                color = Felt.Muted,
+                style = MaterialTheme.typography.bodyMedium,
+                textAlign = TextAlign.Center,
+            )
+            GoldButton("نزّلها هسه", onDownload)
+            if (!update.required) {
+                Text(
+                    "بعدين",
+                    color = Felt.Muted,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onLater).padding(8.dp)
+                        .testTag("update-later"),
+                )
+            }
         }
     }
 }

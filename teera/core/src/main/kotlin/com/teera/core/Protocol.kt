@@ -171,6 +171,8 @@ sealed interface ClientMessage {
         val avatar: String = "",
         /** The player's own picture, a small JPEG in base64, when [avatar] is "photo". */
         val photo: String? = null,
+        /** The app's own build number, so the server can say when a newer one is out. 0 from apps before 1.4.1. */
+        val appVersion: Int = 0,
     ) : ClientMessage
 
     @Serializable @SerialName("createRoom")
@@ -361,6 +363,13 @@ sealed interface ServerMessage {
     /** Somebody at the table took a screenshot: [seat] as their voice and chat carry it. */
     @Serializable @SerialName("screenshot")
     data class ScreenshotTaken(val seat: Int, val name: String) : ServerMessage
+
+    /**
+     * A newer app is out: [url] downloads it. [required] when this one is too old to keep
+     * playing with the rest.
+     */
+    @Serializable @SerialName("update")
+    data class UpdateAvailable(val versionCode: Int, val versionName: String, val url: String, val required: Boolean = false) : ServerMessage
 
     /** How a vote to change the target went. */
     @Serializable @SerialName("targetResult")

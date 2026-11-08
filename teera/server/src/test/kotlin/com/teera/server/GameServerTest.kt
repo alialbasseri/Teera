@@ -83,7 +83,7 @@ class GameServerTest {
         session.say(ClientMessage.Hello("Ali"))
         session.await<ServerMessage.Welcome>()
         session.say(ClientMessage.JoinRoom("ZZZZ"))
-        assertEquals(com.teera.core.ErrorCode.ROOM_NOT_FOUND, session.await<ServerMessage.Failure>().code)
+        assertEquals(com.teera.core.ErrorCode.ROOM_NOT_FOUND, session.await<ServerMessage.Failure> { it.code != com.teera.core.ErrorCode.INTERNAL }.code)
         session.close()
     }
 
@@ -321,6 +321,24 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `an app from before update windows is told in words, a newer old one gets the window`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        val old = ws.webSocketSession("/ws")
+        old.say(ClientMessage.Hello("Ali"))
+        val told = old.await<ServerMessage.Failure>()
+        assertEquals(ErrorCode.INTERNAL, told.code, "a code old apps show the words of, without closing")
+        assertTrue("/download" in told.message && com.teera.room.LATEST_APP_NAME in told.message)
+
+        val newer = ws.webSocketSession("/ws")
+        newer.say(ClientMessage.Hello("Sara", appVersion = 1))
+        val offer = newer.await<ServerMessage.UpdateAvailable>()
+        assertEquals(com.teera.room.LATEST_APP_VERSION, offer.versionCode)
+        assertEquals(com.teera.room.APK_URL, offer.url)
+    }
+
+    @Test
     fun `the download page hands out the latest build`() = testApplication {
         application { gameServer() }
         val page = client.get("/download").bodyAsText()
@@ -351,7 +369,7 @@ class RoomLinkTest {
 
         // A code typed by hand that is not a room is still refused, not opened.
         sara.say(ClientMessage.JoinRoom("ZZZZ"))
-        assertEquals(ErrorCode.ROOM_NOT_FOUND, sara.await<ServerMessage.Failure>().code)
+        assertEquals(ErrorCode.ROOM_NOT_FOUND, sara.await<ServerMessage.Failure> { it.code != ErrorCode.INTERNAL }.code)
 
         ali.close(); sara.close()
     }
