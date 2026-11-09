@@ -109,6 +109,29 @@ class Room(
         listed = listed,
     )
 
+    // -- calling people back ------------------------------------------------------
+
+    /** Players whose app is out of sight, though still connected. */
+    private val away = HashSet<String>()
+
+    fun setAway(playerId: String, isAway: Boolean): Output {
+        if (isAway) away += playerId else away -= playerId
+        return Output.NOTHING
+    }
+
+    /**
+     * Who the table is waiting on while they are not looking at it (app out of sight, or
+     * line dropped), so their phone can call them back; null when nobody is.
+     */
+    fun absentActing(): String? {
+        val state = game ?: return null
+        if (state.phase == Phase.GAME_OVER || state.phase == Phase.MATCH_OVER) return null
+        val seat = state.actingSeat ?: return null
+        if (standIns.containsKey(seat)) return null
+        val member = members.values.firstOrNull { it.seat == seat } ?: return null
+        return member.playerId.takeIf { !member.connected || it in away }
+    }
+
     // -- the list of games being played ------------------------------------------
 
     /** Whether anyone may find this table in the list and watch it. Any one player may say so. */

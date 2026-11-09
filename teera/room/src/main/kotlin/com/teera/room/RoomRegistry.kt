@@ -25,6 +25,10 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
         @Volatile
         var lastActivity: Long = System.currentTimeMillis()
 
+        /** The turn whose absent player was last called back by a notification. */
+        @Volatile
+        var calledBack: String? = null
+
         /** The match being played here, as the books know it; set when it starts. */
         @Volatile
         var matchId: String? = null

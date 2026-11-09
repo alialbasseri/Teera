@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+: asked once, for invitations and "your turn" with the app closed. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Android 14+: lets the table be told when somebody screenshots it. -->
     <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE" />
     <!-- Talking across the table: asked for the first time somebody opens their mic. -->
@@ -24,6 +26,23 @@
         android:isGame="true"
         android:theme="@style/Theme.Dominoes"
         tools:targetApi="26">
+
+        <service
+            android:name=".TeeraMessaging"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="teera" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_launcher_monochrome" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification" />
 
         <activity
             android:name=".MainActivity"

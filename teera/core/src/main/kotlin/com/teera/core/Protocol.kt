@@ -289,6 +289,14 @@ sealed interface ClientMessage {
     @Serializable @SerialName("setListed")
     data class SetListed(val listed: Boolean) : ClientMessage
 
+    /** This phone's address for notifications with the app closed. */
+    @Serializable @SerialName("pushToken")
+    data class PushToken(val token: String) : ClientMessage
+
+    /** The app went out of sight (or came back), so the table may need to call them back. */
+    @Serializable @SerialName("away")
+    data class Away(val away: Boolean) : ClientMessage
+
     /** The ranking. */
     @Serializable @SerialName("leaderboard")
     data object AskLeaderboard : ClientMessage
@@ -387,7 +395,7 @@ sealed interface ServerMessage {
 
     /** Whether an invite reached anyone: false when they do not have the app open. */
     @Serializable @SerialName("inviteSent")
-    data class InviteSent(val playerId: String, val delivered: Boolean) : ServerMessage
+    data class InviteSent(val playerId: String, val delivered: Boolean, val pushed: Boolean = false) : ServerMessage
 
     /** Somebody's own picture, sent once when either of you joins rather than with every view. */
     @Serializable @SerialName("avatar")

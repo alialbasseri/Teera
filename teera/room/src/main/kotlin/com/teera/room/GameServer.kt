@@ -53,6 +53,7 @@ fun Application.gameServer(
     records: Records = Records.NONE,
     /** Where to check for the newest app (the cloud server); null keeps the built-in numbers. */
     latestFrom: String? = null,
+    pusher: Pusher = Pusher.NONE,
 ) {
     if (latestFrom != null) {
         launch {
@@ -92,6 +93,20 @@ fun Application.gameServer(
                         holder.nextBotMoveAt = now + botThink()
                     }
                     if (output != Room.Output.NOTHING) publish(holder, output, records)
+                    // The table is waiting on somebody who is not looking: call them back,
+                    // once per turn.
+                    val absent = holder.room.absentActing()
+                    val state = holder.room.game
+                    if (absent != null && state != null) {
+                        val turn = "${state.gameNumber}:${state.board.size}:${state.actingSeat}:${state.phase}"
+                        if (holder.calledBack != turn) {
+                            holder.calledBack = turn
+                            pusher.notify(
+                                absent, "دورك بطيرة!", "الطاولة تنتظرك، ارجع العب",
+                                mapOf("code" to holder.room.code),
+                            )
+                        }
+                    }
                 } finally {
                     holder.lock.unlock()
                 }
@@ -234,10 +249,17 @@ fun Application.gameServer(
                         }
                         is ClientMessage.Invite -> {
                             val target = registry.online[message.playerId]
-                            val invite = ServerMessage.Invited(me!!, name, avatar, message.code.uppercase().take(8))
+                            val code = message.code.uppercase().filter(Char::isLetterOrDigit).take(8)
+                            val invite = ServerMessage.Invited(me!!, name, avatar, code)
                             target?.sessions?.forEach { it.trySend(invite) }
-                            trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null))
+                            // Not in the app: their phone hears of it anyway, if it can.
+                            val pushed = target == null && pusher.canReach(message.playerId)
+                            if (pushed) {
+                                pusher.notify(message.playerId, "عزيمة على طيرة", "$name يعزمك على طاولته", mapOf("code" to code))
+                            }
+                            trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null, pushed = pushed))
                         }
+                        is ClientMessage.PushToken -> if (message.token.length in 20..4096) pusher.remember(me!!, message.token)
                         ClientMessage.MyRecord -> trySend(ServerMessage.Record(records.recordOf(me!!)))
                         ClientMessage.AskLeaderboard -> trySend(ServerMessage.LeaderboardIs(records.leaderboard()))
                         is ClientMessage.AskMatch -> trySend(
@@ -373,10 +395,11 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         ClientMessage.ScreenCaptured -> room.screenCaptured(playerId)
         is ClientMessage.VoteTarget -> room.voteTarget(playerId, message.yes)
         is ClientMessage.SetListed -> room.setListed(playerId, message.listed)
+        is ClientMessage.Away -> room.setAway(playerId, message.away)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
-        is ClientMessage.AskMatch -> null
+        is ClientMessage.AskMatch, is ClientMessage.PushToken -> null
     }
 }
 

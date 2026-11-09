@@ -388,6 +388,47 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `an invitation to somebody without the app open goes to their phone, and so does a waiting turn`() = testApplication {
+        val told = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+        val pusher = object : com.teera.room.Pusher {
+            val tokens = java.util.concurrent.ConcurrentHashMap<String, String>()
+            override fun remember(playerId: String, token: String) { tokens[playerId] = token }
+            override fun canReach(playerId: String) = tokens.containsKey(playerId)
+            override fun notify(playerId: String, title: String, body: String, data: Map<String, String>) {
+                told += playerId to title
+            }
+        }
+        application { gameServer(pusher = pusher) }
+        val ws = createClient { install(WebSockets) }
+
+        // Sara's phone told the server where to reach it, then she closed the app.
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara", playerId = "sara", appVersion = 99))
+        sara.await<ServerMessage.Welcome>()
+        sara.say(ClientMessage.PushToken("token-of-saras-phone-0000"))
+        sara.close()
+
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        ali.await<ServerMessage.Welcome>()
+        ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = ali.await<ServerMessage.RoomUpdate>().room.code
+        withTimeout(10_000) { while (!pusher.canReach("sara")) kotlinx.coroutines.delay(20) }
+        ali.say(ClientMessage.Invite("sara", code))
+        val sent = ali.await<ServerMessage.InviteSent>()
+        assertTrue(!sent.delivered && sent.pushed)
+        assertEquals("sara" to "عزيمة على طيرة", told.first())
+
+        // Ali starts against bots, then puts the app away: when his turn comes, his phone hears.
+        ali.say(ClientMessage.PushToken("token-of-alis-phone-00000"))
+        (1..3).forEach { ali.say(ClientMessage.SetBot(it, enabled = true, difficulty = Difficulty.NORMAL)) }
+        ali.await<ServerMessage.RoomUpdate> { it.room.seats.count { s -> s.isBot } == 3 }
+        ali.say(ClientMessage.StartMatch)
+        ali.say(ClientMessage.Away(true))
+        withTimeout(15_000) { while (told.none { it == ("ali" to "دورك بطيرة!") }) kotlinx.coroutines.delay(50) }
+    }
+
+    @Test
     fun `the download page hands out the latest build`() = testApplication {
         application { gameServer() }
         val page = client.get("/download").bodyAsText()

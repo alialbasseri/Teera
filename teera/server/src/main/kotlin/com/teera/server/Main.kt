@@ -18,7 +18,24 @@ fun main() {
         }
     } ?: Records.NONE
     LoggerFactory.getLogger("Main").info("records: {}", if (records === Records.NONE) "not kept" else "kept")
+
+    // Notifications: the Firebase service account, as a Render secret file or a variable.
+    val account = sequenceOf(
+        System.getenv("FIREBASE_SERVICE_ACCOUNT"),
+        runCatching { java.io.File("/etc/secrets/firebase.json").readText() }.getOrNull(),
+    ).firstOrNull { !it.isNullOrBlank() }?.trim()?.let { text ->
+        if (text.startsWith("{")) text else runCatching { String(java.util.Base64.getDecoder().decode(text)) }.getOrNull()
+    }
+    val pusher: com.teera.room.Pusher = account?.let { json ->
+        try {
+            FcmPusher(json, records as? SqlRecords ?: object : TokenStore {})
+        } catch (e: Exception) {
+            LoggerFactory.getLogger("Main").warn("the Firebase key could not be used: {}", e.message)
+            null
+        }
+    } ?: com.teera.room.Pusher.NONE
+    LoggerFactory.getLogger("Main").info("notifications: {}", if (pusher === com.teera.room.Pusher.NONE) "off" else "on")
     embeddedServer(Netty, port = port, host = "0.0.0.0") {
-        gameServer(records = records, latestFrom = com.teera.room.VERSION_URL)
+        gameServer(records = records, latestFrom = com.teera.room.VERSION_URL, pusher = pusher)
     }.start(wait = true)
 }

@@ -41,7 +41,25 @@ private val log = LoggerFactory.getLogger("Database")
 class SqlRecords(
     internal val source: DataSource,
     private val clock: () -> Long = System::currentTimeMillis,
-) : Records {
+) : Records, TokenStore {
+
+    /** Kept with the player, so a restart does not forget where to reach them. Called off the game's threads. */
+    override fun save(playerId: String, token: String?) {
+        withConnection { db ->
+            db.prepareStatement("UPDATE players SET push_token = ? WHERE id = ?").use {
+                if (token == null) it.setNull(1, Types.VARCHAR) else it.setString(1, token)
+                it.setString(2, playerId)
+                it.executeUpdate()
+            }
+        }
+    }
+
+    override fun load(playerId: String): String? = withConnection { db ->
+        db.prepareStatement("SELECT push_token FROM players WHERE id = ?").use {
+            it.setString(1, playerId)
+            it.executeQuery().use { row -> if (row.next()) row.getString(1) else null }
+        }
+    }
 
     // One writer, a bounded queue: a database that is gone for good must not eat the memory.
     private val writer = ThreadPoolExecutor(
@@ -445,6 +463,7 @@ class SqlRecords(
                         steps TEXT NOT NULL,
                         PRIMARY KEY (match_id, game_number))""",
                 )
+                sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS push_token VARCHAR(512)")
                 sql.execute("CREATE INDEX IF NOT EXISTS match_seats_player ON match_seats (player_id)")
                 sql.execute("CREATE INDEX IF NOT EXISTS matches_started ON matches (started_at)")
             }

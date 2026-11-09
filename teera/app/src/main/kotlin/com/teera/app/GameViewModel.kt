@@ -673,6 +673,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setForeground(foreground: Boolean) {
         if (foreground) startPresence() else stopPresence()
+        // At a table: say whether the app is in sight, so the server can call this phone
+        // back with a notification when the table is waiting on it.
+        if (_state.value.room != null && onInternet) client?.send(ClientMessage.Away(!foreground))
     }
 
     private fun startPresence() {
@@ -688,6 +691,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         )
         presence = link
         presencePump = viewModelScope.launch { link.incoming.collect(::onPresence) }
+        // Where to reach this phone with the app closed, for invitations and "your turn".
+        Push.token(getApplication()) { token -> presence?.send(ClientMessage.PushToken(token)) }
         onlinePoll = viewModelScope.launch {
             while (true) {
                 askWhoIsOnline()
@@ -739,7 +744,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
             is ServerMessage.InviteSent -> if (!message.delivered) {
                 val name = _state.value.friends.firstOrNull { it.id == message.playerId }?.name ?: "صاحبك"
-                _state.update { it.copy(notice = "$name مو فاتح التطبيق هسه، دزله اللنك") }
+                _state.update {
+                    it.copy(
+                        notice = if (message.pushed) "$name مو فاتح التطبيق، وصلته العزيمة إشعار بتليفونه"
+                        else "$name مو فاتح التطبيق هسه، دزله اللنك",
+                    )
+                }
             } else {
                 _state.update { it.copy(notice = "انرسلت العزيمة") }
             }

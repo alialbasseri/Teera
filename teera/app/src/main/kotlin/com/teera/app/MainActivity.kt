@@ -57,6 +57,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         sound = SoundEngine(applicationContext)
+        Push.start(applicationContext)
         setContent {
             TeeraTheme(dark = true) {
                 TeeraApp(sound = sound)
@@ -74,7 +75,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun followLink(intent: Intent?) {
-        codeFromLink(intent?.dataString)?.let(model::openLink)
+        // A room's link, or a notification tapped (an invitation, or the table waiting).
+        val code = codeFromLink(intent?.dataString)
+            ?: intent?.getStringExtra(Push.EXTRA_CODE)?.uppercase()?.filter(Char::isLetterOrDigit)?.take(8)?.ifEmpty { null }
+        code?.let(model::openLink)
+        intent?.removeExtra(Push.EXTRA_CODE)
     }
 
     override fun onResume() {
@@ -122,6 +127,20 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
     val talking by viewModel.voice.talking.collectAsStateWithLifecycle()
     val hearing by viewModel.voice.hearing.collectAsStateWithLifecycle()
     val speaking by viewModel.voice.speaking.collectAsStateWithLifecycle()
+    // Notifications (Android 13+): asked once, so invitations reach a closed app.
+    val askForNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        val prefs = context.getSharedPreferences("dominoes", android.content.Context.MODE_PRIVATE)
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            System.getProperty("teera.noPresence") != "true" &&
+            !prefs.getBoolean("askedNotifications", false) &&
+            ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            prefs.edit().putBoolean("askedNotifications", true).apply()
+            askForNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     val askForMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) viewModel.setMic(true) else viewModel.micRefused()
     }

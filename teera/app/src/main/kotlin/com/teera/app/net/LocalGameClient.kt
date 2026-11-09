@@ -86,10 +86,11 @@ class LocalGameClient(
             is ClientMessage.VoteTarget -> room.voteTarget(playerId, message.yes)
             is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> Room.Output.ROOM
             is ClientMessage.SetListed -> room.setListed(playerId, message.listed)
+            is ClientMessage.Away -> Room.Output.NOTHING
             // Friends and invitations live on the internet server, not at a table of bots.
             is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
             ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
-            is ClientMessage.AskMatch -> Room.Output.NOTHING
+            is ClientMessage.AskMatch, is ClientMessage.PushToken -> Room.Output.NOTHING
         }
         publish(output)
     }
