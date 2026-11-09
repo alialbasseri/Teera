@@ -138,9 +138,24 @@ fun Application.gameServer(
 
         // The developer's numbers, behind a password kept in Render.
         get("/admin") {
-            val given = call.request.queryParameters["key"]
-            if (adminKey.isNullOrBlank() || given != adminKey) {
-                call.respondText("Not Found", status = io.ktor.http.HttpStatusCode.NotFound)
+            val key = adminKey?.trim().orEmpty()
+            val given = call.request.queryParameters["key"]?.trim().orEmpty()
+            val gate = when {
+                key.isEmpty() -> AdminGate.NOT_SET
+                key.length < 6 -> AdminGate.TOO_SHORT
+                given.isEmpty() -> AdminGate.ASK
+                !java.security.MessageDigest.isEqual(given.toByteArray(), key.toByteArray()) -> AdminGate.WRONG
+                else -> null
+            }
+            if (gate != null) {
+                // A wrong guess waits, so the password cannot be guessed quickly.
+                if (gate == AdminGate.WRONG) kotlinx.coroutines.delay(1_500)
+                val status = when (gate) {
+                    AdminGate.ASK -> io.ktor.http.HttpStatusCode.OK
+                    AdminGate.WRONG -> io.ktor.http.HttpStatusCode.Forbidden
+                    else -> io.ktor.http.HttpStatusCode.ServiceUnavailable
+                }
+                call.respondText(adminGatePage(gate), ContentType.Text.Html, status)
                 return@get
             }
             val holders = registry.all()

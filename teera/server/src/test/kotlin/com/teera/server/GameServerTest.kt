@@ -461,10 +461,32 @@ class RoomLinkTest {
     @Test
     fun `the developer's numbers open only with the password`() = testApplication {
         application { gameServer(adminKey = "secret123") }
-        assertEquals(404, client.get("/admin").status.value)
-        assertEquals(404, client.get("/admin?key=wrong").status.value)
+        val ask = client.get("/admin")
+        assertEquals(200, ask.status.value)
+        assertTrue("type=\"password\"" in ask.bodyAsText() && "فاتحين اللعبة" !in ask.bodyAsText())
+        val wrong = client.get("/admin?key=wrong")
+        assertEquals(403, wrong.status.value)
+        assertTrue("الباسورد غلط" in wrong.bodyAsText() && "فاتحين اللعبة" !in wrong.bodyAsText())
         val page = client.get("/admin?key=secret123").bodyAsText()
         assertTrue("طيرة · الأرقام" in page && "فاتحين اللعبة" in page)
+        // A stray space from copying the password still opens it.
+        assertTrue("فاتحين اللعبة" in client.get("/admin?key=%20secret123%20").bodyAsText())
+    }
+
+    @Test
+    fun `the developer's page says when Render has no password`() = testApplication {
+        application { gameServer(adminKey = null) }
+        val none = client.get("/admin?key=anything")
+        assertEquals(503, none.status.value)
+        assertTrue("ADMIN_KEY" in none.bodyAsText() && "فاتحين اللعبة" !in none.bodyAsText())
+    }
+
+    @Test
+    fun `the developer's page refuses a short password`() = testApplication {
+        application { gameServer(adminKey = "abc") }
+        val short = client.get("/admin?key=abc")
+        assertEquals(503, short.status.value)
+        assertTrue("أقصر من 6" in short.bodyAsText() && "فاتحين اللعبة" !in short.bodyAsText())
     }
 
     @Test

@@ -47,7 +47,7 @@ fun main() {
             records = records,
             latestFrom = com.teera.room.VERSION_URL,
             pusher = pusher,
-            adminKey = System.getenv("ADMIN_KEY")?.trim()?.takeIf { it.length >= 6 },
+            adminKey = System.getenv("ADMIN_KEY"),
         )
     }.start(wait = true)
 }
