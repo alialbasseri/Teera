@@ -518,4 +518,22 @@ class Screenshots {
             avatarFor = { seat, size -> com.teera.app.ui.Avatar(seat?.avatar.orEmpty(), seat?.name.orEmpty(), size) },
         )
     }
+
+    /** Ali's phone, roughly: host, online, the lock line showing. It must fit without scrolling. */
+    @Test
+    @Config(sdk = [34], qualifiers = "w392dp-h780dp-xxhdpi")
+    fun lobbyAli() = shoot("lobby-ali") {
+        LobbyScreen(
+            room = RoomInfo(
+                code = "KHAN", hostId = "me", rules = Rules.DEFAULT,
+                seats = listOf(seats[0], seats[1], Seat(2, "bot-2", "Bot 3", isBot = true), Seat(3, "", "")),
+            ),
+            myId = "me", isHost = true, offline = false,
+            onTakeSeat = {}, onToggleBot = { _, _ -> }, onSetRules = {}, onStart = {}, onLeave = {},
+            onShare = {},
+            talk = com.teera.app.ui.Talk(speaking = setOf(1)),
+            avatarFor = { seat, size -> com.teera.app.ui.Avatar(seat?.avatar.orEmpty(), seat?.name.orEmpty(), size) },
+            onKick = {}, onLock = {},
+        )
+    }
 }

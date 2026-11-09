@@ -118,7 +118,10 @@ fun Application.gameServer(
 
     routing {
         get("/health") {
-            call.respondText("ok rooms=${registry.size()}")
+            // Whether the books and notifications are set up, so a deploy can be checked from outside.
+            val books = if (records === Records.NONE) "off" else "on"
+            val push = if (pusher === Pusher.NONE) "off" else "on"
+            call.respondText("ok rooms=${registry.size()} records=$books push=$push")
         }
 
         // Rooms still waiting for players. A phone hosting on the Wi-Fi only ever has one,

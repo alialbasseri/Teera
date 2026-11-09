@@ -122,8 +122,8 @@ const val VERSION_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/version.json"
 
 /** The build at [APK_URL] when the server was last deployed; [LatestApp] keeps up after that. */
-const val LATEST_APP_VERSION = 24
-const val LATEST_APP_NAME = "1.7.0"
+const val LATEST_APP_VERSION = 25
+const val LATEST_APP_NAME = "1.7.1"
 
 /** Apps older than this are told they must update, not just that they may. */
 const val MIN_APP_VERSION = 0

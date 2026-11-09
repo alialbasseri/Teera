@@ -79,16 +79,13 @@ fun LobbyScreen(
 
     WalnutRoom {
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
-        // One screen when it fits; on a small phone or with large text it scrolls, rather
-        // than squeezing the chairs until the bottom one and its buttons are cut off.
+        // One screen, fixed: nothing scrolls. The chairs round the table take whatever
+        // height is left and shrink to fit it, so the buttons are always on screen.
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .heightIn(min = maxHeight)
-                .padding(horizontal = 20.dp, vertical = 16.dp),
+                .fillMaxSize()
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween,
         ) {
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             // The code goes on a brass plate, big enough to read across a room.
@@ -103,11 +100,16 @@ fun LobbyScreen(
                 Text("كود الغرفة", style = MaterialTheme.typography.labelSmall, color = Felt.Muted)
                 Text(room.code, fontSize = 40.sp, style = MaterialTheme.typography.headlineLarge, color = Felt.Brass)
             }
-            Text(
+            val hint = when {
+                offline -> "لعب بدون إنترنت"
+                wifiAddress != null -> "أصحابك على نفس الواي فاي يشوفون الطاولة بالقائمة"
+                else -> ""
+            }
+            if (hint.isNotEmpty()) Text(
                 when {
                     offline -> "لعب بدون إنترنت"
                     wifiAddress != null -> "أصحابك على نفس الواي فاي يشوفون الطاولة بالقائمة"
-                    else -> "دزّ اللنك، يدوسون عليه ويدخلون"
+                    else -> ""
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Felt.Muted,
@@ -163,9 +165,10 @@ fun LobbyScreen(
           }
 
             // The table and its four chairs, laid out in rows so no chair can sit on the
-            // table or run off the edge however narrow the phone.
+            // table or run off the edge however narrow the phone; shrunk to the height left.
+            FitHeight(Modifier.weight(1f).fillMaxWidth()) {
             Column(
-                Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                Modifier.fillMaxWidth().padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
@@ -181,9 +184,10 @@ fun LobbyScreen(
                 }
                 SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor, onKick = onKick)
             }
+            }
 
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            RosetteRule(Modifier.padding(horizontal = 40.dp, vertical = 6.dp))
+            RosetteRule(Modifier.padding(horizontal = 40.dp, vertical = 2.dp))
 
             room.tournament?.let { label ->
                 Text("🏆 $label", style = MaterialTheme.typography.titleSmall, color = Felt.GoldLit, textAlign = TextAlign.Center)
@@ -242,7 +246,7 @@ fun LobbyScreen(
                 Text("🔒 الغرفة مقفولة", color = Felt.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
             }
 
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             if (isHost) {
                 GoldButton(if (ready) "وزّع" else "ناقص لاعبين", onStart, enabled = ready)
             } else {
@@ -376,6 +380,28 @@ private fun SeatChair(
                     .clickable { onToggleBot(seat, !bot) }
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
+        }
+    }
+}
+
+/**
+ * Lays out its content at full size, then shrinks it (from the middle) to fit the height
+ * it is given. Taps land where they look, since the shrinking is a drawing layer.
+ */
+@Composable
+private fun FitHeight(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    androidx.compose.ui.layout.Layout(content, modifier) { measurables, constraints ->
+        val placeable = measurables.first().measure(
+            constraints.copy(minWidth = 0, minHeight = 0, maxHeight = androidx.compose.ui.unit.Constraints.Infinity),
+        )
+        val width = constraints.maxWidth
+        val height = if (constraints.hasBoundedHeight) constraints.maxHeight else placeable.height
+        val k = if (placeable.height > height && placeable.height > 0) height.toFloat() / placeable.height else 1f
+        layout(width, height) {
+            placeable.placeWithLayer((width - placeable.width) / 2, (height - placeable.height) / 2) {
+                scaleX = k
+                scaleY = k
+            }
         }
     }
 }
