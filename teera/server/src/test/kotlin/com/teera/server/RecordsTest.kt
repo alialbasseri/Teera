@@ -248,7 +248,7 @@ class RecordsTest {
             @Suppress("UNREACHABLE_CODE") error("unreachable")
         }
 
-        say(ClientMessage.Hello("Ali", playerId = "ali-1"))
+        say(ClientMessage.Hello("Ali", playerId = "ali-1", appVersion = 99))
         next { it as? ServerMessage.Welcome }
         say(ClientMessage.CreateRoom(Rules.DEFAULT))
         next { it as? ServerMessage.RoomUpdate }
@@ -272,7 +272,7 @@ class RecordsTest {
         application { gameServer() }
         val ws = createClient { install(WebSockets) }
         val host = ws.webSocketSession("/ws")
-        host.send(Protocol.encode(ClientMessage.Hello("Ali")))
+        host.send(Protocol.encode(ClientMessage.Hello("Ali", appVersion = 99)))
         host.send(Protocol.encode(ClientMessage.MyRecord))
         val answer = withTimeout(10_000) {
             var found: ServerMessage.Record? = null

@@ -188,9 +188,17 @@ fun Application.gameServer(
             var avatar = ""
             var photo: String? = null
             var holder: RoomRegistry.Holder? = null
+            // An app too old to show the update window: it may say hello, but not sit at a table.
+            var tooOld = false
 
             suspend fun fail(code: ErrorCode, message: String) =
                 send(Protocol.encode(ServerMessage.Failure(code, message)))
+
+            // Old apps show the words of an INTERNAL failure without closing: that is how they hear it.
+            suspend fun refuseOld() = fail(
+                ErrorCode.INTERNAL,
+                "نسختك قديمة وما تشتغل بعد. نزّل النسخة الجديدة (${LatestApp.name}) من: ${call.request.host()}/download",
+            )
 
             val voiceAllowance = VoiceAllowance()
 
@@ -217,6 +225,13 @@ fun Application.gameServer(
                     }
                     val me = playerId
 
+                    // Too old to be told of updates: no table, no tournament, until it is updated.
+                    if (tooOld && (message is ClientMessage.CreateRoom || message is ClientMessage.JoinRoom ||
+                            message is ClientMessage.CreateTournament)) {
+                        refuseOld()
+                        return@consumeEach
+                    }
+
                     when (message) {
                         is ClientMessage.Hello -> {
                             if (message.version != Protocol.VERSION) {
@@ -231,18 +246,14 @@ fun Application.gameServer(
                             avatar = message.avatar.take(12).filter { it.isLetterOrDigit() || it == ':' }
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
+                            tooOld = message.appVersion < OLDEST_PLAYABLE_APP
                             registry.arrived(playerId!!, name, avatar, this)
                             records.playerSeen(playerId!!, name, avatar, message.appVersion)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                             when {
                                 // Apps before 1.4.1 cannot show an update window, but they do
                                 // show the words of an error: that is how they hear of it.
-                                message.appVersion == 0 -> trySend(
-                                    ServerMessage.Failure(
-                                        ErrorCode.INTERNAL,
-                                        "نزلت نسخة جديدة من طيرة (${LatestApp.name})! نزّلها من: ${call.request.host()}/download",
-                                    ),
-                                )
+                                tooOld -> refuseOld()
                                 message.appVersion < LatestApp.code -> trySend(
                                     ServerMessage.UpdateAvailable(
                                         LatestApp.code, LatestApp.name, APK_URL,

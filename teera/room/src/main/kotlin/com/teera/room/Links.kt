@@ -147,6 +147,12 @@ const val VERSION_URL =
 const val LATEST_APP_VERSION = 27
 const val LATEST_APP_NAME = "1.7.3"
 
+/**
+ * The oldest build allowed at a table: 1.4.1 and later show the update window, so they hear
+ * of every new build. Earlier ones send no build number (0) and are turned away.
+ */
+const val OLDEST_PLAYABLE_APP = 1
+
 /** Apps older than this are told they must update, not just that they may. */
 const val MIN_APP_VERSION = 0
 

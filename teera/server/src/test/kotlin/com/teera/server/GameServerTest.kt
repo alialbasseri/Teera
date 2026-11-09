@@ -57,14 +57,14 @@ class GameServerTest {
         val ws = createClient { install(WebSockets) }
 
         val host = ws.webSocketSession("/ws")
-        host.say(ClientMessage.Hello("Ali"))
+        host.say(ClientMessage.Hello("Ali", appVersion = 99))
         host.await<ServerMessage.Welcome>()
         host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = host.await<ServerMessage.RoomUpdate>().room.code
         assertEquals(RoomRegistry.CODE_LENGTH, code.length)
 
         val guest = ws.webSocketSession("/ws")
-        guest.say(ClientMessage.Hello("Sara"))
+        guest.say(ClientMessage.Hello("Sara", appVersion = 99))
         guest.await<ServerMessage.Welcome>()
         guest.say(ClientMessage.JoinRoom(code.lowercase()))   // codes are case-insensitive
 
@@ -81,7 +81,7 @@ class GameServerTest {
         application { gameServer() }
         val ws = createClient { install(WebSockets) }
         val session = ws.webSocketSession("/ws")
-        session.say(ClientMessage.Hello("Ali"))
+        session.say(ClientMessage.Hello("Ali", appVersion = 99))
         session.await<ServerMessage.Welcome>()
         session.say(ClientMessage.JoinRoom("ZZZZ"))
         assertEquals(com.teera.core.ErrorCode.ROOM_NOT_FOUND, session.await<ServerMessage.Failure> { it.code != com.teera.core.ErrorCode.INTERNAL }.code)
@@ -94,13 +94,13 @@ class GameServerTest {
         val ws = createClient { install(WebSockets) }
 
         val host = ws.webSocketSession("/ws")
-        host.say(ClientMessage.Hello("Ali"))
+        host.say(ClientMessage.Hello("Ali", appVersion = 99))
         host.await<ServerMessage.Welcome>()
         host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = host.await<ServerMessage.RoomUpdate>().room.code
 
         val guest = ws.webSocketSession("/ws")
-        guest.say(ClientMessage.Hello("Sara"))
+        guest.say(ClientMessage.Hello("Sara", appVersion = 99))
         guest.await<ServerMessage.Welcome>()
         guest.say(ClientMessage.JoinRoom(code))
         guest.await<ServerMessage.RoomUpdate>()
@@ -130,7 +130,7 @@ class GameServerTest {
         val ws = createClient { install(WebSockets) }
 
         val host = ws.webSocketSession("/ws")
-        host.say(ClientMessage.Hello("Ali"))
+        host.say(ClientMessage.Hello("Ali", appVersion = 99))
         host.await<ServerMessage.Welcome>()
         host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         host.await<ServerMessage.RoomUpdate>()
@@ -154,7 +154,7 @@ class GameServerTest {
         val ws = createClient { install(WebSockets) }
 
         val host = ws.webSocketSession("/ws")
-        host.say(ClientMessage.Hello("Ali"))
+        host.say(ClientMessage.Hello("Ali", appVersion = 99))
         host.await<ServerMessage.Welcome>()
         host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         host.await<ServerMessage.RoomUpdate>()
@@ -194,7 +194,7 @@ class OpenRoomsTest {
         val ws = createClient { install(WebSockets) }
 
         val first = ws.webSocketSession("/ws")
-        first.say(ClientMessage.Hello("Ali", playerId = "ali"))
+        first.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
         first.await<ServerMessage.Welcome>()
         first.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = first.await<ServerMessage.RoomUpdate>().room.code
@@ -205,7 +205,7 @@ class OpenRoomsTest {
 
         // The phone's line changed: a new socket rejoins while the old one is still open.
         val second = ws.webSocketSession("/ws")
-        second.say(ClientMessage.Hello("Ali", playerId = "ali"))
+        second.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
         second.await<ServerMessage.Welcome>()
         second.say(ClientMessage.JoinRoom(code, rejoin = true))
         assertTrue(!second.await<ServerMessage.GameUpdate>().view.spectating)
@@ -227,7 +227,7 @@ class OpenRoomsTest {
 
         val ws = createClient { install(WebSockets) }
         val host = ws.webSocketSession("/ws")
-        host.say(ClientMessage.Hello("Ali"))
+        host.say(ClientMessage.Hello("Ali", appVersion = 99))
         host.await<ServerMessage.Welcome>()
         host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = host.await<ServerMessage.RoomUpdate>().room.code
@@ -245,13 +245,13 @@ class VoiceRelayTest {
         val ws = createClient { install(WebSockets) }
 
         val ali = ws.webSocketSession("/ws")
-        ali.say(ClientMessage.Hello("Ali"))
+        ali.say(ClientMessage.Hello("Ali", appVersion = 99))
         ali.await<ServerMessage.Welcome>()
         ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = ali.await<ServerMessage.RoomUpdate>().room.code
 
         val sara = ws.webSocketSession("/ws")
-        sara.say(ClientMessage.Hello("Sara"))
+        sara.say(ClientMessage.Hello("Sara", appVersion = 99))
         sara.await<ServerMessage.Welcome>()
         sara.say(ClientMessage.JoinRoom(code))
         sara.await<ServerMessage.RoomUpdate>()
@@ -259,7 +259,7 @@ class VoiceRelayTest {
 
         // A stranger who never joined the room cannot speak into it.
         val stranger = ws.webSocketSession("/ws")
-        stranger.say(ClientMessage.Hello("Nobody"))
+        stranger.say(ClientMessage.Hello("Nobody", appVersion = 99))
         stranger.await<ServerMessage.Welcome>()
         stranger.send(Frame.Binary(true, byteArrayOf(1, 0, 9, 9, 9, 9, 9)))
 
@@ -288,13 +288,13 @@ class AvatarTest {
         val ws = createClient { install(WebSockets) }
 
         val ali = ws.webSocketSession("/ws")
-        ali.say(ClientMessage.Hello("Ali", avatar = "photo", photo = "QUxJ"))
+        ali.say(ClientMessage.Hello("Ali", avatar = "photo", photo = "QUxJ", appVersion = 99))
         ali.await<ServerMessage.Welcome>()
         ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
         val code = ali.await<ServerMessage.RoomUpdate>().room.code
 
         val sara = ws.webSocketSession("/ws")
-        sara.say(ClientMessage.Hello("Sara", avatar = "p:6"))
+        sara.say(ClientMessage.Hello("Sara", avatar = "p:6", appVersion = 99))
         sara.await<ServerMessage.Welcome>()
         sara.say(ClientMessage.JoinRoom(code))
 
@@ -337,6 +337,37 @@ class RoomLinkTest {
         val offer = newer.await<ServerMessage.UpdateAvailable>()
         assertEquals(com.teera.room.LatestApp.code, offer.versionCode)
         assertEquals(com.teera.room.APK_URL, offer.url)
+    }
+
+    @Test
+    fun `an app from before update windows cannot sit at a table until it is updated`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+
+        // A 1.4.1-or-later app opens a room; that one may play.
+        val host = ws.webSocketSession("/ws")
+        host.say(ClientMessage.Hello("Sara", appVersion = 1))
+        host.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = host.await<ServerMessage.RoomUpdate>().room.code
+
+        val old = ws.webSocketSession("/ws")
+        old.say(ClientMessage.Hello("Ali"))
+        old.await<ServerMessage.Failure>()
+
+        old.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val noRoom = old.await<ServerMessage.Failure>()
+        assertEquals(ErrorCode.INTERNAL, noRoom.code)
+        assertTrue("نسختك قديمة" in noRoom.message && "/download" in noRoom.message)
+
+        old.say(ClientMessage.JoinRoom(code))
+        assertTrue("نسختك قديمة" in old.await<ServerMessage.Failure>().message)
+        old.say(ClientMessage.JoinRoom(code, rejoin = true))
+        assertTrue("نسختك قديمة" in old.await<ServerMessage.Failure>().message)
+
+        // Nobody old ever reached the table.
+        host.say(ClientMessage.JoinRoom(code))
+        val room = host.await<ServerMessage.RoomUpdate>().room
+        assertTrue(room.seats.none { it.name == "Ali" } && room.spectators.none { it.name == "Ali" })
     }
 
     @Test
@@ -519,13 +550,13 @@ class RoomLinkTest {
         val ws = createClient { install(WebSockets) }
 
         val ali = ws.webSocketSession("/ws")
-        ali.say(ClientMessage.Hello("Ali"))
+        ali.say(ClientMessage.Hello("Ali", appVersion = 99))
         ali.await<ServerMessage.Welcome>()
         ali.say(ClientMessage.JoinRoom("KHAN", rejoin = true))
         assertEquals("KHAN", ali.await<ServerMessage.RoomUpdate>().room.code, "reopened under the same code")
 
         val sara = ws.webSocketSession("/ws")
-        sara.say(ClientMessage.Hello("Sara"))
+        sara.say(ClientMessage.Hello("Sara", appVersion = 99))
         sara.await<ServerMessage.Welcome>()
         sara.say(ClientMessage.JoinRoom("KHAN", rejoin = true))
         val room = sara.await<ServerMessage.RoomUpdate> { it.room.seats.any { s -> s.name == "Sara" } }.room
