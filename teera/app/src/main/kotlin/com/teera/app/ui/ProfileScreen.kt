@@ -26,6 +26,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
@@ -53,6 +55,8 @@ fun ProfileScreen(
     recordKept: Boolean = true,
     onOpenMatch: (String, Int) -> Unit = { _, _ -> },
     onRanking: () -> Unit = {},
+    onFelt: (com.teera.app.ui.theme.FeltStyle) -> Unit = {},
+    onBones: (com.teera.app.ui.theme.BoneStyle) -> Unit = {},
 ) {
     WalnutRoom {
         Column(Modifier.fillMaxSize()) {
@@ -131,8 +135,74 @@ fun ProfileScreen(
                     modifier = Modifier.padding(top = 6.dp),
                 )
                 Spacer(Modifier.height(18.dp))
+                LooksPicker(onFelt, onBones)
+                Spacer(Modifier.height(18.dp))
                 GoldButton("تمام", onClose)
                 Spacer(Modifier.height(24.dp))
+            }
+        }
+    }
+}
+
+/** The felt and the bones, as this phone likes them; a small table shows the pick. */
+@Composable
+private fun LooksPicker(
+    onFelt: (com.teera.app.ui.theme.FeltStyle) -> Unit,
+    onBones: (com.teera.app.ui.theme.BoneStyle) -> Unit,
+) {
+    val looks = com.teera.app.ui.theme.Looks
+    Text("شكل الطاولة", color = Felt.Brass, style = MaterialTheme.typography.titleMedium)
+    Spacer(Modifier.height(8.dp))
+    // The pick, as it will look: a patch of felt with three bones on it.
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(96.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(androidx.compose.ui.graphics.Brush.radialGradient(listOf(Felt.TableLight, Felt.Table, Felt.Deep)))
+            .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            DominoTile(com.teera.core.Domino.of(6, 3), Modifier.size(64.dp, 32.dp), vertical = false)
+            DominoTile(com.teera.core.Domino.of(5, 5), Modifier.size(32.dp, 64.dp))
+            DominoTile(null, Modifier.size(32.dp, 64.dp), faceUp = false)
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Text("القماش", color = Felt.Muted, style = MaterialTheme.typography.labelMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+        com.teera.app.ui.theme.FeltStyle.entries.forEach { style ->
+            val chosen = looks.felt == style
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(style.table)
+                        .border(if (chosen) 3.dp else 1.dp, if (chosen) Felt.GoldLit else Felt.Brass.copy(alpha = 0.5f), CircleShape)
+                        .clickable { onFelt(style) }
+                        .testTag("felt-${style.name}"),
+                )
+                Text(style.label, color = if (chosen) Felt.GoldLit else Felt.Muted, style = MaterialTheme.typography.labelSmall)
+            }
+        }
+    }
+    Text("البولات", color = Felt.Muted, style = MaterialTheme.typography.labelMedium)
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(vertical = 6.dp)) {
+        com.teera.app.ui.theme.BoneStyle.entries.forEach { style ->
+            val chosen = looks.bones == style
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(
+                    Modifier
+                        .size(width = 30.dp, height = 52.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(style.face)
+                        .border(if (chosen) 3.dp else 1.dp, if (chosen) Felt.GoldLit else style.edge, RoundedCornerShape(6.dp))
+                        .clickable { onBones(style) }
+                        .testTag("bones-${style.name}"),
+                )
+                Text(style.label, color = if (chosen) Felt.GoldLit else Felt.Muted, style = MaterialTheme.typography.labelSmall)
             }
         }
     }

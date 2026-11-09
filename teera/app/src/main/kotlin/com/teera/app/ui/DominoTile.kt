@@ -37,7 +37,14 @@ fun pipColour(value: Int): Color = Color(TileArt.colourOf(value) or 0xFF000000.t
  */
 private fun DrawScope.drawFace(value: Int, area: Rect, standing: Boolean) {
     val radius = min(area.width, area.height) * 0.095f
-    val colour = pipColour(value)
+    // On black bones the darker spots (navy, grey) would vanish: lift them towards white.
+    val colour = pipColour(value).let {
+        if (com.teera.app.ui.theme.Looks.bones == com.teera.app.ui.theme.BoneStyle.BLACK) {
+            androidx.compose.ui.graphics.lerp(it, Color.White, 0.35f)
+        } else {
+            it
+        }
+    }
     for (pip in TileArt.pipsOf(value)) {
         val x = if (standing) pip.x else pip.y
         val y = if (standing) pip.y else pip.x

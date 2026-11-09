@@ -238,7 +238,12 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     },
                 )
 
-                Screen.Rules -> RulesScreen(onClose = viewModel::closeRules)
+                Screen.Rules -> RulesScreen(onClose = viewModel::closeRules, onTutorial = viewModel::showTutorial)
+
+                Screen.Tutorial -> com.teera.app.ui.TutorialScreen(
+                    onTry = viewModel::tryFromTutorial,
+                    onClose = viewModel::closeTutorial,
+                )
 
                 Screen.Ranking -> com.teera.app.ui.RankingScreen(
                     board = state.leaderboard,
@@ -290,6 +295,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     recordLoading = state.recordLoading,
                     recordKept = state.recordKept,
                     onOpenMatch = { id, seat -> viewModel.openMatch(id, seat) },
+                    onFelt = viewModel::chooseFelt,
+                    onBones = viewModel::chooseBones,
                     onRanking = viewModel::showRanking,
                 )
 

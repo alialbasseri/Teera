@@ -186,6 +186,40 @@ class Screenshots {
         com.teera.app.ui.MatchScreen(sampleMatch, loading = false, mySeat = 0, onClose = {})
     }
 
+    @Test
+    fun tutorial() = shoot("tutorial") { com.teera.app.ui.TutorialScreen(onTry = {}, onClose = {}) }
+
+    /** The same table in red felt and wooden bones, then black on black. */
+    @Test
+    fun tableStyles() {
+        try {
+            com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.RED
+            com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.WOOD
+            shoot("table-red-wood") {
+                val v = midGame()
+                TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+            }
+        } finally {
+            com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.GREEN
+            com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.IVORY
+        }
+    }
+
+    @Test
+    fun tableBlack() {
+        try {
+            com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.BLUE
+            com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.BLACK
+            shoot("table-blue-black") {
+                val v = midGame()
+                TableScreen(v, onMove = {}, onNextGame = {}, onLeave = {}, avatarFor = { seat, size -> pictures(v, seat, size) })
+            }
+        } finally {
+            com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.GREEN
+            com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.IVORY
+        }
+    }
+
     /** The games being played that anyone may watch. */
     @Test
     fun liveGames() = shoot("live-games") {

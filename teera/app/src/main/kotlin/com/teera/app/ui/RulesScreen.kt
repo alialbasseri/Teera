@@ -43,7 +43,7 @@ import com.teera.core.Domino
  * version for players.
  */
 @Composable
-fun RulesScreen(onClose: () -> Unit) {
+fun RulesScreen(onClose: () -> Unit, onTutorial: () -> Unit = {}) {
     WalnutRoom {
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -54,6 +54,8 @@ fun RulesScreen(onClose: () -> Unit) {
                     Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "رجوع", tint = Felt.Brass)
                 }
                 Spacer(Modifier.weight(1f))
+                // The same rules, a page at a time with the bones drawn.
+                BrassButton("تعلّم خطوة بخطوة", onTutorial)
             }
             Column(
                 Modifier

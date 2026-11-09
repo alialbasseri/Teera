@@ -42,7 +42,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live, Ranking, Match }
+enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live, Ranking, Match, Tutorial }
 
 /** Somebody this player knows: met at a table, or added by their code. */
 data class Friend(val id: String, val name: String, val avatar: String)
@@ -560,6 +560,30 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(update = null) }
     }
 
+    fun chooseFelt(style: com.teera.app.ui.theme.FeltStyle) {
+        com.teera.app.ui.theme.Looks.felt = style
+        prefs.edit().putString(KEY_FELT, style.name).apply()
+    }
+
+    fun chooseBones(style: com.teera.app.ui.theme.BoneStyle) {
+        com.teera.app.ui.theme.Looks.bones = style
+        prefs.edit().putString(KEY_BONES, style.name).apply()
+    }
+
+    /** The lesson for somebody new; it opens by itself the first time the app does. */
+    fun showTutorial() = _state.update { it.copy(screen = Screen.Tutorial) }
+
+    fun closeTutorial() {
+        prefs.edit().putBoolean(KEY_TUTORIAL_SEEN, true).apply()
+        _state.update { if (it.screen == Screen.Tutorial) it.copy(screen = Screen.Menu) else it }
+    }
+
+    /** From the lesson's last page: a first game, against easy bots. */
+    fun tryFromTutorial() {
+        closeTutorial()
+        playOffline(Difficulty.EASY)
+    }
+
     /** The ranking: players, and the strongest pairs. */
     fun showRanking() {
         if (presence == null) startPresence()
@@ -669,6 +693,13 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         _state.update { it.copy(friends = loadFriends()) }
+        // The felt and bones this phone picked.
+        runCatching { com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.valueOf(prefs.getString(KEY_FELT, null) ?: "GREEN") }
+        runCatching { com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.valueOf(prefs.getString(KEY_BONES, null) ?: "IVORY") }
+        // Somebody new starts with the lesson (never in a test, which drives the menu itself).
+        if (!prefs.getBoolean(KEY_TUTORIAL_SEEN, false) && System.getProperty("teera.noPresence") != "true") {
+            _state.update { it.copy(screen = Screen.Tutorial) }
+        }
     }
 
     fun setForeground(foreground: Boolean) {
@@ -929,6 +960,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             Screen.Friends -> closeFriends()
             Screen.Live -> closeLive()
             Screen.Ranking -> closeRanking()
+            Screen.Tutorial -> closeTutorial()
             Screen.Match -> closeMatch()
             Screen.Menu -> Unit
         }
@@ -955,6 +987,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val ONLINE_POLL_MS = 15_000L
         const val RECORD_WAIT_MS = 75_000L
         const val LIVE_POLL_MS = 8_000L
+        const val KEY_TUTORIAL_SEEN = "tutorialSeen"
+        const val KEY_FELT = "feltStyle"
+        const val KEY_BONES = "boneStyle"
         const val KEY_UPDATE_LATER = "updateLater"
         const val PHOTO_SIZE = 160
     }

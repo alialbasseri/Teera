@@ -7,6 +7,8 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -42,10 +44,49 @@ val Ruqaa = FontFamily(
     Font(com.teera.app.R.font.aref_ruqaa_bold, FontWeight.Bold),
 )
 
+/** The felt on the table, picked on the profile. */
+enum class FeltStyle(val label: String, val deep: Color, val table: Color, val light: Color) {
+    GREEN("أخضر", Color(0xFF07301C), Color(0xFF0F4A2A), Color(0xFF1A6B3C)),
+    RED("أحمر", Color(0xFF2E0A0E), Color(0xFF5A1620), Color(0xFF7E2430)),
+    BLUE("أزرق", Color(0xFF071C33), Color(0xFF0F3256), Color(0xFF1B4C7A)),
+    BLACK("أسود", Color(0xFF0B0B0C), Color(0xFF1C1C1F), Color(0xFF2E2E33)),
+}
+
+/** The bones themselves: ivory, wood, or black with bright spots. */
+enum class BoneStyle(
+    val label: String,
+    val face: Color,
+    val faceLit: Color,
+    val faceEdge: Color,
+    val faceShade: Color,
+    val edge: Color,
+    val back: Color,
+    val backEdge: Color,
+) {
+    IVORY(
+        "عاج", Color(0xFFFBF6EC), Color(0xFFFFFCF5), Color(0xFFD8CCB6), Color(0xFFE2D8C6),
+        Color(0xFF6B5B44), Color(0xFF8E2727), Color(0xFF5A1414),
+    ),
+    WOOD(
+        "خشب", Color(0xFFD9B27C), Color(0xFFEACB9C), Color(0xFFA67C4E), Color(0xFFC79E68),
+        Color(0xFF5A3B1C), Color(0xFF4A2E16), Color(0xFF2E1C0C),
+    ),
+    BLACK(
+        "أسود", Color(0xFF26262A), Color(0xFF3A3A40), Color(0xFF121214), Color(0xFF1E1E22),
+        Color(0xFF000000), Color(0xFFB08A3E), Color(0xFF6E5420),
+    ),
+}
+
+/** What this phone has picked; reading it in a drawing redraws that drawing when it changes. */
+object Looks {
+    var felt by androidx.compose.runtime.mutableStateOf(FeltStyle.GREEN)
+    var bones by androidx.compose.runtime.mutableStateOf(BoneStyle.IVORY)
+}
+
 object Felt {
-    val Deep = Color(0xFF07301C)
-    val Table = Color(0xFF0F4A2A)
-    val TableLight = Color(0xFF1A6B3C)
+    val Deep: Color get() = Looks.felt.deep
+    val Table: Color get() = Looks.felt.table
+    val TableLight: Color get() = Looks.felt.light
 
     // The cabinet the felt is set into: walnut, with gold laid along its edges.
     val Rail = Color(0xFF3A2616)
@@ -58,15 +99,15 @@ object Felt {
     val Brass = Color(0xFFD9B166)
     val BrassDim = Color(0xFF8A6A2A)
 
-    val Ivory = Color(0xFFFBF6EC)
-    val IvoryLit = Color(0xFFFFFCF5)
-    val IvoryEdge = Color(0xFFD8CCB6)
-    val IvoryShade = Color(0xFFE2D8C6)
+    val Ivory: Color get() = Looks.bones.face
+    val IvoryLit: Color get() = Looks.bones.faceLit
+    val IvoryEdge: Color get() = Looks.bones.faceEdge
+    val IvoryShade: Color get() = Looks.bones.faceShade
     val Pip = Color(0xFF2F2A24)
     val PipShadow = Color(0x4D4A3B22)
-    val BoneEdge = Color(0xFF6B5B44)
-    val TileBack = Color(0xFF8E2727)
-    val TileBackEdge = Color(0xFF5A1414)
+    val BoneEdge: Color get() = Looks.bones.edge
+    val TileBack: Color get() = Looks.bones.back
+    val TileBackEdge: Color get() = Looks.bones.backEdge
 
     val Ink = Color(0xFF14110C)
     val Parchment = Color(0xFFFBF7EF)
