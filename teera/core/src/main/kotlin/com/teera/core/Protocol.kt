@@ -373,13 +373,13 @@ enum class Emote {
     SHEEL,
     /** "سبلوش!" */
     SPLOOSH,
-    /** "والله دنيييكم" */
+    /** "والله دنيييكم": retired from the board and never passed on, kept so an older phone's press is read. */
     WALLAH,
     ;
 
     companion object {
         /** What the soundboard offers, in order. */
-        val BOARD = listOf(GULP, NO_WAY, SHEEL, SPLOOSH, WALLAH, CHAT, DRUMROLL, SAD)
+        val BOARD = listOf(GULP, NO_WAY, SHEEL, SPLOOSH, CHAT, DRUMROLL, SAD)
     }
 }
 

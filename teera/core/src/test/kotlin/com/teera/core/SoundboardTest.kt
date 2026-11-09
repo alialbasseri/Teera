@@ -42,6 +42,14 @@ class SoundboardTest {
     }
 
     @Test
+    fun `the retired wallah line is off the board and nobody hears an old phone's press`() {
+        assertTrue(Emote.WALLAH !in Emote.BOARD)
+        assertEquals(Room.Output.NOTHING, room().emote("b", Emote.WALLAH))
+        val old = ClientMessage.SendEmote(Emote.WALLAH)
+        assertEquals(old, Protocol.decodeClient(Protocol.encode(old)), "still read, so an old phone gets no error")
+    }
+
+    @Test
     fun `an emote survives the wire`() {
         val sent = ClientMessage.SendEmote(Emote.DRUMROLL)
         assertEquals(sent, Protocol.decodeClient(Protocol.encode(sent)))

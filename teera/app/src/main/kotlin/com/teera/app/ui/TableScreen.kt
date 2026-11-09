@@ -681,7 +681,7 @@ private fun Emote.words(): String = when (this) {
     Emote.CHAT -> "يلا شباب خلي نسولف"
     Emote.SHEEL -> "شيل!"
     Emote.SPLOOSH -> "سبلوش!"
-    Emote.WALLAH -> "والله دنيييكم"
+    Emote.WALLAH -> ""
 }
 
 /** A soundboard press, popping up over whoever pressed it. */
@@ -1545,7 +1545,7 @@ private fun Emote.label(): String = when (this) {
     Emote.NO_WAY -> "بالله ما طيغ!"
     Emote.SHEEL -> "شيل"
     Emote.SPLOOSH -> "سبلوش"
-    Emote.WALLAH -> "والله دنيييكم"
+    Emote.WALLAH -> ""
     Emote.CHAT -> "يلا نسولف"
     Emote.DRUMROLL -> "طبل"
     Emote.SAD -> "حسرة"

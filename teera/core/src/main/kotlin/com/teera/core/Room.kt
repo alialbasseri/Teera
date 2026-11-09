@@ -700,6 +700,8 @@ class Room(
      */
     fun emote(playerId: String, emote: Emote): Output {
         val seat = seatOf(playerId) ?: return Output.NOTHING
+        // Taken off the board; an older phone may still send it, and nobody hears it.
+        if (emote == Emote.WALLAH) return Output.NOTHING
         val now = clock()
         if (now - (lastEmote[playerId] ?: Long.MIN_VALUE / 2) < EMOTE_GAP_MS) return Output.NOTHING
         lastEmote[playerId] = now
