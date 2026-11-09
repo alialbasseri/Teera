@@ -313,6 +313,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onOpenMatch = { id, seat -> viewModel.openMatch(id, seat) },
                     onFelt = viewModel::chooseFelt,
                     onBones = viewModel::chooseBones,
+                    reminders = state.reminders,
+                    onReminders = viewModel::setReminders,
                     onRanking = viewModel::showRanking,
                 )
 

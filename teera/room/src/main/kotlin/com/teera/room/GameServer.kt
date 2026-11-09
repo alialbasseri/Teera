@@ -54,8 +54,13 @@ fun Application.gameServer(
     /** Where to check for the newest app (the cloud server); null keeps the built-in numbers. */
     latestFrom: String? = null,
     pusher: Pusher = Pusher.NONE,
+    /** The password to the developer's page (/admin?key=…); none, and the page does not exist. */
+    adminKey: String? = null,
 ) {
     val tournaments = Tournaments(records)
+    // The most people with the app open at once today, for the developer's page.
+    var peakDay = ""
+    var peak = 0
     if (latestFrom != null) {
         launch {
             while (isActive) {
@@ -113,6 +118,9 @@ fun Application.gameServer(
                 }
             }
             registry.evictIdle(IDLE_ROOM_MS)
+            val today = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Baghdad")).toString()
+            if (today != peakDay) { peakDay = today; peak = 0 }
+            peak = maxOf(peak, registry.online.size)
         }
     }
 
@@ -127,6 +135,24 @@ fun Application.gameServer(
         // Rooms still waiting for players. A phone hosting on the Wi-Fi only ever has one,
         // so a friend who typed the host's address can find it without a code.
         roomLinks()
+
+        // The developer's numbers, behind a password kept in Render.
+        get("/admin") {
+            val given = call.request.queryParameters["key"]
+            if (adminKey.isNullOrBlank() || given != adminKey) {
+                call.respondText("Not Found", status = io.ktor.http.HttpStatusCode.NotFound)
+                return@get
+            }
+            val holders = registry.all()
+            val live = LiveNow(
+                online = registry.online.size,
+                rooms = holders.size,
+                playing = holders.count { h -> h.room.game?.let { it.phase != Phase.MATCH_OVER } == true },
+                watchers = holders.sumOf { it.room.info().spectators.size },
+                peakToday = peak,
+            )
+            call.respondText(adminPage(live, records.adminStats()), ContentType.Text.Html)
+        }
 
         get("/rooms") {
             val open = registry.all().filter { !it.room.isStarted }.map { it.room.code }
@@ -186,7 +212,7 @@ fun Application.gameServer(
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
                             registry.arrived(playerId!!, name, avatar, this)
-                            records.playerSeen(playerId!!, name, avatar)
+                            records.playerSeen(playerId!!, name, avatar, message.appVersion)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                             when {
                                 // Apps before 1.4.1 cannot show an update window, but they do
@@ -277,6 +303,7 @@ fun Application.gameServer(
                             trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null, pushed = pushed))
                         }
                         is ClientMessage.PushToken -> if (message.token.length in 20..4096) pusher.remember(me!!, message.token)
+                        is ClientMessage.Reminders -> records.setReminders(me!!, message.on)
 
                         // Tournaments: a bracket of pairs, each match played in its own room.
                         is ClientMessage.CreateTournament -> {
@@ -469,7 +496,7 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
-        is ClientMessage.AskMatch, is ClientMessage.PushToken, is ClientMessage.CreateTournament,
+        is ClientMessage.AskMatch, is ClientMessage.PushToken, is ClientMessage.Reminders, is ClientMessage.CreateTournament,
         is ClientMessage.AskTournament, is ClientMessage.PlayTournamentMatch, is ClientMessage.SetTournamentWinner -> null
     }
 }

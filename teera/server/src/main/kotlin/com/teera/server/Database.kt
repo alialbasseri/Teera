@@ -12,7 +12,10 @@ import com.teera.core.PlayerRecord
 import com.teera.core.Protocol
 import com.teera.core.Room
 import com.teera.core.teamOf
+import com.teera.room.AdminStats
+import com.teera.room.DayStat
 import com.teera.room.Records
+import java.util.concurrent.ConcurrentHashMap
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import java.net.URI
@@ -96,19 +99,190 @@ class SqlRecords(
         writer.submit {}.get(30, TimeUnit.SECONDS)
     }
 
-    override fun playerSeen(playerId: String, name: String, avatar: String) = write("player") { db ->
+    /** Days a player's opening of the app is already counted for, so each counts once a day. */
+    private val visitsCounted = java.util.Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    override fun playerSeen(playerId: String, name: String, avatar: String, appVersion: Int) = write("player") { db ->
         val now = clock()
-        val updated = db.prepareStatement("UPDATE players SET name = ?, avatar = ?, last_seen = ? WHERE id = ?").use {
-            it.setString(1, name); it.setString(2, avatar); it.setLong(3, now); it.setString(4, playerId)
+        val updated = db.prepareStatement("UPDATE players SET name = ?, avatar = ?, last_seen = ?, app_version = ? WHERE id = ?").use {
+            it.setString(1, name); it.setString(2, avatar); it.setLong(3, now); it.setInt(4, appVersion); it.setString(5, playerId)
             it.executeUpdate()
         }
         if (updated == 0) {
-            db.prepareStatement("INSERT INTO players (id, name, avatar, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)").use {
+            db.prepareStatement("INSERT INTO players (id, name, avatar, first_seen, last_seen, app_version) VALUES (?, ?, ?, ?, ?, ?)").use {
                 it.setString(1, playerId); it.setString(2, name); it.setString(3, avatar)
-                it.setLong(4, now); it.setLong(5, now)
+                it.setLong(4, now); it.setLong(5, now); it.setInt(6, appVersion)
                 it.executeUpdate()
             }
         }
+        // Who opened the app which day, for the developer's numbers.
+        val day = dayOf(now)
+        if (visitsCounted.add("$playerId|$day")) {
+            val seen = db.prepareStatement("SELECT 1 FROM visits WHERE player_id = ? AND on_day = ?").use {
+                it.setString(1, playerId); it.setString(2, day)
+                it.executeQuery().use { row -> row.next() }
+            }
+            if (!seen) {
+                db.prepareStatement("INSERT INTO visits (player_id, on_day) VALUES (?, ?)").use {
+                    it.setString(1, playerId); it.setString(2, day)
+                    it.executeUpdate()
+                }
+            }
+        }
+    }
+
+    override fun setReminders(playerId: String, on: Boolean) = write("reminders") { db ->
+        db.prepareStatement("UPDATE players SET reminders_off = ? WHERE id = ?").use {
+            it.setBoolean(1, !on); it.setString(2, playerId)
+            it.executeUpdate()
+        }
+    }
+
+    // -- reminders ------------------------------------------------------------------
+
+    /** Somebody a reminder can reach: a phone address, reminders on. */
+    data class Reachable(val playerId: String, val name: String, val lastSeen: Long)
+
+    fun reachable(): List<Reachable> = withConnection { db ->
+        db.prepareStatement(
+            "SELECT id, name, last_seen FROM players WHERE push_token IS NOT NULL AND (reminders_off IS NULL OR reminders_off = FALSE)",
+        ).use {
+            it.executeQuery().use { row ->
+                buildList { while (row.next()) add(Reachable(row.getString(1), row.getString(2), row.getLong(3))) }
+            }
+        }
+    }
+
+    /** How many reminders this player has had in all; it picks the next line, so none repeats soon. */
+    fun remindersSent(playerId: String): Int = withConnection { db ->
+        db.prepareStatement("SELECT COUNT(*) FROM reminders WHERE player_id = ?").use {
+            it.setString(1, playerId)
+            it.executeQuery().use { row -> if (row.next()) row.getInt(1) else 0 }
+        }
+    }
+
+    fun reminded(playerId: String, day: String, slot: Int): Boolean = withConnection { db ->
+        db.prepareStatement("SELECT 1 FROM reminders WHERE player_id = ? AND on_day = ? AND slot = ?").use {
+            it.setString(1, playerId); it.setString(2, day); it.setInt(3, slot)
+            it.executeQuery().use { row -> row.next() }
+        }
+    }
+
+    fun noteReminder(playerId: String, day: String, slot: Int, line: Int) = withConnection { db ->
+        db.prepareStatement("INSERT INTO reminders (player_id, on_day, slot, line, sent_at) VALUES (?, ?, ?, ?, ?)").use {
+            it.setString(1, playerId); it.setString(2, day); it.setInt(3, slot); it.setInt(4, line); it.setLong(5, clock())
+            it.executeUpdate()
+        }
+    }
+
+    // -- the developer's numbers --------------------------------------------------------
+
+    override suspend fun adminStats(): AdminStats? = withContext(Dispatchers.IO) {
+        try {
+            withConnection { db -> readAdmin(db) }
+        } catch (e: Exception) {
+            log.warn("could not read the numbers: {}", e.message)
+            null
+        }
+    }
+
+    private fun readAdmin(db: Connection): AdminStats {
+        val now = clock()
+        val today = dayOf(now)
+        val since = now - 15L * 24 * 3600 * 1000
+        val month = now - 30L * 24 * 3600 * 1000
+        fun count(sql: String, vararg args: Any): Int = db.prepareStatement(sql).use {
+            args.forEachIndexed { i, a -> if (a is Long) it.setLong(i + 1, a) else it.setString(i + 1, a.toString()) }
+            it.executeQuery().use { row -> if (row.next()) row.getInt(1) else 0 }
+        }
+
+        // Matches and games of the last two weeks, bucketed by Baghdad's day.
+        class M(val id: String, val started: Long, val ended: Long?)
+        val matches = db.prepareStatement("SELECT id, started_at, ended_at FROM matches WHERE started_at >= ?").use {
+            it.setLong(1, since)
+            it.executeQuery().use { row ->
+                buildList { while (row.next()) add(M(row.getString(1), row.getLong(2), row.getLong(3).takeUnless { row.wasNull() })) }
+            }
+        }
+        val lastGame = HashMap<String, Long>()
+        val gamesByDay = HashMap<String, Int>()
+        db.prepareStatement("SELECT match_id, ended_at FROM games WHERE ended_at >= ?").use {
+            it.setLong(1, since)
+            it.executeQuery().use { row ->
+                while (row.next()) {
+                    val at = row.getLong(2)
+                    lastGame.merge(row.getString(1), at, ::maxOf)
+                    gamesByDay.merge(dayOf(at), 1, Int::plus)
+                }
+            }
+        }
+        fun minutes(m: M): Int {
+            val end = m.ended ?: lastGame[m.id] ?: m.started
+            return ((end - m.started) / 60_000).toInt().coerceIn(0, 6 * 60)
+        }
+        val seatedByMatch = HashMap<String, MutableSet<String>>()
+        if (matches.isNotEmpty()) {
+            matches.map { it.id }.chunked(500).forEach { chunk ->
+                val marks = chunk.joinToString(",") { "?" }
+                db.prepareStatement("SELECT match_id, player_id FROM match_seats WHERE player_id IS NOT NULL AND match_id IN ($marks)").use {
+                    chunk.forEachIndexed { i, id -> it.setString(i + 1, id) }
+                    it.executeQuery().use { row -> while (row.next()) seatedByMatch.getOrPut(row.getString(1)) { HashSet() } += row.getString(2) }
+                }
+            }
+        }
+        val openedByDay = HashMap<String, Int>()
+        db.prepareStatement("SELECT on_day, COUNT(*) FROM visits WHERE on_day >= ? GROUP BY on_day").use {
+            it.setString(1, dayOf(since))
+            it.executeQuery().use { row -> while (row.next()) openedByDay[row.getString(1)] = row.getInt(2) }
+        }
+        val days = (13 downTo 0).map { back ->
+            val day = dayOf(now - back * 24L * 3600 * 1000)
+            val ofDay = matches.filter { dayOf(it.started) == day }
+            DayStat(
+                day = day,
+                opened = openedByDay[day] ?: 0,
+                played = ofDay.flatMap { seatedByMatch[it.id].orEmpty() }.toSet().size,
+                matches = ofDay.size,
+                games = gamesByDay[day] ?: 0,
+                minutes = ofDay.sumOf(::minutes),
+            )
+        }
+        val todays = days.last()
+        val finished = matches.filter { it.ended != null }
+
+        val versions = LinkedHashMap<Int, Int>()
+        db.prepareStatement("SELECT app_version, COUNT(*) FROM players WHERE last_seen >= ? GROUP BY app_version ORDER BY app_version DESC").use {
+            it.setLong(1, month)
+            it.executeQuery().use { row -> while (row.next()) versions[row.getInt(1)] = row.getInt(2) }
+        }
+        val top = db.prepareStatement(
+            """SELECT p.name, COUNT(*) FROM match_seats s
+               JOIN matches m ON m.id = s.match_id JOIN players p ON p.id = s.player_id
+               WHERE m.started_at >= ? GROUP BY p.id, p.name ORDER BY 2 DESC""",
+        ).use {
+            it.setLong(1, month)
+            it.maxRows = 10
+            it.executeQuery().use { row -> buildList { while (row.next()) add(row.getString(1) to row.getInt(2)) } }
+        }
+        return AdminStats(
+            totalPlayers = count("SELECT COUNT(*) FROM players"),
+            newToday = count("SELECT COUNT(*) FROM players WHERE first_seen >= ?", startOfDay(now)),
+            openedToday = todays.opened,
+            playedToday = todays.played,
+            matchesToday = todays.matches,
+            finishedToday = finished.count { dayOf(it.ended!!) == today },
+            gamesToday = todays.games,
+            minutesToday = todays.minutes,
+            totalMatches = count("SELECT COUNT(*) FROM matches"),
+            totalGames = count("SELECT COUNT(*) FROM games"),
+            averageMatchMinutes = if (finished.isEmpty()) 0 else finished.sumOf(::minutes) / finished.size,
+            days = days,
+            versions = versions,
+            topPlayers = top,
+            reachable = count("SELECT COUNT(*) FROM players WHERE push_token IS NOT NULL AND (reminders_off IS NULL OR reminders_off = FALSE)"),
+            remindersToday = count("SELECT COUNT(*) FROM reminders WHERE on_day = ?", today),
+            tournaments = count("SELECT COUNT(*) FROM tournaments"),
+        )
     }
 
     override fun happened(matchId: String, roomCode: String, happening: Room.Happening) = when (happening) {
@@ -555,6 +729,14 @@ class SqlRecords(
     }
 
     companion object {
+        /** The game's friends are in Iraq: days begin at midnight Baghdad time. */
+        val ZONE: java.time.ZoneId = java.time.ZoneId.of("Asia/Baghdad")
+
+        fun dayOf(epochMs: Long): String = java.time.Instant.ofEpochMilli(epochMs).atZone(ZONE).toLocalDate().toString()
+
+        fun startOfDay(epochMs: Long): Long =
+            java.time.Instant.ofEpochMilli(epochMs).atZone(ZONE).toLocalDate().atStartOfDay(ZONE).toInstant().toEpochMilli()
+
         private const val RECENT = 10
         private const val LEADERBOARD_SIZE = 50
         private val STEPS = ListSerializer(GameEvent.serializer())
@@ -607,6 +789,23 @@ class SqlRecords(
                         PRIMARY KEY (match_id, game_number))""",
                 )
                 sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS push_token VARCHAR(512)")
+                sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS app_version INT")
+                sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS reminders_off BOOLEAN")
+                sql.execute(
+                    """CREATE TABLE IF NOT EXISTS visits (
+                        player_id VARCHAR(64) NOT NULL,
+                        on_day VARCHAR(10) NOT NULL,
+                        PRIMARY KEY (player_id, on_day))""",
+                )
+                sql.execute(
+                    """CREATE TABLE IF NOT EXISTS reminders (
+                        player_id VARCHAR(64) NOT NULL,
+                        on_day VARCHAR(10) NOT NULL,
+                        slot INT NOT NULL,
+                        line INT NOT NULL,
+                        sent_at BIGINT NOT NULL,
+                        PRIMARY KEY (player_id, on_day, slot))""",
+                )
                 sql.execute(
                     """CREATE TABLE IF NOT EXISTS tournaments (
                         id VARCHAR(12) PRIMARY KEY,

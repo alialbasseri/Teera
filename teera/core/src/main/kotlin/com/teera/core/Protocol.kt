@@ -312,6 +312,10 @@ sealed interface ClientMessage {
     @Serializable @SerialName("pushToken")
     data class PushToken(val token: String) : ClientMessage
 
+    /** The evening reminders on or off for this player. */
+    @Serializable @SerialName("reminders")
+    data class Reminders(val on: Boolean) : ClientMessage
+
     /** The app went out of sight (or came back), so the table may need to call them back. */
     @Serializable @SerialName("away")
     data class Away(val away: Boolean) : ClientMessage

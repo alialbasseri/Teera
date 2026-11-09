@@ -187,6 +187,25 @@ class RecordsTest {
     }
 
     @Test
+    fun `the developer's numbers count today's people, matches and games`() {
+        val records = h2()
+        records.playerSeen("ali", "Ali", "", 25)
+        records.playerSeen("ali", "Ali", "", 25) // twice in a day counts once
+        records.playerSeen("sara", "Sara", "", 22)
+        val happenings = match("ali", "Ali", target = 40, seed = 5)
+        happenings.forEach { records.happened("m-stats", "STAT", it) }
+        records.flush()
+        val stats = assertNotNull(runBlocking { records.adminStats() })
+        assertEquals(2, stats.openedToday)
+        assertEquals(2, stats.totalPlayers)
+        assertEquals(1, stats.matchesToday)
+        assertEquals(1, stats.playedToday)
+        assertTrue(stats.gamesToday > 0)
+        assertEquals(mapOf(25 to 1, 22 to 1), stats.versions)
+        assertEquals(14, stats.days.size)
+    }
+
+    @Test
     fun `a stranger has an empty record, and a dead database is no record rather than a crash`() {
         val records = h2()
         val empty = assertNotNull(runBlocking { records.recordOf("nobody") })

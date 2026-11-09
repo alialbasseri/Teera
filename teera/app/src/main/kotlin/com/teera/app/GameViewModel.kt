@@ -100,6 +100,8 @@ data class UiState(
     /** Tournaments this phone knows (made here or opened by code), and the one open. */
     val tournaments: Map<String, com.teera.core.Tournament> = emptyMap(),
     val tournamentId: String? = null,
+    /** The evening reminders ("يلا نلعب"), on unless this player turned them off. */
+    val reminders: Boolean = true,
     /** People this player blocked, by id, with their names: kept on the phone only. */
     val blocked: Map<String, String> = emptyMap(),
     /** A newer app is out, and this player has not said "later" to it yet. */
@@ -577,6 +579,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(update = null) }
     }
 
+    fun setReminders(on: Boolean) {
+        prefs.edit().putBoolean(KEY_REMINDERS, on).apply()
+        _state.update { it.copy(reminders = on) }
+        presence?.send(ClientMessage.Reminders(on))
+    }
+
     fun chooseFelt(style: com.teera.app.ui.theme.FeltStyle) {
         com.teera.app.ui.theme.Looks.felt = style
         prefs.edit().putString(KEY_FELT, style.name).apply()
@@ -749,7 +757,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var onlinePoll: Job? = null
 
     init {
-        _state.update { it.copy(friends = loadFriends(), blocked = loadBlocked()) }
+        _state.update { it.copy(friends = loadFriends(), blocked = loadBlocked(), reminders = prefs.getBoolean(KEY_REMINDERS, true)) }
         // The felt and bones this phone picked.
         runCatching { com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.valueOf(prefs.getString(KEY_FELT, null) ?: "GREEN") }
         runCatching { com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.valueOf(prefs.getString(KEY_BONES, null) ?: "IVORY") }
@@ -781,6 +789,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         presencePump = viewModelScope.launch { link.incoming.collect(::onPresence) }
         // Where to reach this phone with the app closed, for invitations and "your turn".
         Push.token(getApplication()) { token -> presence?.send(ClientMessage.PushToken(token)) }
+        // The server keeps this player's choice about reminders; say it on every connection.
+        link.send(ClientMessage.Reminders(_state.value.reminders))
         onlinePoll = viewModelScope.launch {
             while (true) {
                 askWhoIsOnline()
@@ -1111,6 +1121,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val LIVE_POLL_MS = 8_000L
         const val KEY_TUTORIAL_SEEN = "tutorialSeen"
         const val KEY_BLOCKED = "blocked"
+        const val KEY_REMINDERS = "reminders"
         const val KEY_TOURNAMENTS = "tournaments"
         const val KEY_FELT = "feltStyle"
         const val KEY_BONES = "boneStyle"

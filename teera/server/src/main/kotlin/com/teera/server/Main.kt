@@ -35,7 +35,19 @@ fun main() {
         }
     } ?: com.teera.room.Pusher.NONE
     LoggerFactory.getLogger("Main").info("notifications: {}", if (pusher === com.teera.room.Pusher.NONE) "off" else "on")
+    val registry = com.teera.room.RoomRegistry()
+    // The evening reminders need the books (who to reach, what they were sent) and notifications.
+    if (records is SqlRecords && pusher !== com.teera.room.Pusher.NONE) {
+        Reminders(records, pusher, registry).start(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()))
+        LoggerFactory.getLogger("Main").info("reminders: on")
+    }
     embeddedServer(Netty, port = port, host = "0.0.0.0") {
-        gameServer(records = records, latestFrom = com.teera.room.VERSION_URL, pusher = pusher)
+        gameServer(
+            registry = registry,
+            records = records,
+            latestFrom = com.teera.room.VERSION_URL,
+            pusher = pusher,
+            adminKey = System.getenv("ADMIN_KEY")?.trim()?.takeIf { it.length >= 6 },
+        )
     }.start(wait = true)
 }

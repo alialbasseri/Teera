@@ -12,8 +12,14 @@ import com.teera.core.Room
  * throw: a database that is down loses a record, not a game.
  */
 interface Records {
-    /** Somebody opened the app and said hello. */
-    fun playerSeen(playerId: String, name: String, avatar: String) {}
+    /** Somebody opened the app and said hello, from app build [appVersion] (0 if too old to say). */
+    fun playerSeen(playerId: String, name: String, avatar: String, appVersion: Int = 0) {}
+
+    /** A player turned the evening reminders off, or back on. */
+    fun setReminders(playerId: String, on: Boolean) {}
+
+    /** The developer's numbers; null when no books are kept. */
+    suspend fun adminStats(): AdminStats? = null
 
     /** Something happened at a table; [matchId] is the same for one match from start to end. */
     fun happened(matchId: String, roomCode: String, happening: Room.Happening) {}

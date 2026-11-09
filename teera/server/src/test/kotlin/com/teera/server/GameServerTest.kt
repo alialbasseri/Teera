@@ -459,6 +459,15 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `the developer's numbers open only with the password`() = testApplication {
+        application { gameServer(adminKey = "secret123") }
+        assertEquals(404, client.get("/admin").status.value)
+        assertEquals(404, client.get("/admin?key=wrong").status.value)
+        val page = client.get("/admin?key=secret123").bodyAsText()
+        assertTrue("طيرة · الأرقام" in page && "فاتحين اللعبة" in page)
+    }
+
+    @Test
     fun `the download page hands out the latest build`() = testApplication {
         application { gameServer() }
         val page = client.get("/download").bodyAsText()

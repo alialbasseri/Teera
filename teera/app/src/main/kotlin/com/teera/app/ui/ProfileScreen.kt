@@ -57,6 +57,8 @@ fun ProfileScreen(
     onRanking: () -> Unit = {},
     onFelt: (com.teera.app.ui.theme.FeltStyle) -> Unit = {},
     onBones: (com.teera.app.ui.theme.BoneStyle) -> Unit = {},
+    reminders: Boolean = true,
+    onReminders: (Boolean) -> Unit = {},
 ) {
     WalnutRoom {
         Column(Modifier.fillMaxSize()) {
@@ -136,6 +138,30 @@ fun ProfileScreen(
                 )
                 Spacer(Modifier.height(18.dp))
                 LooksPicker(onFelt, onBones)
+                Spacer(Modifier.height(14.dp))
+                // The evening nudges, which this player can turn off.
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, Felt.Brass.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("التذكيرات", color = Felt.Parchment, style = MaterialTheme.typography.titleSmall)
+                        Text("«يلا نلعب» بعد العصر لنص الليل", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = reminders,
+                        onCheckedChange = onReminders,
+                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                            checkedThumbColor = Felt.Ink, checkedTrackColor = Felt.Brass,
+                            uncheckedThumbColor = Felt.Muted, uncheckedTrackColor = Felt.Rail,
+                        ),
+                        modifier = Modifier.testTag("reminders"),
+                    )
+                }
                 Spacer(Modifier.height(18.dp))
                 GoldButton("تمام", onClose)
                 Spacer(Modifier.height(24.dp))
