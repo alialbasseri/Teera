@@ -24,6 +24,11 @@ interface Records {
     /** The ranking; null when no books are kept. */
     suspend fun leaderboard(): com.teera.core.Leaderboard? = null
 
+    /** Keeps a tournament as it now stands; must return at once. */
+    fun saveTournament(tournament: com.teera.core.Tournament) {}
+
+    suspend fun loadTournament(id: String): com.teera.core.Tournament? = null
+
     /** One match, game by game; null when there is no such match or no books. */
     suspend fun matchDetail(matchId: String): com.teera.core.MatchDetail? = null
 

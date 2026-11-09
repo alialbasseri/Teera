@@ -108,7 +108,13 @@ class Room(
         spectators = spectatorSeats(),
         listed = listed,
         locked = locked,
+        teamNames = teamNames,
+        tournament = tournamentLabel,
     )
+
+    /** For a tournament match: the teams' names (seats 0 and 2, seats 1 and 3) and the round. */
+    var teamNames: List<String> = emptyList()
+    var tournamentLabel: String? = null
 
     // -- who may come in -----------------------------------------------------------
 

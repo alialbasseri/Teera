@@ -251,6 +251,20 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     kept = state.recordKept,
                     myId = state.myId,
                     onClose = viewModel::closeRanking,
+                    tournaments = state.tournaments.values.sortedByDescending { it.createdAtEpochMs },
+                    onOpenTournament = viewModel::openTournament,
+                    onCreateTournament = viewModel::createTournament,
+                )
+
+                Screen.Tournament -> com.teera.app.ui.TournamentScreen(
+                    tournament = state.tournamentId?.let { state.tournaments[it] },
+                    myId = state.myId,
+                    onPlay = { round, index -> state.tournamentId?.let { viewModel.playTournamentMatch(it, round, index) } },
+                    onWinner = { round, index, team -> state.tournamentId?.let { viewModel.setTournamentWinner(it, round, index, team) } },
+                    onShare = { t ->
+                        shareText(context, "بطولة طيرة: ${t.name} 🏆\nافتح طيرة ← الكأس ← البطولات، واكتب الكود: ${t.id}\n\nما عندك اللعبة؟ ${viewModel.linkFor("")?.substringBefore("/j/") ?: "https://teera-xfvr.onrender.com"}/download")
+                    },
+                    onClose = viewModel::closeTournament,
                 )
 
                 Screen.Match -> com.teera.app.ui.MatchScreen(

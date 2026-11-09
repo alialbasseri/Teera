@@ -62,6 +62,7 @@ fun RecordCard(
 private fun Note(text: String) =
     Text(text, color = Felt.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun Filled(record: PlayerRecord, now: Long, onOpenMatch: (String, Int) -> Unit, onRanking: () -> Unit) {
     // Their place in the ranking, which opens it.
@@ -85,6 +86,17 @@ private fun Filled(record: PlayerRecord, now: Long, onOpenMatch: (String, Int) -
         Stat("${record.games}", "گيمات")
         Stat("${record.finishes}", "خلّصت")
         Stat("${record.teeras}", "طيّرت")
+    }
+    // Titles held, then badges earned.
+    if (record.titles.isNotEmpty() || record.badges.isNotEmpty()) {
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().testTag("badges"),
+        ) {
+            record.titles.forEach { Badge("👑 $it", Felt.GoldLit) }
+            record.badges.forEach { Badge(it, Felt.Parchment) }
+        }
     }
     if (record.recent.isEmpty()) {
         Note("بعدك ما لعبت أونلاين. أول مباراة تلعبها تنحفظ هنا")
@@ -151,4 +163,17 @@ internal fun whenPlayed(at: Long, now: Long): String {
         1 -> "البارحة"
         else -> "${calendar.get(Calendar.DAY_OF_MONTH)}/${calendar.get(Calendar.MONTH) + 1}"
     }
+}
+
+@Composable
+private fun Badge(text: String, colour: Color) {
+    Text(
+        text,
+        color = colour,
+        style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, Felt.Brass.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
 }

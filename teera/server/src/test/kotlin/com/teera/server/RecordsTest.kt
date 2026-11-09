@@ -157,6 +157,36 @@ class RecordsTest {
     }
 
     @Test
+    fun `a tournament is kept and read back, and titles go to whoever leads`() {
+        for ((label, records) in databases()) {
+            val t = com.teera.core.Tournament.create("T" + UUID.randomUUID().toString().take(4).uppercase(), "بطولة", "ali", listOf("a", "b", "c", "d"), 1)!!
+                .withWinner(0, 0, 1)!!
+            records.saveTournament(t)
+            records.saveTournament(t.withWinner(0, 1, 3)!!)
+            records.flush()
+            val back = assertNotNull(runBlocking { records.loadTournament(t.id) }, label)
+            assertEquals(3, back.rounds[1][0].b, label)
+
+            val ali = "ali-" + UUID.randomUUID()
+            val sara = "sara-" + UUID.randomUUID()
+            records.playerSeen(ali, "Ali", "")
+            records.playerSeen(sara, "Sara", "")
+            val room = Room("TTL", ali, Rules(target = 60))
+            room.join(ali, "Ali"); room.join(sara, "Sara")
+            room.setBot(ali, 2, true, Difficulty.NORMAL); room.setBot(ali, 3, true, Difficulty.NORMAL)
+            room.start(ali, seed = 21)
+            val id = UUID.randomUUID().toString()
+            playOut(room, ali, sara).forEach { records.happened(id, "TTL", it) }
+            records.flush()
+            val board = assertNotNull(runBlocking { records.leaderboard() }, label)
+            assertTrue(board.titles.any { it.title == "الملازم" }, label)
+            val winner = board.players.first { it.playerId == ali || it.playerId == sara }.playerId
+            val record = assertNotNull(runBlocking { records.recordOf(winner) }, label)
+            assertTrue("أول فوز" in record.badges, label)
+        }
+    }
+
+    @Test
     fun `a stranger has an empty record, and a dead database is no record rather than a crash`() {
         val records = h2()
         val empty = assertNotNull(runBlocking { records.recordOf("nobody") })

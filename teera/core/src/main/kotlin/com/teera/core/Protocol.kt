@@ -41,6 +41,10 @@ data class RoomInfo(
     val listed: Boolean = false,
     /** Only people invited from inside, or already here, may come in. */
     val locked: Boolean = false,
+    /** A tournament match: the two teams' names, for seats 0 and 2 and for seats 1 and 3. */
+    val teamNames: List<String> = emptyList(),
+    /** Which tournament and round, as the lobby says it. */
+    val tournament: String? = null,
 )
 
 /** A game being played that its players let anyone watch, as the list shows it. */
@@ -312,6 +316,21 @@ sealed interface ClientMessage {
     @Serializable @SerialName("away")
     data class Away(val away: Boolean) : ClientMessage
 
+    /** A knockout of [teams] (4, 8 or 16 pairs, by name), drawn in the order given. */
+    @Serializable @SerialName("createTournament")
+    data class CreateTournament(val name: String, val teams: List<String>) : ClientMessage
+
+    @Serializable @SerialName("tournament")
+    data class AskTournament(val id: String) : ClientMessage
+
+    /** Opens (or joins) the room a tournament match is played in. */
+    @Serializable @SerialName("playTournamentMatch")
+    data class PlayTournamentMatch(val id: String, val round: Int, val index: Int) : ClientMessage
+
+    /** The organiser settles a match by hand. */
+    @Serializable @SerialName("tournamentWinner")
+    data class SetTournamentWinner(val id: String, val round: Int, val index: Int, val team: Int) : ClientMessage
+
     /** The ranking. */
     @Serializable @SerialName("leaderboard")
     data object AskLeaderboard : ClientMessage
@@ -434,6 +453,10 @@ sealed interface ServerMessage {
     @Serializable @SerialName("liveGames")
     data class LiveGames(val games: List<LiveGame>) : ServerMessage
 
+    /** A tournament as it stands; null if there is no such tournament. */
+    @Serializable @SerialName("tournament")
+    data class TournamentIs(val id: String, val tournament: Tournament?) : ServerMessage
+
     /** The ranking; null where the server keeps no books. */
     @Serializable @SerialName("leaderboard")
     data class LeaderboardIs(val board: Leaderboard?) : ServerMessage
@@ -468,6 +491,9 @@ data class PlayerRecord(
     /** Their place in the ranking, once they have a ranked match. */
     val rating: Int? = null,
     val rank: Int? = null,
+    /** Badges earned (first win, five teeras…), and titles held (ملك الطيرة…). */
+    val badges: List<String> = emptyList(),
+    val titles: List<String> = emptyList(),
 )
 
 /**
@@ -475,7 +501,11 @@ data class PlayerRecord(
  * with people on both sides: more for beating a stronger pair, less for a weaker one.
  */
 @Serializable
-data class Leaderboard(val players: List<RankedPlayer>, val pairs: List<RankedPair>)
+data class Leaderboard(
+    val players: List<RankedPlayer>,
+    val pairs: List<RankedPair>,
+    val titles: List<TitleHolder> = emptyList(),
+)
 
 @Serializable
 data class RankedPlayer(

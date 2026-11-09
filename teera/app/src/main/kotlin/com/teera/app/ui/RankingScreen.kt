@@ -25,6 +25,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -51,8 +52,17 @@ fun RankingScreen(
     kept: Boolean,
     myId: String,
     onClose: () -> Unit,
+    /** Tournaments this phone knows, and making or opening one. */
+    tournaments: List<com.teera.core.Tournament> = emptyList(),
+    onOpenTournament: (String) -> Unit = {},
+    onCreateTournament: (String, List<String>) -> Unit = { _, _ -> },
 ) {
-    var pairs by rememberSaveable { mutableStateOf(false) }
+    var tab by rememberSaveable { mutableStateOf(0) }
+    val pairs = tab == 1
+    var creating by remember { mutableStateOf(false) }
+    if (creating) {
+        CreateTournamentDialog(onCreate = { name, teams -> creating = false; onCreateTournament(name, teams) }, onClose = { creating = false })
+    }
     WalnutRoom {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -74,8 +84,35 @@ fun RankingScreen(
                     .clip(RoundedCornerShape(20.dp))
                     .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(20.dp)),
             ) {
-                Tab("اللاعبين", !pairs, "tab-players") { pairs = false }
-                Tab("الثنائيات", pairs, "tab-pairs") { pairs = true }
+                Tab("اللاعبين", tab == 0, "tab-players") { tab = 0 }
+                Tab("الثنائيات", tab == 1, "tab-pairs") { tab = 1 }
+                Tab("الألقاب", tab == 2, "tab-titles") { tab = 2 }
+                Tab("البطولات", tab == 3, "tab-tournaments") { tab = 3 }
+            }
+
+            if (tab == 3) {
+                Tournaments(tournaments, onOpenTournament) { creating = true }
+                return@Column
+            }
+            if (tab == 2) {
+                val titles = board?.titles.orEmpty()
+                if (titles.isEmpty()) {
+                    Note(if (board == null && loading) "دا نجيب الألقاب…" else "بعد محد أخذ لقب. العبوا وشوفوا منو ياخذها")
+                    return@Column
+                }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag("titles")) {
+                    itemsIndexed(titles, key = { _, it -> it.title }) { _, title ->
+                        Line(
+                            place = 0,
+                            avatars = listOf(title.avatar),
+                            names = listOf(title.title + " · " + title.name),
+                            mine = title.playerId == myId,
+                            big = "👑",
+                            small = title.value,
+                        )
+                    }
+                }
+                return@Column
             }
 
             val empty = when {
@@ -129,7 +166,7 @@ private fun Tab(text: String, chosen: Boolean, tag: String, onClick: () -> Unit)
         modifier = Modifier
             .background(if (chosen) Felt.Brass else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 22.dp, vertical = 8.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
             .testTag(tag),
     )
 }
@@ -161,7 +198,9 @@ private fun Line(place: Int, avatars: List<String>, names: List<String>, mine: B
             .padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("$place", color = medal, style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(30.dp), textAlign = TextAlign.Center)
+        if (place > 0) {
+            Text("$place", color = medal, style = MaterialTheme.typography.titleLarge, modifier = Modifier.width(30.dp), textAlign = TextAlign.Center)
+        }
         Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
             avatars.forEachIndexed { index, avatar ->
                 Box(Modifier.size(36.dp).clip(CircleShape).border(1.dp, Felt.Brass, CircleShape)) {
@@ -181,5 +220,55 @@ private fun Line(place: Int, avatars: List<String>, names: List<String>, mine: B
             Text(small, color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
         }
         Text(big, color = if (mine) Felt.GoldLit else Felt.Brass, style = MaterialTheme.typography.titleLarge)
+    }
+}
+
+/** The tournaments tab: make one, open one by its code, or open one already known. */
+@Composable
+private fun Tournaments(known: List<com.teera.core.Tournament>, onOpen: (String) -> Unit, onCreate: () -> Unit) {
+    var code by remember { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        GoldButton("سوّي بطولة", onCreate, Modifier.testTag("new-tournament"))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.OutlinedTextField(
+                value = code,
+                onValueChange = { code = it.uppercase().filter(Char::isLetterOrDigit).take(6) },
+                label = { Text("كود بطولة") },
+                singleLine = true,
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Felt.Brass, unfocusedBorderColor = Felt.Brass.copy(alpha = 0.5f),
+                    focusedLabelColor = Felt.Brass, unfocusedLabelColor = Felt.Muted,
+                    focusedTextColor = Felt.Parchment, unfocusedTextColor = Felt.Parchment, cursorColor = Felt.Brass,
+                ),
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            BrassButton("افتح", { onOpen(code) }, enabled = code.length >= 4)
+        }
+        if (known.isEmpty()) Note("سوّي بطولة لجماعتك، أو افتح وحدة بكودها")
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            itemsIndexed(known, key = { _, it -> it.id }) { _, t ->
+                val status = t.champion?.let { "🏆 ${t.teams[it]}" }
+                    ?: t.rounds.indexOfFirst { round -> round.any { it.winner == null } }.takeIf { it >= 0 }?.let { t.roundName(it) }
+                    ?: ""
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0x99120B05))
+                        .border(1.dp, Felt.Brass.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+                        .clickable { onOpen(t.id) }
+                        .padding(12.dp)
+                        .testTag("tournament-${t.id}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(t.name, color = Felt.Parchment, style = MaterialTheme.typography.titleSmall)
+                        Text("${t.teams.size} فرق · ${t.id}", color = Felt.Muted, style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(status, color = Felt.Brass, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
     }
 }

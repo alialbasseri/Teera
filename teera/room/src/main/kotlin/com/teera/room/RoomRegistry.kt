@@ -25,6 +25,10 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
         @Volatile
         var lastActivity: Long = System.currentTimeMillis()
 
+        /** For a tournament match: told which side lost, so the winners go through. */
+        @Volatile
+        var onMatchFinished: ((losingSide: Int) -> Unit)? = null
+
         /** The turn whose absent player was last called back by a notification. */
         @Volatile
         var calledBack: String? = null

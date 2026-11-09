@@ -42,7 +42,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live, Ranking, Match, Tutorial }
+enum class Screen { Menu, Lobby, Table, Rules, Profile, Friends, Live, Ranking, Match, Tutorial, Tournament }
 
 /** Somebody this player knows: met at a table, or added by their code. */
 data class Friend(val id: String, val name: String, val avatar: String)
@@ -97,6 +97,9 @@ data class UiState(
     val matchLoading: Boolean = false,
     /** Games being played that their players let anyone watch. */
     val liveGames: List<com.teera.core.LiveGame> = emptyList(),
+    /** Tournaments this phone knows (made here or opened by code), and the one open. */
+    val tournaments: Map<String, com.teera.core.Tournament> = emptyMap(),
+    val tournamentId: String? = null,
     /** People this player blocked, by id, with their names: kept on the phone only. */
     val blocked: Map<String, String> = emptyMap(),
     /** A newer app is out, and this player has not said "later" to it yet. */
@@ -517,7 +520,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
             is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
 
-            is ServerMessage.LeaderboardIs, is ServerMessage.MatchIs -> onPresence(message)
+            is ServerMessage.LeaderboardIs, is ServerMessage.MatchIs, is ServerMessage.TournamentIs -> onPresence(message)
 
             is ServerMessage.TargetResult -> _state.update {
                 it.copy(
@@ -598,11 +601,51 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         playOffline(Difficulty.EASY)
     }
 
+    // -- tournaments ------------------------------------------------------------------
+
+    private var creatingTournament = false
+
+    private fun knownTournaments(): List<String> =
+        prefs.getString(KEY_TOURNAMENTS, null).orEmpty().split(',').filter { it.isNotBlank() }
+
+    private fun rememberTournament(id: String) {
+        val ids = (listOf(id) + knownTournaments().filter { it != id }).take(20)
+        prefs.edit().putString(KEY_TOURNAMENTS, ids.joinToString(",")).apply()
+    }
+
+    fun createTournament(name: String, teams: List<String>) {
+        if (presence == null) startPresence()
+        creatingTournament = true
+        presence?.send(ClientMessage.CreateTournament(name, teams))
+    }
+
+    /** Opens a tournament by its code (one made here, or a friend's). */
+    fun openTournament(id: String) {
+        val code = id.trim().uppercase().filter(Char::isLetterOrDigit)
+        if (code.isEmpty()) return
+        if (presence == null) startPresence()
+        _state.update { it.copy(screen = Screen.Tournament, tournamentId = code) }
+        presence?.send(ClientMessage.AskTournament(code))
+    }
+
+    fun closeTournament() = _state.update { if (it.screen == Screen.Tournament) it.copy(screen = Screen.Ranking) else it }
+
+    /** Opens the room for a tournament match (or joins it, if it is being played). */
+    fun playTournamentMatch(id: String, round: Int, index: Int) {
+        if (!_state.value.hasInternetServer) return noInternetServer()
+        connectTo(_state.value.serverUrl, internet = true)
+        client?.send(ClientMessage.PlayTournamentMatch(id, round, index))
+    }
+
+    fun setTournamentWinner(id: String, round: Int, index: Int, team: Int) =
+        presence?.send(ClientMessage.SetTournamentWinner(id, round, index, team))
+
     /** The ranking: players, and the strongest pairs. */
     fun showRanking() {
         if (presence == null) startPresence()
         _state.update { it.copy(screen = Screen.Ranking, leaderboardLoading = true) }
         presence?.send(ClientMessage.AskLeaderboard)
+        knownTournaments().forEach { presence?.send(ClientMessage.AskTournament(it)) }
         viewModelScope.launch {
             delay(RECORD_WAIT_MS)
             _state.update { if (it.leaderboardLoading) it.copy(leaderboardLoading = false) else it }
@@ -781,6 +824,20 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
             is ServerMessage.LeaderboardIs -> _state.update {
                 it.copy(leaderboard = message.board ?: it.leaderboard, leaderboardLoading = false, recordKept = message.board != null)
+            }
+            is ServerMessage.TournamentIs -> {
+                val t = message.tournament
+                if (t == null) {
+                    if (_state.value.tournamentId == message.id) _state.update { it.copy(notice = "ما لگيت بطولة بهالكود") }
+                } else {
+                    rememberTournament(t.id)
+                    _state.update { it.copy(tournaments = it.tournaments + (t.id to t)) }
+                    // Just made here: open it.
+                    if (creatingTournament) {
+                        creatingTournament = false
+                        _state.update { it.copy(screen = Screen.Tournament, tournamentId = t.id) }
+                    }
+                }
             }
             is ServerMessage.MatchIs -> _state.update {
                 if (it.screen != Screen.Match) it
@@ -1025,6 +1082,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             Screen.Live -> closeLive()
             Screen.Ranking -> closeRanking()
             Screen.Tutorial -> closeTutorial()
+            Screen.Tournament -> closeTournament()
             Screen.Match -> closeMatch()
             Screen.Menu -> Unit
         }
@@ -1053,6 +1111,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val LIVE_POLL_MS = 8_000L
         const val KEY_TUTORIAL_SEEN = "tutorialSeen"
         const val KEY_BLOCKED = "blocked"
+        const val KEY_TOURNAMENTS = "tournaments"
         const val KEY_FELT = "feltStyle"
         const val KEY_BONES = "boneStyle"
         const val KEY_UPDATE_LATER = "updateLater"

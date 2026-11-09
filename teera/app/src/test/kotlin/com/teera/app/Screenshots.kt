@@ -220,6 +220,31 @@ class Screenshots {
         }
     }
 
+    private val sampleTournament = com.teera.core.Tournament.create(
+        "T7KQ", "بطولة الجمعة", "me", listOf("علي وعبود", "حسن وسيف", "عمر ونور", "سارة ومريم"), 0,
+    )!!.withWinner(0, 0, 0)!!.withRoom(0, 1, "QCNU")!!
+
+    @Test
+    fun tournament() = shoot("tournament") {
+        com.teera.app.ui.TournamentScreen(sampleTournament, myId = "me", onPlay = { _, _ -> }, onWinner = { _, _, _ -> }, onShare = {}, onClose = {})
+    }
+
+    @Test
+    fun titles() = shoot("titles") {
+        com.teera.app.ui.RankingScreen(
+            sampleBoard.copy(
+                titles = listOf(
+                    com.teera.core.TitleHolder("ملك الطيرة", "p1", "عبود نفط", "p:0", "7 طيرة"),
+                    com.teera.core.TitleHolder("ملك الاكس", "me", "علي", "p:1", "23 اكس"),
+                    com.teera.core.TitleHolder("بطل الخاوات", "p3", "حسن", "p:7", "5 خاوة"),
+                    com.teera.core.TitleHolder("الحديد", "p1", "عبود نفط", "p:0", "6 فوز ورا بعض"),
+                    com.teera.core.TitleHolder("الملازم", "me", "علي", "p:1", "31 مباراة"),
+                ),
+            ),
+            loading = false, kept = true, myId = "me", onClose = {},
+        )
+    }
+
     /** The games being played that anyone may watch. */
     @Test
     fun liveGames() = shoot("live-games") {
@@ -345,6 +370,7 @@ class Screenshots {
                 com.teera.app.ui.RecordCard(
                     com.teera.core.PlayerRecord(
                         matches = 12, wins = 8, losses = 4, games = 97, finishes = 31, teeras = 6, rating = 1047, rank = 2,
+                        badges = listOf("أول فوز", "أول طيرة", "5 طيرات", "50 گيم", "3 فوزات ورا بعض"), titles = listOf("ملك الاكس"),
                         firstSeenEpochMs = now - 3 * day,
                         recent = listOf(
                             com.teera.core.MatchSummary(now - 3_600_000, "KHAN", null, "عمر", listOf("سارة", "نور"), 88, 140, 7),

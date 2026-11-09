@@ -288,11 +288,57 @@ class SqlRecords(
         }
         val board = readLeaderboard(db)
         val place = board.players.indexOfFirst { it.playerId == playerId }
+        val streak = lastStreaks[playerId] ?: 0
+        val badges = listOfNotNull(
+            "أول فوز".takeIf { wins >= 1 },
+            "10 فوزات".takeIf { wins >= 10 },
+            "50 فوز".takeIf { wins >= 50 },
+            "أول طيرة".takeIf { teeras >= 1 },
+            "5 طيرات".takeIf { teeras >= 5 },
+            "أول اكس".takeIf { finishes >= 1 },
+            "25 اكس".takeIf { finishes >= 25 },
+            "50 گيم".takeIf { games >= 50 },
+            "200 گيم".takeIf { games >= 200 },
+            "3 فوزات ورا بعض".takeIf { streak >= 3 },
+            "5 فوزات ورا بعض".takeIf { streak >= 5 },
+        )
         return PlayerRecord(
             matches, wins, losses, games, finishes, teeras, firstSeen, recent,
             rating = board.players.getOrNull(place)?.rating,
             rank = if (place >= 0) place + 1 else null,
+            badges = badges,
+            titles = board.titles.filter { it.playerId == playerId }.map { it.title },
         )
+    }
+
+    override fun saveTournament(tournament: com.teera.core.Tournament) = write("tournament") { db ->
+        val data = Protocol.json.encodeToString(com.teera.core.Tournament.serializer(), tournament)
+        val updated = db.prepareStatement("UPDATE tournaments SET data = ?, updated_at = ? WHERE id = ?").use {
+            it.setString(1, data); it.setLong(2, clock()); it.setString(3, tournament.id)
+            it.executeUpdate()
+        }
+        if (updated == 0) {
+            db.prepareStatement("INSERT INTO tournaments (id, data, updated_at) VALUES (?, ?, ?)").use {
+                it.setString(1, tournament.id); it.setString(2, data); it.setLong(3, clock())
+                it.executeUpdate()
+            }
+        }
+    }
+
+    override suspend fun loadTournament(id: String): com.teera.core.Tournament? = withContext(Dispatchers.IO) {
+        try {
+            withConnection { db ->
+                db.prepareStatement("SELECT data FROM tournaments WHERE id = ?").use {
+                    it.setString(1, id)
+                    it.executeQuery().use { row ->
+                        if (row.next()) Protocol.json.decodeFromString(com.teera.core.Tournament.serializer(), row.getString(1)) else null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.warn("could not read a tournament: {}", e.message)
+            null
+        }
     }
 
     override suspend fun leaderboard(): Leaderboard? = withContext(Dispatchers.IO) {
@@ -340,7 +386,11 @@ class SqlRecords(
         fun name(id: String) = people[id]?.first ?: "لاعب"
         fun avatar(id: String) = people[id]?.second.orEmpty().takeIf { it != "photo" }.orEmpty()
 
+        val titles = readTitles(db, played, standings, ::name, ::avatar)
+        lastStreaks = streaks(played)
+
         return Leaderboard(
+            titles = titles,
             players = standings.entries
                 .sortedWith(compareByDescending<Map.Entry<String, Ranking.Standing>> { it.value.rating }.thenByDescending { it.value.wins })
                 .take(LEADERBOARD_SIZE)
@@ -352,6 +402,99 @@ class SqlRecords(
                 )
                 .take(LEADERBOARD_SIZE)
                 .map { (key, s) -> RankedPair(listOf(name(key.first), name(key.second)), listOf(avatar(key.first), avatar(key.second)), s.matches, s.wins) },
+        )
+    }
+
+    /** Each player's longest run of ranked wins, as of the last ranking read. */
+    @Volatile
+    private var lastStreaks: Map<String, Int> = emptyMap()
+
+    private fun streaks(played: List<Ranking.Played>): Map<String, Int> {
+        val current = HashMap<String, Int>()
+        val best = HashMap<String, Int>()
+        for (match in played.filter(Ranking::counts)) {
+            for (seat in 0 until 4) {
+                val id = match.players[seat] ?: continue
+                val won = match.losingTeam != teamOf(seat)
+                val run = if (won) (current[id] ?: 0) + 1 else 0
+                current[id] = run
+                if (run > (best[id] ?: 0)) best[id] = run
+            }
+        }
+        return best
+    }
+
+    /**
+     * The titles: one holder each, from the books. The most teeras and the most X from
+     * finished games; the most upheld alerts, credited to the side that raised them; the
+     * longest run of wins and the most matches, from ranked matches.
+     */
+    private fun readTitles(
+        db: Connection,
+        played: List<Ranking.Played>,
+        standings: Map<String, Ranking.Standing>,
+        name: (String) -> String,
+        avatar: (String) -> String,
+    ): List<com.teera.core.TitleHolder> {
+        val teeras = HashMap<String, Int>()
+        val finishes = HashMap<String, Int>()
+        db.prepareStatement(
+            """SELECT s.player_id,
+                      SUM(CASE WHEN g.end_kind = 'TEERA' THEN 1 ELSE 0 END),
+                      SUM(CASE WHEN g.end_kind = 'X' THEN 1 ELSE 0 END)
+               FROM games g JOIN match_seats s ON s.match_id = g.match_id AND s.seat = g.winner_seat
+               WHERE s.player_id IS NOT NULL
+               GROUP BY s.player_id""",
+        ).use {
+            it.executeQuery().use { row ->
+                while (row.next()) {
+                    teeras[row.getString(1)] = row.getInt(2)
+                    finishes[row.getString(1)] = row.getInt(3)
+                }
+            }
+        }
+
+        // Alerts are in the games' steps: credit whoever sat on the side that raised them.
+        val alerts = HashMap<String, Int>()
+        val alertGames = ArrayList<Pair<String, String>>()
+        db.prepareStatement("SELECT match_id, steps FROM games WHERE steps LIKE ?").use {
+            it.setString(1, "%\"alert\"%")
+            it.executeQuery().use { row -> while (row.next()) alertGames += row.getString(1) to row.getString(2) }
+        }
+        if (alertGames.isNotEmpty()) {
+            val seatsOf = HashMap<String, Array<String?>>()
+            alertGames.map { it.first }.distinct().chunked(500).forEach { chunk ->
+                val marks = chunk.joinToString(",") { "?" }
+                db.prepareStatement("SELECT match_id, seat, player_id FROM match_seats WHERE match_id IN ($marks)").use {
+                    chunk.forEachIndexed { i, id -> it.setString(i + 1, id) }
+                    it.executeQuery().use { row ->
+                        while (row.next()) {
+                            val seat = row.getInt(2)
+                            if (seat in 0 until 4) seatsOf.getOrPut(row.getString(1)) { arrayOfNulls(4) }[seat] = row.getString(3)
+                        }
+                    }
+                }
+            }
+            for ((match, json) in alertGames) {
+                val steps = runCatching { Protocol.json.decodeFromString(STEPS, json) }.getOrDefault(emptyList())
+                for (upheld in steps.filterIsInstance<GameEvent.AlertUpheld>()) {
+                    val raisers = (0 until 4).filter { teamOf(it) != upheld.againstTeam }
+                    raisers.mapNotNull { seatsOf[match]?.getOrNull(it) }.forEach { alerts[it] = (alerts[it] ?: 0) + 1 }
+                }
+            }
+        }
+
+        val streak = streaks(played)
+        fun holder(title: String, counts: Map<String, Int>, words: (Int) -> String): com.teera.core.TitleHolder? {
+            val best = counts.entries.filter { it.value > 0 }.maxByOrNull { it.value } ?: return null
+            return com.teera.core.TitleHolder(title, best.key, name(best.key), avatar(best.key), words(best.value))
+        }
+        return listOfNotNull(
+            holder("ملك الطيرة", teeras) { "$it طيرة" },
+            holder("ملك الاكس", finishes) { "$it اكس" },
+            holder("بطل الخاوات", alerts) { "$it خاوة" },
+            holder("الحديد", streak) { "$it فوز ورا بعض" },
+            holder("الملازم", standings.mapValues { it.value.matches }) { "$it مباراة" },
         )
     }
 
@@ -464,6 +607,12 @@ class SqlRecords(
                         PRIMARY KEY (match_id, game_number))""",
                 )
                 sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS push_token VARCHAR(512)")
+                sql.execute(
+                    """CREATE TABLE IF NOT EXISTS tournaments (
+                        id VARCHAR(12) PRIMARY KEY,
+                        data TEXT NOT NULL,
+                        updated_at BIGINT NOT NULL)""",
+                )
                 sql.execute("CREATE INDEX IF NOT EXISTS match_seats_player ON match_seats (player_id)")
                 sql.execute("CREATE INDEX IF NOT EXISTS matches_started ON matches (started_at)")
             }

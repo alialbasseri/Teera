@@ -429,6 +429,36 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `a tournament is made, its match opens a room with the teams on the chairs, and the organiser settles results`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        ali.await<ServerMessage.Welcome>()
+
+        ali.say(ClientMessage.CreateTournament("بطولة الجمعة", listOf("علي وعبود", "حسن وسيف", "عمر ونور", "سارة ومريم")))
+        val made = assertNotNull(ali.await<ServerMessage.TournamentIs>().tournament)
+        assertEquals(2, made.rounds.size)
+
+        ali.say(ClientMessage.PlayTournamentMatch(made.id, 0, 0))
+        val room = ali.await<ServerMessage.RoomUpdate>().room
+        assertEquals(listOf("علي وعبود", "حسن وسيف"), room.teamNames)
+        assertTrue(room.tournament!!.startsWith("بطولة الجمعة"))
+        val withRoom = assertNotNull(ali.await<ServerMessage.TournamentIs>().tournament)
+        assertEquals(room.code, withRoom.rounds[0][0].roomCode)
+
+        // A friend opens it by its code and sees the same; only the organiser settles it.
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara", playerId = "sara", appVersion = 99))
+        sara.await<ServerMessage.Welcome>()
+        sara.say(ClientMessage.SetTournamentWinner(made.id, 0, 1, 2))
+        assertEquals(null, sara.await<ServerMessage.TournamentIs>().tournament!!.rounds[0][1].winner)
+        ali.say(ClientMessage.SetTournamentWinner(made.id, 0, 1, 2))
+        val settled = ali.await<ServerMessage.TournamentIs> { it.tournament?.rounds?.get(0)?.get(1)?.winner == 2 }.tournament!!
+        assertEquals(2, settled.rounds[1][0].b)
+    }
+
+    @Test
     fun `the download page hands out the latest build`() = testApplication {
         application { gameServer() }
         val page = client.get("/download").bodyAsText()

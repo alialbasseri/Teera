@@ -230,7 +230,7 @@ class WebSocketGameClient(
 
     override fun send(message: ClientMessage) = synchronized(this) {
         when (message) {
-            is ClientMessage.CreateRoom, is ClientMessage.JoinRoom -> roomRequest = message
+            is ClientMessage.CreateRoom, is ClientMessage.JoinRoom, is ClientMessage.PlayTournamentMatch -> roomRequest = message
             ClientMessage.LeaveRoom -> roomRequest = null
             else -> Unit
         }
@@ -238,7 +238,8 @@ class WebSocketGameClient(
         when {
             current != null -> current.send(encode(message))
             // Replayed by open() anyway; queueing it too would ask twice.
-            message is ClientMessage.CreateRoom || message is ClientMessage.JoinRoom -> Unit
+            message is ClientMessage.CreateRoom || message is ClientMessage.JoinRoom ||
+                message is ClientMessage.PlayTournamentMatch -> Unit
             else -> pending += encode(message)
         }
         Unit

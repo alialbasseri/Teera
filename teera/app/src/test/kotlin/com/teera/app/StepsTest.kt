@@ -5,6 +5,8 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import com.teera.app.ui.TableScreen
 import com.teera.app.ui.stepsOf
 import com.teera.core.Arm
@@ -120,5 +122,17 @@ class StepsTest {
         compose.setContent { com.teera.app.ui.MatchScreen(detail, loading = false, mySeat = 0, onClose = {}) }
         compose.onNodeWithTag("game-1").performClick()
         compose.onNodeWithText("سارة لعب").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a tournament is made from its name and four teams`() {
+        var made: Pair<String, List<String>>? = null
+        compose.setContent { com.teera.app.ui.CreateTournamentDialog(onCreate = { n, t -> made = n to t }, onClose = {}) }
+        compose.onNodeWithTag("tournament-name").performTextInput("بطولة")
+        listOf("علي وعبود", "حسن وسيف", "عمر ونور", "سارة ومريم").forEachIndexed { i, team ->
+            compose.onNodeWithTag("team-$i").performScrollTo().performTextInput(team)
+        }
+        compose.onNodeWithTag("tournament-create").performScrollTo().performClick()
+        assertEquals("بطولة" to listOf("علي وعبود", "حسن وسيف", "عمر ونور", "سارة ومريم"), made)
     }
 }

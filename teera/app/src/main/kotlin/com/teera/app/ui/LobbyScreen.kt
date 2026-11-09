@@ -185,6 +185,11 @@ fun LobbyScreen(
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
             RosetteRule(Modifier.padding(horizontal = 40.dp, vertical = 6.dp))
 
+            room.tournament?.let { label ->
+                Text("🏆 $label", style = MaterialTheme.typography.titleSmall, color = Felt.GoldLit, textAlign = TextAlign.Center)
+                Text("كل فريق يگعد بالكراسي اللي عليها اسمه", style = MaterialTheme.typography.labelSmall, color = Felt.Muted)
+                Spacer(Modifier.height(6.dp))
+            }
             Text("المباراة لـ", style = MaterialTheme.typography.labelLarge, color = Felt.Brass)
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -340,7 +345,8 @@ private fun SeatChair(
             maxLines = 1,
         )
         Text(
-            if (partnered) "فريقك" else "الخصم",
+            // A tournament match names the teams; otherwise it is yours or theirs.
+            room.teamNames.getOrNull(seat % 2) ?: if (partnered) "فريقك" else "الخصم",
             color = if (partnered) Felt.Playable else Felt.Muted,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,

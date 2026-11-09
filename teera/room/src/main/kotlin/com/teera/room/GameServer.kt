@@ -55,6 +55,7 @@ fun Application.gameServer(
     latestFrom: String? = null,
     pusher: Pusher = Pusher.NONE,
 ) {
+    val tournaments = Tournaments(records)
     if (latestFrom != null) {
         launch {
             while (isActive) {
@@ -273,6 +274,51 @@ fun Application.gameServer(
                             trySend(ServerMessage.InviteSent(message.playerId, delivered = target != null, pushed = pushed))
                         }
                         is ClientMessage.PushToken -> if (message.token.length in 20..4096) pusher.remember(me!!, message.token)
+
+                        // Tournaments: a bracket of pairs, each match played in its own room.
+                        is ClientMessage.CreateTournament -> {
+                            val made = com.teera.core.Tournament.create(
+                                tournaments.newId(), message.name, me!!, message.teams, System.currentTimeMillis(),
+                            )
+                            if (made == null) {
+                                fail(ErrorCode.BAD_MESSAGE, "البطولة لازم تكون 4 أو 8 أو 16 فريق، وكل فريق إله اسم")
+                            } else {
+                                tournaments.put(made)
+                                trySend(ServerMessage.TournamentIs(made.id, made))
+                            }
+                        }
+                        is ClientMessage.AskTournament -> trySend(ServerMessage.TournamentIs(message.id.uppercase(), tournaments.get(message.id)))
+                        is ClientMessage.SetTournamentWinner -> {
+                            val t = tournaments.get(message.id)
+                            val updated = t?.takeIf { it.creatorId == me }?.withWinner(message.round, message.index, message.team)
+                            if (updated != null) tournaments.put(updated)
+                            trySend(ServerMessage.TournamentIs(message.id.uppercase(), updated ?: t))
+                        }
+                        is ClientMessage.PlayTournamentMatch -> {
+                            val t = tournaments.get(message.id)
+                            val match = t?.rounds?.getOrNull(message.round)?.getOrNull(message.index)
+                            if (t == null || match?.a == null || match.b == null || match.winner != null) {
+                                fail(ErrorCode.BAD_MESSAGE, "هالمباراة مو جاهزة تنلعب")
+                                return@consumeEach
+                            }
+                            // Already being played: go to that room.
+                            val open = match.roomCode?.let { registry.find(it) }
+                            val target = open ?: registry.create(me!!, com.teera.core.Rules.DEFAULT).also { made ->
+                                made.lock.withLock {
+                                    made.room.teamNames = listOf(t.teams[match.a!!], t.teams[match.b!!])
+                                    made.room.tournamentLabel = "${t.name} · ${t.roundName(message.round)}"
+                                }
+                                val (id, round, index) = Triple(t.id, message.round, message.index)
+                                made.onMatchFinished = { losing -> tournaments.matchFinished(id, round, index, losing) }
+                                t.withRoom(message.round, message.index, made.room.code)?.let(tournaments::put)
+                            }
+                            holder?.let { detach(it, me!!) }
+                            holder = target
+                            target.sessions[me!!] = this
+                            target.lock.withLock { publish(target, target.room.join(me, name, avatar), records) }
+                            swapPhotos(target, me, photo)
+                            tournaments.get(t.id)?.let { trySend(ServerMessage.TournamentIs(it.id, it)) }
+                        }
                         ClientMessage.MyRecord -> trySend(ServerMessage.Record(records.recordOf(me!!)))
                         ClientMessage.AskLeaderboard -> trySend(ServerMessage.LeaderboardIs(records.leaderboard()))
                         is ClientMessage.AskMatch -> trySend(
@@ -420,7 +466,8 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
-        is ClientMessage.AskMatch, is ClientMessage.PushToken -> null
+        is ClientMessage.AskMatch, is ClientMessage.PushToken, is ClientMessage.CreateTournament,
+        is ClientMessage.AskTournament, is ClientMessage.PlayTournamentMatch, is ClientMessage.SetTournamentWinner -> null
     }
 }
 
@@ -438,6 +485,7 @@ private suspend fun publish(holder: RoomRegistry.Holder, output: Room.Output, re
     for (happening in room.takeHappenings()) {
         if (happening is Room.Happening.MatchStarted) holder.matchId = UUID.randomUUID().toString()
         holder.matchId?.let { records.happened(it, room.code, happening) }
+        if (happening is Room.Happening.MatchFinished) holder.onMatchFinished?.invoke(happening.losingTeam)
     }
     if (output == Room.Output.NOTHING) return
 
