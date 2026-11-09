@@ -208,7 +208,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbars) }) { padding ->
+    Scaffold { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (state.screen) {
                 Screen.Menu -> MenuScreen(
@@ -279,6 +279,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     games = state.liveGames,
                     onWatch = viewModel::watchLive,
                     onClose = viewModel::closeLive,
+                    onAsk = viewModel::askToJoin,
+                    asked = state.askedRooms,
                 )
 
                 Screen.Friends -> com.teera.app.ui.FriendsScreen(
@@ -342,6 +344,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         avatarFor = seatPicture,
                         onKick = if (state.offline) null else { id: String -> viewModel.kick(id) },
                         onSwap = if (state.offline) null else { seated: String, watcher: String -> viewModel.swap(seated, watcher) },
+                        onRename = if (state.offline) null else { name: String -> viewModel.renameRoom(name) },
                         onLock = if (state.offline) null else { locked: Boolean -> viewModel.setLocked(locked) },
                     )
                     if (inviting) {
@@ -361,6 +364,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         view = view,
                         onMove = viewModel::play,
                         onNextGame = viewModel::nextGame,
+                        onBackToLobby = viewModel::backToLobby,
                         onLeave = viewModel::leave,
                         emotes = state.emotes,
                         onEmote = viewModel::sendEmote,
@@ -421,12 +425,22 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
             }
 
             // An invitation can arrive on any screen.
+            state.joinAsks.firstOrNull()?.let { ask ->
+                com.teera.app.ui.JoinAskDialog(
+                    ask,
+                    onYes = { viewModel.answerJoin(ask.playerId, true) },
+                    onNo = { viewModel.answerJoin(ask.playerId, false) },
+                )
+            }
             state.announcement?.let { words ->
                 com.teera.app.ui.AnnouncementDialog(words, onClose = viewModel::dismissAnnouncement)
             }
             state.invite?.let { invite ->
                 com.teera.app.ui.InvitedDialog(invite, onAccept = viewModel::acceptInvite, onLater = viewModel::dismissInvite)
             }
+
+            // Short notices drop in from the top, over the scores, never over the bones.
+            SnackbarHost(snackbars, Modifier.align(Alignment.TopCenter).padding(top = 4.dp))
 
             // The server is holding the seat; say so, so nobody thinks the game froze.
             if (state.link == Link.LOST && state.screen != Screen.Menu) {

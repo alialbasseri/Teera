@@ -389,13 +389,15 @@ class RoomLinkTest {
         passerBy.say(ClientMessage.Hello("Hassan", appVersion = 99))
         passerBy.await<ServerMessage.Welcome>()
         passerBy.say(ClientMessage.ListLiveGames)
-        assertTrue(passerBy.await<ServerMessage.LiveGames>().games.isEmpty(), "not listed yet")
+        val hidden = passerBy.await<ServerMessage.LiveGames>().games.single()
+        assertTrue(!hidden.open && hidden.code.isEmpty(), "not listed yet: shown, but only to ask into")
 
         host.say(ClientMessage.SetListed(true))
         host.await<ServerMessage.GameUpdate> { it.view.listed }
         passerBy.say(ClientMessage.ListLiveGames)
         val listed = passerBy.await<ServerMessage.LiveGames>().games.single()
         assertEquals(code, listed.code)
+        assertTrue(listed.open)
 
         passerBy.say(ClientMessage.JoinRoom(listed.code))
         assertTrue(passerBy.await<ServerMessage.GameUpdate>().view.spectating)
@@ -460,6 +462,64 @@ class RoomLinkTest {
         ali.say(ClientMessage.StartMatch)
         ali.say(ClientMessage.Away(true))
         withTimeout(15_000) { while (told.none { it == ("ali" to "دورك بطيرة!") }) kotlinx.coroutines.delay(50) }
+    }
+
+    @Test
+    fun `a room nobody listed shows by name without its code, and comes in on a yes`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        val code = ali.await<ServerMessage.RoomUpdate>().room.code
+        ali.say(ClientMessage.RenameRoom("گعدة الجمعة"))
+        assertEquals("گعدة الجمعة", ali.await<ServerMessage.RoomUpdate> { it.room.name == "گعدة الجمعة" }.room.name)
+
+        // An older app cannot ask, so it does not see the room at all.
+        val old = ws.webSocketSession("/ws")
+        old.say(ClientMessage.Hello("Omar", playerId = "omar", appVersion = 27))
+        old.say(ClientMessage.ListLiveGames)
+        assertTrue(old.await<ServerMessage.LiveGames>().games.isEmpty())
+
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara", playerId = "sara", appVersion = 99))
+        sara.say(ClientMessage.ListLiveGames)
+        val listed = sara.await<ServerMessage.LiveGames>().games.single()
+        assertEquals("گعدة الجمعة", listed.name)
+        assertEquals("", listed.code, "the code is not given away")
+        assertTrue(!listed.open && !listed.started && listed.freeChairs == 3)
+
+        sara.say(ClientMessage.AskToJoin(listed.ref))
+        val asked = ali.await<ServerMessage.JoinAsked>()
+        assertEquals("sara" to "Sara", asked.playerId to asked.name)
+        ali.say(ClientMessage.AnswerJoin("sara", yes = true))
+        val answer = sara.await<ServerMessage.JoinAnswer>()
+        assertTrue(answer.yes)
+        assertEquals(code, answer.code)
+        assertEquals("Ali", answer.by)
+
+        sara.say(ClientMessage.JoinRoom(answer.code!!))
+        sara.await<ServerMessage.RoomUpdate> { it.room.seats.any { s -> s.name == "Sara" } }
+    }
+
+    @Test
+    fun `a no keeps them out, and only the first answer counts`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        ali.await<ServerMessage.RoomUpdate>()
+        val sara = ws.webSocketSession("/ws")
+        sara.say(ClientMessage.Hello("Sara", playerId = "sara", appVersion = 99))
+        sara.say(ClientMessage.ListLiveGames)
+        val ref = sara.await<ServerMessage.LiveGames>().games.single().ref
+        sara.say(ClientMessage.AskToJoin(ref))
+        ali.await<ServerMessage.JoinAsked>()
+        ali.say(ClientMessage.AnswerJoin("sara", yes = false))
+        ali.say(ClientMessage.AnswerJoin("sara", yes = true))
+        val answer = sara.await<ServerMessage.JoinAnswer>()
+        assertTrue(!answer.yes && answer.code == null)
     }
 
     @Test

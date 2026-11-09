@@ -422,11 +422,53 @@ fun Application.gameServer(
                         is ClientMessage.AskMatch -> trySend(
                             ServerMessage.MatchIs(message.matchId, records.matchDetail(message.matchId.take(36))),
                         )
-                        ClientMessage.ListLiveGames -> trySend(
-                            ServerMessage.LiveGames(
-                                registry.all().mapNotNull { it.lock.withLock { it.room.liveGame() } }.take(50),
-                            ),
-                        )
+                        // Apps that can ask to come in see every room; older ones only the open ones.
+                        ClientMessage.ListLiveGames -> {
+                            val everyRoom = appVersion >= ASK_TO_JOIN_APP
+                            trySend(
+                                ServerMessage.LiveGames(
+                                    registry.all()
+                                        .mapNotNull { h -> h.lock.withLock { h.room.liveGame(everyRoom, h.ref) } }
+                                        .sortedWith(compareByDescending<com.teera.core.LiveGame> { it.open }.thenByDescending { it.started })
+                                        .take(50),
+                                ),
+                            )
+                        }
+
+                        is ClientMessage.AskToJoin -> {
+                            val target = registry.byRef(message.ref)
+                            if (target == null) {
+                                trySend(ServerMessage.JoinAnswer(yes = false, code = null, roomName = "", by = ""))
+                                return@consumeEach
+                            }
+                            val now = System.currentTimeMillis()
+                            val asked = target.asks[me!!]
+                            // One request at a time: asking again inside a minute changes nothing.
+                            if (asked != null && now - asked < ASK_AGAIN_MS) return@consumeEach
+                            val answerers = target.lock.withLock { target.room.answerers() }
+                            if (answerers.isEmpty()) {
+                                trySend(ServerMessage.JoinAnswer(yes = false, code = null, roomName = "", by = ""))
+                                return@consumeEach
+                            }
+                            target.asks[me] = now
+                            val ask = ServerMessage.JoinAsked(me, name, avatar)
+                            answerers.forEach { id -> target.sessions[id]?.trySend(ask) }
+                        }
+
+                        is ClientMessage.AnswerJoin -> {
+                            val current = holder ?: return@consumeEach
+                            val inside = current.lock.withLock { me!! in current.room.answerers() }
+                            // Answered once, by whoever is first; a late tap changes nothing.
+                            if (!inside || current.asks.remove(message.playerId) == null) return@consumeEach
+                            if (message.yes) current.lock.withLock { current.room.admit(message.playerId) }
+                            val answer = ServerMessage.JoinAnswer(
+                                yes = message.yes,
+                                code = current.room.code.takeIf { message.yes },
+                                roomName = current.room.name,
+                                by = name,
+                            )
+                            registry.online[message.playerId]?.sessions?.forEach { it.trySend(answer) }
+                        }
 
                         else -> {
                             val current = holder
@@ -472,6 +514,12 @@ fun Application.gameServer(
 
 /** A player's own picture: a small JPEG, base64. About 12 KB is what the app sends. */
 private const val MAX_PHOTO_CHARS = 48_000
+
+/** The first app build that can ask to come into a room from the list. */
+const val ASK_TO_JOIN_APP = 28
+
+/** How long before a request to come in may be sent again. */
+private const val ASK_AGAIN_MS = 60_000L
 
 /** A phone may send this many problems or suggestions in [FEEDBACK_WINDOW_MS]. */
 private const val MAX_FEEDBACK_PER_WINDOW = 5
@@ -566,13 +614,15 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.Away -> room.setAway(playerId, message.away)
         is ClientMessage.Kick -> room.kick(playerId, message.playerId)
         is ClientMessage.Swap -> room.swap(playerId, message.seated, message.watcher)
+        ClientMessage.BackToLobby -> room.backToLobby(playerId)
+        is ClientMessage.RenameRoom -> room.rename(playerId, message.name)
         is ClientMessage.SetLocked -> room.setLocked(playerId, message.locked)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
         is ClientMessage.AskMatch, is ClientMessage.PushToken, is ClientMessage.Reminders, is ClientMessage.CreateTournament,
         is ClientMessage.AskTournament, is ClientMessage.PlayTournamentMatch, is ClientMessage.SetTournamentWinner,
-        is ClientMessage.Feedback -> null
+        is ClientMessage.Feedback, is ClientMessage.AskToJoin, is ClientMessage.AnswerJoin -> null
     }
 }
 

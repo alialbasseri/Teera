@@ -39,7 +39,15 @@ import com.teera.core.LiveGame
  * against whom, the score, and a button to go and watch.
  */
 @Composable
-fun LiveGamesScreen(games: List<LiveGame>, onWatch: (String) -> Unit, onClose: () -> Unit) {
+fun LiveGamesScreen(
+    games: List<LiveGame>,
+    onWatch: (String) -> Unit,
+    onClose: () -> Unit,
+    /** Asks to come into a room that is not open to all. */
+    onAsk: (LiveGame) -> Unit = {},
+    /** Rooms already asked into, by ref, waiting on an answer. */
+    asked: Set<String> = emptySet(),
+) {
     WalnutRoom {
         Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -48,14 +56,14 @@ fun LiveGamesScreen(games: List<LiveGame>, onWatch: (String) -> Unit, onClose: (
                 }
             }
             Text(
-                "اللعبات الماشية",
+                "الطاولات",
                 color = Felt.Brass,
                 fontSize = 40.sp,
                 style = MaterialTheme.typography.displayLarge,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             )
             Text(
-                "تفرّج على أي لعبة، وتگدر تحچي وياهم",
+                "ادخل العب وياهم أو تفرّج. المفتوحة تدخلها، والباقي تطلب وهمّه يقبلون",
                 color = Felt.Muted,
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 12.dp),
@@ -66,14 +74,14 @@ fun LiveGamesScreen(games: List<LiveGame>, onWatch: (String) -> Unit, onClose: (
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        "ماكو لعبة ماشية مفتوحة للتفرج هسه",
+                        "ماكو طاولة هسه",
                         color = Felt.Parchment,
                         style = MaterialTheme.typography.titleMedium,
                         textAlign = TextAlign.Center,
                     )
                     Spacer(Modifier.size(8.dp))
                     Text(
-                        "اللعبة تطلع هنا إذا واحد من لاعبيها اختار «خلي لعبتنا تبين للكل» من ⋮ بالطاولة",
+                        "افتح غرفة وخلي جماعتك يدخلون، وتطلع هنا للكل",
                         color = Felt.Muted,
                         style = MaterialTheme.typography.bodyMedium,
                         textAlign = TextAlign.Center,
@@ -81,14 +89,16 @@ fun LiveGamesScreen(games: List<LiveGame>, onWatch: (String) -> Unit, onClose: (
                 }
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.testTag("live-games")) {
-                items(games, key = { it.code }) { game -> LiveGameCard(game, onWatch) }
+                items(games, key = { it.ref.ifEmpty { it.code } }) { game ->
+                    LiveGameCard(game, onWatch, onAsk, waiting = game.ref.isNotEmpty() && game.ref in asked)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun LiveGameCard(game: LiveGame, onWatch: (String) -> Unit) {
+private fun LiveGameCard(game: LiveGame, onWatch: (String) -> Unit, onAsk: (LiveGame) -> Unit, waiting: Boolean) {
     Column(
         Modifier
             .fillMaxWidth()
@@ -97,6 +107,26 @@ private fun LiveGameCard(game: LiveGame, onWatch: (String) -> Unit) {
             .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
             .padding(14.dp),
     ) {
+        if (game.name.isNotBlank()) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    game.name,
+                    color = Felt.Brass,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    when {
+                        !game.started && game.freeChairs > 0 -> "ناقصهم ${game.freeChairs}"
+                        !game.started -> "بالغرفة"
+                        else -> "يلعبون"
+                    } + if (game.open) "" else " · 🔒",
+                    color = if (!game.started && game.freeChairs > 0) Felt.Playable else Felt.Muted,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Team(game, listOf(0, 2), game.scores.getOrElse(0) { 0 }, Modifier.weight(1f))
             Text("ضد", color = Felt.Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(horizontal = 8.dp))
@@ -104,20 +134,28 @@ private fun LiveGameCard(game: LiveGame, onWatch: (String) -> Unit) {
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "گيم ${game.gameNumber} · " + (if (game.games > 0) "${game.games} گيمات" else "لـ ${game.target}") + if (game.watchers > 0) " · ${game.watchers} يتفرجون" else "",
+                (if (game.started) "گيم ${game.gameNumber} · " else "") +
+                    (if (game.games > 0) "${game.games} گيمات" else "لـ ${game.target}") +
+                    if (game.watchers > 0) " · ${game.watchers} يتفرجون" else "",
                 color = Felt.Muted,
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.weight(1f),
             )
+            val label = when {
+                waiting -> "ننتظر جوابهم…"
+                !game.open -> "اطلب تدخل"
+                !game.started && game.freeChairs > 0 -> "ادخل العب"
+                else -> "تفرّج"
+            }
             Box(
                 Modifier
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Felt.Brass)
-                    .clickable { onWatch(game.code) }
+                    .background(if (waiting) Felt.Brass.copy(alpha = 0.4f) else Felt.Brass)
+                    .clickable(enabled = !waiting) { if (game.open) onWatch(game.code) else onAsk(game) }
                     .padding(horizontal = 18.dp, vertical = 8.dp)
-                    .testTag("watch-${game.code}"),
+                    .testTag("watch-${game.code.ifEmpty { game.ref }}"),
             ) {
-                Text("تفرّج", color = Felt.Ink, style = MaterialTheme.typography.labelLarge)
+                Text(label, color = Felt.Ink, style = MaterialTheme.typography.labelLarge)
             }
         }
     }

@@ -99,6 +99,10 @@ data class UiState(
     val matchLoading: Boolean = false,
     /** Games being played that their players let anyone watch. */
     val liveGames: List<com.teera.core.LiveGame> = emptyList(),
+    /** Rooms this phone asked to come into from the list, by ref, still waiting. */
+    val askedRooms: Set<String> = emptySet(),
+    /** People asking to come into this room, for somebody here to answer. */
+    val joinAsks: List<ServerMessage.JoinAsked> = emptyList(),
     /** Tournaments this phone knows (made here or opened by code), and the one open. */
     val tournaments: Map<String, com.teera.core.Tournament> = emptyMap(),
     val tournamentId: String? = null,
@@ -539,7 +543,12 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
             is ServerMessage.Online, is ServerMessage.PlayerFound,
             is ServerMessage.Invited, is ServerMessage.InviteSent, is ServerMessage.Record,
-            is ServerMessage.FeedbackReceived, is ServerMessage.Announcement -> onPresence(message)
+            is ServerMessage.FeedbackReceived, is ServerMessage.Announcement, is ServerMessage.JoinAnswer -> onPresence(message)
+
+            is ServerMessage.JoinAsked -> _state.update {
+                if (message.playerId in it.blocked) it
+                else it.copy(joinAsks = it.joinAsks.filter { a -> a.playerId != message.playerId } + message)
+            }
         }
     }
 
@@ -863,6 +872,18 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 it.copy(notice = if (message.ok) "وصل، شكراً! راح نقراه" else "ما وصل. جرّب بعد شوية")
             }
             is ServerMessage.Announcement -> _state.update { it.copy(announcement = message.text) }
+            is ServerMessage.JoinAnswer -> {
+                _state.update { it.copy(askedRooms = emptySet()) }
+                val code = message.code
+                if (message.yes && code != null) {
+                    _state.update { it.copy(notice = "${message.by} قبلك، تفضّل") }
+                    watchLive(code)
+                } else {
+                    _state.update {
+                        it.copy(notice = if (message.roomName.isEmpty()) "الطاولة ما بقت" else "ما قبلوا هسه. جرّب طاولة ثانية")
+                    }
+                }
+            }
             is ServerMessage.InviteSent -> if (!message.delivered) {
                 val name = _state.value.friends.firstOrNull { it.id == message.playerId }?.name ?: "صاحبك"
                 _state.update {
@@ -910,6 +931,22 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun dismissAnnouncement() = _state.update { it.copy(announcement = null) }
+
+    /** Asks to come into a room from the list that is not open to all. */
+    fun askToJoin(game: com.teera.core.LiveGame) {
+        if (presence == null) startPresence()
+        presence?.send(ClientMessage.AskToJoin(game.ref))
+        _state.update { it.copy(askedRooms = it.askedRooms + game.ref, notice = "انرسل طلبك لـ${game.name}. ننتظر جوابهم") }
+    }
+
+    /** Somebody here answers a request to come in. */
+    fun answerJoin(playerId: String, yes: Boolean) {
+        client?.send(ClientMessage.AnswerJoin(playerId, yes))
+        _state.update { it.copy(joinAsks = it.joinAsks.filter { a -> a.playerId != playerId }) }
+    }
+
+    /** The host names the room. */
+    fun renameRoom(name: String) = client?.send(ClientMessage.RenameRoom(name))
 
     fun invite(friend: Friend) {
         val code = _state.value.room?.code ?: return
@@ -985,6 +1022,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     // -- the host's say over the room -------------------------------------------------
 
     fun kick(playerId: String) = client?.send(ClientMessage.Kick(playerId))
+
+    /** After the match: the whole table goes back to the room's lobby for another. */
+    fun backToLobby() = client?.send(ClientMessage.BackToLobby)
 
     /** The host puts a watcher in a chair, and its player (or bot, "bot-N") out to watch. */
     fun swap(seated: String, watcher: String) = client?.send(ClientMessage.Swap(seated, watcher))

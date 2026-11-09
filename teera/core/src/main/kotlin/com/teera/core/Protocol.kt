@@ -45,6 +45,8 @@ data class RoomInfo(
     val teamNames: List<String> = emptyList(),
     /** Which tournament and round, as the lobby says it. */
     val tournament: String? = null,
+    /** The room's name: the host's choice, or «طاولة» and the host's name. */
+    val name: String = "",
 )
 
 /** A game being played that its players let anyone watch, as the list shows it. */
@@ -60,6 +62,15 @@ data class LiveGame(
     val watchers: Int,
     /** Played to this many games rather than to [target]; 0 when to the target. */
     val games: Int = 0,
+    /** The room's name. */
+    val name: String = "",
+    /** Anyone may walk in ([code] is set); otherwise they ask, by [ref], and somebody inside says yes. */
+    val open: Boolean = true,
+    /** Stands for the room in a request to join, without giving its code away. */
+    val ref: String = "",
+    /** Still in the lobby, gathering players; [freeChairs] are waiting for somebody. */
+    val started: Boolean = true,
+    val freeChairs: Int = 0,
 )
 
 /**
@@ -100,6 +111,8 @@ data class PlayerView(
      * phones' clocks drift, so they count down from here rather than from [turnDeadlineEpochMs].
      */
     val turnMillisLeft: Long? = null,
+    /** Every game of this match finished so far, oldest first: the score sheet. */
+    val history: List<GameResult> = emptyList(),
     /** A "ناخذ خاوة" being voted on right now, if any. */
     val alertVote: AlertVote? = null,
     /**
@@ -275,6 +288,22 @@ sealed interface ClientMessage {
     @Serializable @SerialName("raiseAlert")
     data object RaiseAlert : ClientMessage
 
+    /** The host names the room. */
+    @Serializable @SerialName("renameRoom")
+    data class RenameRoom(val name: String) : ClientMessage
+
+    /** Asks to come into a room from the list that is not open to all ([LiveGame.ref]). */
+    @Serializable @SerialName("askToJoin")
+    data class AskToJoin(val ref: String) : ClientMessage
+
+    /** Somebody inside answers a request to come in. */
+    @Serializable @SerialName("answerJoin")
+    data class AnswerJoin(val playerId: String, val yes: Boolean) : ClientMessage
+
+    /** The match is over: everyone goes back to the room's lobby, ready for another. */
+    @Serializable @SerialName("backToLobby")
+    data object BackToLobby : ClientMessage
+
     /** A problem ("problem") or a suggestion ("idea") sent to the developer. */
     @Serializable @SerialName("feedback")
     data class Feedback(val kind: String, val text: String, val roomCode: String? = null) : ClientMessage
@@ -443,6 +472,14 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("error")
     data class Failure(val code: ErrorCode, val message: String) : ServerMessage
+
+    /** Somebody from the list asks to come into this room; anyone inside may answer. */
+    @Serializable @SerialName("joinAsked")
+    data class JoinAsked(val playerId: String, val name: String, val avatar: String) : ServerMessage
+
+    /** The answer to a request to come in: on yes, [code] is the room to join. */
+    @Serializable @SerialName("joinAnswer")
+    data class JoinAnswer(val yes: Boolean, val code: String?, val roomName: String, val by: String = "") : ServerMessage
 
     /** The developer got the problem or suggestion. */
     @Serializable @SerialName("feedbackReceived")

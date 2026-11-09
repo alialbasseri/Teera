@@ -3,6 +3,7 @@ package com.teera.room
 import com.teera.core.Room
 import com.teera.core.Rules
 import io.ktor.websocket.WebSocketSession
+import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 import kotlinx.coroutines.sync.Mutex
@@ -49,6 +50,12 @@ class RoomRegistry(
         /** Bot moves are spaced out so the table reads at human speed. */
         @Volatile
         var nextBotMoveAt: Long = 0L
+
+        /** Stands for this room in the list without giving its code away. */
+        val ref: String = UUID.randomUUID().toString().replace("-", "").take(12)
+
+        /** Who asked from the list to come in, and when; answered once. */
+        val asks: MutableMap<String, Long> = ConcurrentHashMap()
     }
 
     private val rooms = ConcurrentHashMap<String, Holder>()
@@ -86,6 +93,8 @@ class RoomRegistry(
     }
 
     fun find(code: String): Holder? = rooms[code.trim().uppercase()]
+
+    fun byRef(ref: String): Holder? = rooms.values.firstOrNull { it.ref == ref }
 
     /** Opens a room under a code that is already known, for players following it back. */
     fun reopen(code: String, hostId: String): Holder {

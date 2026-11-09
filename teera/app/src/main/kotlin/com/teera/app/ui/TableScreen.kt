@@ -35,6 +35,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -133,6 +134,8 @@ fun TableScreen(
     view: PlayerView,
     onMove: (Move) -> Unit,
     onNextGame: () -> Unit,
+    /** After the match: the whole table back to the room's lobby for another. */
+    onBackToLobby: (() -> Unit)? = null,
     onLeave: () -> Unit,
     emotes: List<ShownEmote> = emptyList(),
     onEmote: (Emote) -> Unit = {},
@@ -217,6 +220,7 @@ fun TableScreen(
     var askAlert by remember { mutableStateOf(false) }
     var askTarget by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf<PeopleAction?>(null) }
+    var scoresOpen by remember { mutableStateOf(false) }
     var feedbackOpen by remember { mutableStateOf(false) }
     if (feedbackOpen && onFeedback != null) FeedbackDialog(onSend = onFeedback, onClose = { feedbackOpen = false })
 
@@ -238,6 +242,34 @@ fun TableScreen(
     val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null
 
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
+
+        // Questions, votes and table talk float at the top of the screen, over the scores,
+        // so nothing ever covers the bones on the table or in the hand.
+        androidx.compose.ui.window.Popup(
+            alignment = Alignment.TopCenter,
+            properties = androidx.compose.ui.window.PopupProperties(focusable = false),
+        ) {
+            Column(
+                Modifier.widthIn(max = 520.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Prompt(
+                    view = view,
+                    rescueMode = rescueMode,
+                    onRescueMode = { rescueState.value = it },
+                    onMove = onMove,
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(top = 4.dp),
+                )
+                view.alertVote?.let { vote ->
+                    AlertVotePanel(view, vote, onVoteAlert, Modifier.padding(horizontal = 8.dp))
+                }
+                view.targetVote?.takeIf { view.alertVote == null }?.let { vote ->
+                    TargetVotePanel(view, vote, onVoteTarget, Modifier.padding(horizontal = 8.dp))
+                }
+                if (onChat != null) ChatToast(chat, Modifier.padding(horizontal = 8.dp))
+            }
+        }
 
         // Watchers choose whose shoulder to look over, or take a dropped player's chair;
         // players choose whether to be looked at.
@@ -280,6 +312,7 @@ fun TableScreen(
         ScoreRail(
             view, sound, onLeave = { if (over || view.spectating || standingIn) onLeave() else confirmLeave = true },
             talk = talk, onRules = { showRules = true }, options = options,
+            onScores = { scoresOpen = true },
         )
         // The other three where they sit: partner across the table, the two of the other
         // team either side. In right-to-left order the first in a row is on the right,
@@ -311,13 +344,6 @@ fun TableScreen(
 
             GivenTile(view)
 
-            Prompt(
-                view = view,
-                rescueMode = rescueMode,
-                onRescueMode = { rescueState.value = it },
-                onMove = onMove,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 18.dp),
-            )
 
             Celebration(view, visible = over && !showSummary, modifier = Modifier.fillMaxSize())
 
@@ -334,14 +360,6 @@ fun TableScreen(
                 }
             }
 
-            if (onChat != null) ChatToast(chat, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))
-
-            view.alertVote?.let { vote ->
-                AlertVotePanel(view, vote, onVoteAlert, Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
-            }
-            view.targetVote?.takeIf { view.alertVote == null }?.let { vote ->
-                TargetVotePanel(view, vote, onVoteTarget, Modifier.align(Alignment.TopCenter).padding(top = 10.dp))
-            }
         }
         Seated(3, Side.LEFT, Modifier.fillMaxHeight())
         }
@@ -423,7 +441,8 @@ fun TableScreen(
     }
     }
 
-    if (over && showSummary) GameSummary(view, steps, onNextGame, onLeave)
+    if (over && showSummary) GameSummary(view, steps, onNextGame, onLeave, onBackToLobby)
+    if (scoresOpen) ScoreSheet(view, onClose = { scoresOpen = false })
 
     // The rules, over the table, without leaving it.
     if (showRules) {
@@ -568,6 +587,8 @@ private fun ScoreRail(
     talk: Talk? = null,
     onRules: () -> Unit = {},
     options: List<MenuOption> = emptyList(),
+    /** Tapping the scores opens the whole sheet, game by game. */
+    onScores: () -> Unit = {},
 ) {
     val us = view.scores.getOrElse(view.yourTeam) { 0 }
     val them = view.scores.getOrElse(1 - view.yourTeam) { 0 }
@@ -580,6 +601,10 @@ private fun ScoreRail(
         ) {
             // Three plates of one size in a row: us, them, and which game of how many points.
             // Points are a burden here, so whoever has fewer is the one in front.
+            Row(
+                Modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onScores).testTag("scores"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             ScorePlate(view.teamName(view.yourTeam), "$us", if (us <= them) Felt.Playable else Felt.Behind, animated = us)
             Spacer(Modifier.width(8.dp))
             ScorePlate(view.teamName(1 - view.yourTeam), "$them", if (them < us) Felt.Playable else Felt.Behind, animated = them)
@@ -589,6 +614,7 @@ private fun ScoreRail(
                 ScorePlate("گيم ${minOf(view.gamesPlayed + 1, view.rules.games)}", "من ${view.rules.games}", Felt.Brass)
             } else {
                 ScorePlate("گيم ${view.gameNumber}", "لـ ${view.rules.target}", Felt.Brass)
+            }
             }
 
             Spacer(Modifier.weight(1f))
@@ -850,6 +876,10 @@ private fun Prompt(
     modifier: Modifier = Modifier,
 ) {
     val waitingOn = view.actingSeat?.let { view.seatInfo(it)?.name } ?: ""
+    val asking = view.isYourMove && view.phase in setOf(Phase.TEERA_OFFER, Phase.REDEAL_OFFER, Phase.RESCUE) ||
+        view.phase == Phase.RESCUE && view.stuckSeat == view.yourSeat
+    // Nothing to ask: take no room at all, not even an empty margin over the scores.
+    if (!asking) return
 
     Box(modifier) {
         when {
@@ -1671,7 +1701,13 @@ internal fun Plaque(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun GameSummary(view: PlayerView, steps: List<GameEvent>, onNextGame: () -> Unit, onLeave: () -> Unit) {
+private fun GameSummary(
+    view: PlayerView,
+    steps: List<GameEvent>,
+    onNextGame: () -> Unit,
+    onLeave: () -> Unit,
+    onBackToLobby: (() -> Unit)? = null,
+) {
     val result = view.lastGame
     var reviewing by remember { mutableStateOf(false) }
     if (reviewing) StepsDialog(view, steps, onClose = { reviewing = false })
@@ -1742,13 +1778,84 @@ private fun GameSummary(view: PlayerView, steps: List<GameEvent>, onNextGame: ()
                     modifier = Modifier.fillMaxWidth().testTag("reviewSteps"),
                 ) { Text("شوف خطوات الگيم", style = MaterialTheme.typography.labelLarge) }
             }
+            val again = onBackToLobby.takeIf { matchOver }
             Button(
-                onClick = if (matchOver) onLeave else onNextGame,
+                onClick = again ?: if (matchOver) onLeave else onNextGame,
                 colors = ButtonDefaults.buttonColors(containerColor = Felt.Brass, contentColor = Felt.Ink),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("summary-go"),
             ) {
-                Text(if (matchOver) "رجوع للقائمة" else "الگيم الجاي", style = MaterialTheme.typography.labelLarge)
+                Text(
+                    when {
+                        again != null -> "ارجع للغرفة"
+                        matchOver -> "رجوع للقائمة"
+                        else -> "الگيم الجاي"
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                )
             }
+            if (again != null) {
+                Text(
+                    "اطلع من الغرفة",
+                    color = Felt.Muted,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onLeave).padding(8.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The score sheet, opened by tapping the scores: every game of the match so far, how it
+ * ended, what each team took, and where that left them.
+ */
+@Composable
+private fun ScoreSheet(view: PlayerView, onClose: () -> Unit) {
+    val teams = listOf(view.yourTeam, 1 - view.yourTeam)
+    Dialog(onDismissRequest = onClose) {
+        Plaque {
+            Text("حساب المباراة", color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
+            SumRow("", teams.map { Cell.Name(view.teamName(it)) })
+            HorizontalDivider(color = Felt.Brass.copy(alpha = 0.4f))
+            if (view.history.isEmpty()) {
+                Text("بعد ما خلص ولا گيم", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium)
+            }
+            androidx.compose.foundation.lazy.LazyColumn(
+                Modifier.fillMaxWidth().heightIn(max = 380.dp).testTag("score-sheet"),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(view.history.size) { i ->
+                    val game = view.history[i]
+                    val who = game.winnerSeat?.let { view.seatInfo(it)?.name?.trim() }.orEmpty()
+                    val how = when (game.end) {
+                        GameEnd.X -> "اكس $who"
+                        GameEnd.TEERA -> "طيرة $who"
+                        GameEnd.BLOCKED -> "قفلت"
+                    }
+                    SumRow(
+                        "${i + 1}. $how",
+                        teams.map { team ->
+                            val tookX = game.end == GameEnd.X && game.winnerSeat?.let(::teamOf) == team
+                            if (tookX) Cell.X else Cell.Points(game.scored.getOrElse(team) { 0 }, signed = true)
+                        },
+                    )
+                }
+            }
+            HorizontalDivider(color = Felt.Brass.copy(alpha = 0.4f))
+            SumRow("المجموع", teams.map { Cell.Points(view.scores.getOrElse(it) { 0 }, signed = false) })
+            if (view.alerts.any { it > 0 }) {
+                Text(
+                    "خاوات: ${view.alerts.getOrElse(view.yourTeam) { 0 }} علينا · ${view.alerts.getOrElse(1 - view.yourTeam) { 0 }} عليهم",
+                    color = Felt.Danger,
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
+            Text(
+                if (view.rules.byGames) "${view.rules.games} گيمات، والأكثر نقاط يخسر" else "اللي يوصل ${view.rules.target} يخسر",
+                color = Felt.Muted,
+                style = MaterialTheme.typography.labelSmall,
+            )
+            GoldButton("تمام", onClose)
         }
     }
 }

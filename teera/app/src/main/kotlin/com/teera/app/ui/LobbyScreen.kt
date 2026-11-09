@@ -79,7 +79,11 @@ fun LobbyScreen(
     onLock: ((Boolean) -> Unit)? = null,
     /** The host puts a watcher in a chair and its player out to watch. */
     onSwap: ((seated: String, watcher: String) -> Unit)? = null,
+    /** The host names the room. */
+    onRename: ((String) -> Unit)? = null,
 ) {
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming && onRename != null) RenameDialog(room.name, onRename, onClose = { renaming = false })
     var swapping by remember { mutableStateOf(false) }
     if (swapping && onSwap != null) {
         SwapPicker(room.seats.filter { it.isBot || it.playerId.isNotEmpty() }, room.spectators, onSwap, onClose = { swapping = false })
@@ -107,7 +111,19 @@ fun LobbyScreen(
                     .padding(horizontal = 30.dp, vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text("كود الغرفة", style = MaterialTheme.typography.labelSmall, color = Felt.Muted)
+                // The room's name over its code; the host taps it to change it.
+                val canRename = isHost && onRename != null
+                Text(
+                    room.name.ifBlank { "كود الغرفة" } + if (canRename) "  ✎" else "",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (canRename) Felt.GoldLit else Felt.Muted,
+                    maxLines = 1,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(enabled = canRename) { renaming = true }
+                        .padding(horizontal = 6.dp)
+                        .testTag("room-name"),
+                )
                 Text(room.code, fontSize = 40.sp, style = MaterialTheme.typography.headlineLarge, color = Felt.Brass)
             }
             val hint = when {

@@ -76,8 +76,14 @@ class Room(
         return happenings.toList().also { happenings.clear() }
     }
 
+    /** This match's finished games, for the score sheet. */
+    private val results = ArrayList<GameResult>()
+
     private fun note(before: GameState?, after: GameState) {
-        if (before == null) happenings += Happening.MatchStarted(after.seats, after.rules)
+        if (before == null) {
+            happenings += Happening.MatchStarted(after.seats, after.rules)
+            results.clear()
+        }
         steps = gatherSteps(
             steps, before?.events, before?.gameNumber, after.events, after.gameNumber,
             sameList = before != null && before.events === after.events,
@@ -85,6 +91,7 @@ class Room(
         val result = after.lastGame
         if (result != null && result.gameNumber != before?.lastGame?.gameNumber) {
             happenings += Happening.GameFinished(result, after.scores, steps)
+            results += result
         }
         val loser = after.losingTeam
         if (loser != null && before?.losingTeam == null) {
@@ -100,7 +107,33 @@ class Room(
 
     // -- the room ----------------------------------------------------------
 
+    /** What the host called the room; empty for the default, «طاولة» and the host's name. */
+    private var title: String = ""
+
+    val name: String
+        get() = title.ifBlank {
+            val host = members[hostId]?.name?.trim() ?: watchers[hostId]?.name?.trim()
+            if (host.isNullOrBlank()) "طاولة $code" else "طاولة $host"
+        }
+
+    fun rename(playerId: String, name: String): Output {
+        if (playerId != hostId) return Output.NOTHING
+        val clean = name.trim().replace(Regex("\\s+"), " ").take(MAX_NAME)
+        if (clean == title) return Output.NOTHING
+        title = clean
+        return Output(roomChanged = true)
+    }
+
+    /** Lets somebody in who asked from the list and was answered yes, even into a locked room. */
+    fun admit(playerId: String) {
+        invited += playerId
+    }
+
+    /** The people at the table who can answer a request to come in. */
+    fun answerers(): List<String> = members.values.filter { it.connected }.map { it.playerId }
+
     fun info(): RoomInfo = RoomInfo(
+        name = name,
         code = code,
         hostId = hostId,
         rules = rules,
@@ -211,20 +244,34 @@ class Room(
         return Output(roomChanged = true, viewChanged = isStarted)
     }
 
-    /** How this table looks in the list; null when it is not in it. */
-    fun liveGame(): LiveGame? {
-        val state = game ?: return null
-        if (!listed || state.phase == Phase.MATCH_OVER || members.values.none { it.connected }) return null
+    /**
+     * How this table looks in the list; null when it is not in it. With [everyRoom], a
+     * table nobody listed shows too, without its code: a newcomer asks to come in.
+     * A room still gathering players shows with its free chairs, for a quick game.
+     */
+    fun liveGame(everyRoom: Boolean = false, ref: String = ""): LiveGame? {
+        if (members.values.none { it.connected }) return null
+        val state = game
+        if (state?.phase == Phase.MATCH_OVER) return null
+        val open = listed && !locked
+        if (!open && !everyRoom) return null
+        // Before the deal only the new list shows it: an older app could only watch.
+        if (state == null && !everyRoom) return null
         val seats = seatList()
         return LiveGame(
-            code = code,
+            code = if (open) code else "",
             names = seats.map { if (it.isBot) "بوت" else it.name },
             avatars = seats.map { it.avatar },
-            scores = state.scores,
-            target = state.rules.target,
-            gameNumber = state.gameNumber,
+            scores = state?.scores ?: listOf(0, 0),
+            target = state?.rules?.target ?: rules.target,
+            gameNumber = state?.gameNumber ?: 0,
             watchers = watchers.size,
-            games = state.rules.games,
+            games = state?.rules?.games ?: rules.games,
+            name = name,
+            open = open,
+            ref = ref,
+            started = state != null,
+            freeChairs = if (state == null) seats.count { it.playerId.isEmpty() && !it.isBot } else 0,
         )
     }
 
@@ -484,6 +531,27 @@ class Room(
         }
     }
 
+    /**
+     * The match is over and somebody wants another: the whole table goes back to the
+     * lobby together, in the same chairs, rather than out of the room. Whoever dropped
+     * during the match leaves their chair free for somebody watching.
+     */
+    fun backToLobby(playerId: String): Output {
+        val state = game ?: return Output.NOTHING
+        if (state.phase != Phase.MATCH_OVER) return Output.NOTHING
+        if (seatOf(playerId) == null && !watchers.containsKey(playerId)) return Output.NOTHING
+        members.values.removeIf { !it.connected }
+        members.values.forEach { it.ready = false }
+        if (members[hostId] == null) hostId = members.keys.firstOrNull() ?: watchers.keys.firstOrNull() ?: hostId
+        standIns.clear()
+        vote = null
+        targetVote = null
+        turnDeadline = null
+        results.clear()
+        game = null
+        return Output(roomChanged = true)
+    }
+
     fun nextGame(playerId: String): Output {
         val state = game ?: return Output.NOTHING
         if (state.phase != Phase.GAME_OVER) return Output.NOTHING
@@ -522,7 +590,7 @@ class Room(
     }
 
     private fun PlayerView.withClock(): PlayerView =
-        copy(turnMillisLeft = turnDeadline?.let { (it - clock()).coerceAtLeast(0) })
+        copy(turnMillisLeft = turnDeadline?.let { (it - clock()).coerceAtLeast(0) }, history = results.toList())
 
     /**
      * A seat that runs out of clock has a move played for it, by a bot playing as well as
@@ -773,6 +841,9 @@ class Room(
 
     companion object {
         private const val EMOTE_GAP_MS = 1_800L
+
+        /** The longest name a room can have. */
+        const val MAX_NAME = 24
 
         /** Watchers' seat numbers, for voice and chat, start after the four chairs. */
         const val WATCHER_SEAT_BASE = 4

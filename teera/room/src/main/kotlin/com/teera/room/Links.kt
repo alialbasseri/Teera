@@ -144,8 +144,8 @@ const val VERSION_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/version.json"
 
 /** The build at [APK_URL] when the server was last deployed; [LatestApp] keeps up after that. */
-const val LATEST_APP_VERSION = 27
-const val LATEST_APP_NAME = "1.7.3"
+const val LATEST_APP_VERSION = 28
+const val LATEST_APP_NAME = "1.8.0"
 
 /**
  * The oldest build allowed at a table: 1.4.1 and later show the update window, so they hear

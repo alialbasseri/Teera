@@ -89,13 +89,15 @@ class LocalGameClient(
             is ClientMessage.Away -> Room.Output.NOTHING
             is ClientMessage.Kick -> room.kick(playerId, message.playerId)
             is ClientMessage.Swap -> room.swap(playerId, message.seated, message.watcher)
+            ClientMessage.BackToLobby -> room.backToLobby(playerId)
+            is ClientMessage.RenameRoom -> room.rename(playerId, message.name)
             is ClientMessage.SetLocked -> room.setLocked(playerId, message.locked)
             // Friends and invitations live on the internet server, not at a table of bots.
             is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
             ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
             is ClientMessage.AskMatch, is ClientMessage.PushToken, is ClientMessage.Reminders, is ClientMessage.CreateTournament,
             is ClientMessage.AskTournament, is ClientMessage.PlayTournamentMatch, is ClientMessage.SetTournamentWinner,
-            is ClientMessage.Feedback -> Room.Output.NOTHING
+            is ClientMessage.Feedback, is ClientMessage.AskToJoin, is ClientMessage.AnswerJoin -> Room.Output.NOTHING
         }
         publish(output)
     }

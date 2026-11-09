@@ -107,3 +107,56 @@ fun AnnouncementDialog(text: String, onClose: () -> Unit) {
         }
     }
 }
+
+/** Somebody from the list asks to come in: anyone at the table may let them. */
+@Composable
+fun JoinAskDialog(ask: com.teera.core.ServerMessage.JoinAsked, onYes: () -> Unit, onNo: () -> Unit) {
+    Dialog(onDismissRequest = onNo) {
+        Plaque {
+            Box(Modifier.clip(androidx.compose.foundation.shape.CircleShape).border(2.dp, Felt.Brass, androidx.compose.foundation.shape.CircleShape)) {
+                Avatar(ask.avatar.takeIf { it != "photo" }.orEmpty(), ask.name, 64.dp)
+            }
+            Text("${ask.name} يريد يدخل لطاولتكم", color = Felt.Parchment, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            Text("يدخل يتفرّج، وإذا أكو كرسي فارغ يگدر يگعد.", color = Felt.Muted, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
+            GoldButton("خليه يدخل", onYes)
+            Text(
+                "لا",
+                color = Felt.Muted,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onNo).padding(8.dp).testTag("join-no"),
+            )
+        }
+    }
+}
+
+/** The host names the room: what it is called in the list of tables. */
+@Composable
+fun RenameDialog(current: String, onRename: (String) -> Unit, onClose: () -> Unit) {
+    var text by remember { mutableStateOf(current) }
+    Dialog(onDismissRequest = onClose) {
+        Plaque {
+            Text("اسم الطاولة", color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.take(com.teera.core.Room.MAX_NAME) },
+                singleLine = true,
+                placeholder = { Text("مثلاً: گعدة الجمعة", color = Felt.Muted) },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = Felt.Parchment,
+                    unfocusedTextColor = Felt.Parchment,
+                    focusedBorderColor = Felt.Brass,
+                    unfocusedBorderColor = Felt.Brass.copy(alpha = 0.5f),
+                    cursorColor = Felt.Brass,
+                ),
+                modifier = Modifier.fillMaxWidth().testTag("rename-text"),
+            )
+            GoldButton("احفظ", { onRename(text); onClose() })
+            Text(
+                "سد",
+                color = Felt.Muted,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose).padding(8.dp),
+            )
+        }
+    }
+}
