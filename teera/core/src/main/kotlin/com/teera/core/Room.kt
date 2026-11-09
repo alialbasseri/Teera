@@ -305,6 +305,42 @@ class Room(
         return Output(roomChanged = true, viewChanged = true)
     }
 
+    /**
+     * The host swaps a player and a watcher: the watcher takes the chair (and the bones in
+     * it, mid-match), and the player sits back and watches from behind it. [seated] is a
+     * player's id, or "bot-N" for the bot in chair N.
+     */
+    fun swap(by: String, seated: String, watcherId: String): Output {
+        if (by != hostId) return Output.NOTHING
+        val watcher = watchers[watcherId] ?: return Output.NOTHING
+        val member = members[seated]
+        val seat = member?.seat
+            ?: seated.removePrefix("bot-").toIntOrNull()?.takeIf { seated.startsWith("bot-") && bots.containsKey(it) }
+            ?: return Output.NOTHING
+
+        watchers.remove(watcherId)
+        standIns.values.remove(watcherId)
+        standIns.remove(seat)
+        if (member != null) {
+            members.remove(seated)
+            showingHands -= seated
+            away -= seated
+            watchers[seated] = Watcher(seated, member.name, member.avatar, watching = seat)
+        } else {
+            bots.remove(seat)
+        }
+        members[watcherId] = Member(watcherId, watcher.name, seat, avatar = watcher.avatar)
+        game?.let { state ->
+            game = state.copy(
+                seats = state.seats.map {
+                    if (it.seat == seat) it.copy(playerId = watcherId, name = watcher.name, isBot = false, connected = true, avatar = watcher.avatar)
+                    else it
+                },
+            )
+        }
+        return Output(roomChanged = true, viewChanged = isStarted)
+    }
+
     /** Everybody who hears the table: the players with a connection, and the watchers. */
     fun humanIds(): List<String> = members.values.filter { it.connected }.map { it.playerId } + watchers.keys
 

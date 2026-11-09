@@ -157,6 +157,7 @@ fun TableScreen(
     isHost: Boolean = false,
     locked: Boolean = false,
     onKick: ((String) -> Unit)? = null,
+    onSwap: ((seated: String, watcher: String) -> Unit)? = null,
     onLock: ((Boolean) -> Unit)? = null,
     /** Blocking, kept on this phone: who is blocked, and blocking or unblocking somebody. */
     blocked: Set<String> = emptySet(),
@@ -260,6 +261,9 @@ fun TableScreen(
             onKick?.takeIf { isHost && onChat != null && view.others(myId).isNotEmpty() }?.let {
                 MenuOption("طلّع واحد…") { picking = PeopleAction.KICK }
             },
+            onSwap?.takeIf { isHost && onChat != null && view.spectators.isNotEmpty() && !over }?.let {
+                MenuOption("بدّل لاعب ويا متفرج…") { picking = PeopleAction.SWAP }
+            },
             onBlock?.takeIf { onChat != null && view.others(myId).isNotEmpty() }?.let {
                 MenuOption("احظر واحد…") { picking = PeopleAction.BLOCK }
             },
@@ -352,7 +356,11 @@ fun TableScreen(
             avatar = { size -> avatarFor(view.yourSeat, size) },
         )
 
-    picking?.let { action ->
+    if (picking == PeopleAction.SWAP) {
+        SwapPicker(view.seats, view.spectators, onSwap = { a, b -> onSwap?.invoke(a, b) }, onClose = { picking = null })
+    }
+
+    picking?.takeIf { it != PeopleAction.SWAP }?.let { action ->
         PeopleDialog(
             title = if (action == PeopleAction.KICK) "طلّع منو؟" else "احظر منو؟",
             note = if (action == PeopleAction.KICK) "يطلع من الغرفة وما يرجع إلا بعزيمة. إذا جان يلعب، يكمل بوت بكرسيه."
@@ -1533,7 +1541,7 @@ private fun TargetVotePanel(view: PlayerView, vote: com.teera.core.TargetVote, o
     }
 }
 
-private enum class PeopleAction { KICK, BLOCK }
+private enum class PeopleAction { KICK, BLOCK, SWAP }
 
 /** The other people here, players and watchers, by id and name; no bots. */
 internal fun PlayerView.others(myId: String): List<Pair<String, String>> =
@@ -1541,6 +1549,42 @@ internal fun PlayerView.others(myId: String): List<Pair<String, String>> =
         .filter { it.playerId != myId && it.playerId.isNotBlank() }
         .distinctBy { it.playerId }
         .map { it.playerId to it.name.ifBlank { "لاعب" } }
+
+/**
+ * Swapping a player and a watcher is two picks: the chair (a person or a bot), then the
+ * watcher who takes it and its bones.
+ */
+@Composable
+internal fun SwapPicker(
+    seats: List<com.teera.core.Seat>,
+    watchers: List<com.teera.core.Seat>,
+    onSwap: (seated: String, watcher: String) -> Unit,
+    onClose: () -> Unit,
+) {
+    var chair by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val picked = chair
+    if (picked == null) {
+        PeopleDialog(
+            title = "منو يطلع يتفرج؟",
+            note = "تختار اللاعب، وبعدين المتفرج اللي ياخذ كرسيه وبولاته.",
+            people = seats.sortedBy { it.seat }.map { s ->
+                (if (s.isBot) "bot-${s.seat}" else s.playerId) to (if (s.isBot) "بوت ${s.seat + 1}" else s.name.ifBlank { "لاعب" })
+            }.filter { it.first.isNotBlank() },
+            label = { "هذا" },
+            onPick = { id, name -> chair = id to name },
+            onClose = onClose,
+        )
+    } else {
+        PeopleDialog(
+            title = "منو يلعب بدال ${picked.second}؟",
+            note = "${picked.second} يصير يتفرج من ورا كرسيه.",
+            people = watchers.map { it.playerId to it.name.ifBlank { "متفرج" } },
+            label = { "يلعب" },
+            onPick = { id, _ -> onSwap(picked.first, id); onClose() },
+            onClose = onClose,
+        )
+    }
+}
 
 /** Picks one of the people here for something done to them: sending out, or blocking. */
 @Composable

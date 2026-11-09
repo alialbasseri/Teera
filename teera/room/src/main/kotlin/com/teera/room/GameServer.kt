@@ -526,6 +526,7 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.SetListed -> room.setListed(playerId, message.listed)
         is ClientMessage.Away -> room.setAway(playerId, message.away)
         is ClientMessage.Kick -> room.kick(playerId, message.playerId)
+        is ClientMessage.Swap -> room.swap(playerId, message.seated, message.watcher)
         is ClientMessage.SetLocked -> room.setLocked(playerId, message.locked)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,

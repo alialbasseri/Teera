@@ -275,6 +275,10 @@ sealed interface ClientMessage {
     @Serializable @SerialName("raiseAlert")
     data object RaiseAlert : ClientMessage
 
+    /** The host swaps a player (or the bot in a chair, "bot-N") with a watcher. */
+    @Serializable @SerialName("swap")
+    data class Swap(val seated: String, val watcher: String) : ClientMessage
+
     @Serializable @SerialName("voteAlert")
     data class VoteAlert(val yes: Boolean) : ClientMessage
 

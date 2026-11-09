@@ -4,6 +4,10 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,7 +77,13 @@ fun LobbyScreen(
     /** The host's say: sending somebody out, and locking the room to the invited. */
     onKick: ((String) -> Unit)? = null,
     onLock: ((Boolean) -> Unit)? = null,
+    /** The host puts a watcher in a chair and its player out to watch. */
+    onSwap: ((seated: String, watcher: String) -> Unit)? = null,
 ) {
+    var swapping by remember { mutableStateOf(false) }
+    if (swapping && onSwap != null) {
+        SwapPicker(room.seats.filter { it.isBot || it.playerId.isNotEmpty() }, room.spectators, onSwap, onClose = { swapping = false })
+    }
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
 
@@ -134,12 +144,26 @@ fun LobbyScreen(
                 )
             }
             if (room.spectators.isNotEmpty()) {
-                Text(
-                    "يتفرجون: " + room.spectators.joinToString("، ") { it.name },
-                    color = Felt.Muted,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Text(
+                        "يتفرجون: " + room.spectators.joinToString("، ") { it.name },
+                        color = Felt.Muted,
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    if (isHost && onSwap != null) {
+                        Text(
+                            "بدّل",
+                            color = Felt.Brass,
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier
+                                .padding(start = 8.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { swapping = true }
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                                .testTag("lobby-swap"),
+                        )
+                    }
+                }
             }
 
             // Sharing the code and opening the mic share one row: the chairs need the height.

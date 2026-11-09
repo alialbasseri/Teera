@@ -966,6 +966,9 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     fun kick(playerId: String) = client?.send(ClientMessage.Kick(playerId))
 
+    /** The host puts a watcher in a chair, and its player (or bot, "bot-N") out to watch. */
+    fun swap(seated: String, watcher: String) = client?.send(ClientMessage.Swap(seated, watcher))
+
     fun setLocked(locked: Boolean) = client?.send(ClientMessage.SetLocked(locked))
 
     private fun loadFriends(): List<Friend> =

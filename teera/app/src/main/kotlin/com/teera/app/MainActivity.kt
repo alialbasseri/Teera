@@ -340,6 +340,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         talk = talk,
                         avatarFor = seatPicture,
                         onKick = if (state.offline) null else { id: String -> viewModel.kick(id) },
+                        onSwap = if (state.offline) null else { seated: String, watcher: String -> viewModel.swap(seated, watcher) },
                         onLock = if (state.offline) null else { locked: Boolean -> viewModel.setLocked(locked) },
                     )
                     if (inviting) {
@@ -382,6 +383,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         isHost = state.isHost,
                         locked = state.room?.locked == true,
                         onKick = { id -> viewModel.kick(id) },
+                        onSwap = { seated, watcher -> viewModel.swap(seated, watcher) },
                         onLock = { locked -> viewModel.setLocked(locked) },
                         blocked = state.blocked.keys,
                         onBlock = { id, name, block -> if (block) viewModel.block(id, name) else viewModel.unblock(id) },
