@@ -2,6 +2,9 @@ package com.teera.room
 
 import io.ktor.http.ContentType
 import io.ktor.server.application.call
+import io.ktor.server.request.host
+import io.ktor.server.response.header
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
@@ -15,14 +18,28 @@ import io.ktor.server.routing.get
  * belong together. Where it has not checked yet, the link opens this little page, whose
  * button hands the code to the app instead.
  */
-fun Route.roomLinks() {
+fun Route.roomLinks(live: () -> LiveCount = { LiveCount(0, 0) }) {
     get("/.well-known/assetlinks.json") {
         call.respondText(ASSET_LINKS, ContentType.Application.Json)
     }
 
-    // What friends are sent to get the game: a page with the button and how to install.
+    // What friends are sent to get the game: the game's own page, always on the newest build.
+    get("/") {
+        call.respondText(landingPage(siteBase(call.request.host()), live()), ContentType.Text.Html)
+    }
     get("/download") {
-        call.respondText(downloadPage(), ContentType.Text.Html)
+        call.respondText(landingPage(siteBase(call.request.host()), live()), ContentType.Text.Html)
+    }
+    get("/site/{file}") {
+        val name = call.parameters["file"].orEmpty()
+        val bytes = siteFile(name)
+        if (bytes == null) {
+            call.respondText("Not Found", status = io.ktor.http.HttpStatusCode.NotFound)
+            return@get
+        }
+        call.response.header(io.ktor.http.HttpHeaders.CacheControl, "public, max-age=86400")
+        val type = if (name.endsWith(".png")) ContentType.Image.PNG else ContentType.Image.JPEG
+        call.respondBytes(bytes, type)
     }
     get("/teera.apk") {
         call.respondRedirect(APK_URL)
@@ -94,9 +111,12 @@ object LatestApp {
         private set
     @Volatile var minimum: Int = MIN_APP_VERSION
         private set
+    /** What the newest build brought, for the game's page; empty until version.json says. */
+    @Volatile var notes: List<String> = emptyList()
+        private set
 
     @kotlinx.serialization.Serializable
-    private data class Build(val code: Int, val name: String, val min: Int = 0)
+    private data class Build(val code: Int, val name: String, val min: Int = 0, val notes: List<String> = emptyList())
 
     /** Takes in what version.json says; false if it could not be read. */
     fun update(json: String): Boolean {
@@ -106,6 +126,7 @@ object LatestApp {
         code = build.code
         name = build.name
         minimum = build.min
+        notes = build.notes.map { it.trim() }.filter { it.isNotEmpty() && it.length <= 300 }.take(12)
         return true
     }
 
@@ -114,6 +135,7 @@ object LatestApp {
         code = LATEST_APP_VERSION
         name = LATEST_APP_NAME
         minimum = MIN_APP_VERSION
+        notes = emptyList()
     }
 }
 
@@ -134,40 +156,3 @@ const val MIN_APP_VERSION = 0
  */
 const val APK_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/teera.apk"
-
-private fun downloadPage() = """<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta property="og:title" content="طيرة — دومنة عراقية ويا جماعتك">
-<meta property="og:description" content="نزّل اللعبة والعب ويا جماعتك أونلاين">
-<title>نزّل طيرة</title>
-<style>
-  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-       background:radial-gradient(circle at 50% 30%,#4a3020,#1e1309 70%);color:#fbf7ef;
-       font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;text-align:center}
-  .card{padding:28px 24px;max-width:380px}
-  h1{font-size:64px;color:#d9b166;margin:0 0 4px}
-  a.go{display:block;padding:16px;border-radius:16px;font-size:20px;font-weight:700;text-decoration:none;
-       color:#14110c;background:linear-gradient(#f0d79a,#d9b166,#a67c2e);margin:18px 0}
-  p,li{color:#a79274;line-height:1.8}
-  ol{text-align:right;padding-right:20px;margin:0}
-</style>
-</head>
-<body>
-<div class="card">
-  <h1>طيرة</h1>
-  <p>دومنة عراقية، أربعة لاعبين، فريقين. العب ويا جماعتك من كل مكان.</p>
-  <a class="go" href="$APK_URL">نزّل اللعبة</a>
-  <p>النسخة ${LatestApp.name}</p>
-  <ol>
-    <li>دوس «نزّل اللعبة» وانتظر يخلص التنزيل.</li>
-    <li>افتح الملف <b>teera.apk</b> من الإشعارات أو من التنزيلات.</li>
-    <li>إذا سألك التليفون، اسمح بالتثبيت من هذا المصدر، وكمّل.</li>
-    <li>إذا عندك نسخة قديمة، تنزل فوگها وتبقى بياناتك.</li>
-  </ol>
-  <p>للأندرويد بس.</p>
-</div>
-</body>
-</html>"""

@@ -16,6 +16,7 @@ import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
+import io.ktor.client.call.body
 import io.ktor.server.testing.testApplication
 import io.ktor.websocket.Frame
 import io.ktor.websocket.WebSocketSession
@@ -372,7 +373,7 @@ class RoomLinkTest {
     @Test
     fun `a newer build named in the repository is offered without a restart`() = testApplication {
         try {
-            assertTrue(com.teera.room.LatestApp.update("""{"code": 9999, "name": "9.9.9"}"""))
+            assertTrue(com.teera.room.LatestApp.update("""{"code": 9999, "name": "9.9.9", "notes": ["بولات <ذهب>"]}"""))
             assertTrue(!com.teera.room.LatestApp.update("not json"), "a broken file changes nothing")
             application { gameServer() }
             val ws = createClient { install(WebSockets) }
@@ -381,7 +382,9 @@ class RoomLinkTest {
             val offer = app.await<ServerMessage.UpdateAvailable>()
             assertEquals(9999, offer.versionCode)
             assertEquals("9.9.9", offer.versionName)
-            assertTrue("9.9.9" in client.get("/download").bodyAsText())
+            val page = client.get("/download").bodyAsText()
+            assertTrue("9.9.9" in page && "شنو الجديد" in page)
+            assertTrue("بولات &lt;ذهب&gt;" in page, "the notes are shown as words, never as markup")
         } finally {
             com.teera.room.LatestApp.reset()
         }
@@ -493,7 +496,17 @@ class RoomLinkTest {
     fun `the download page hands out the latest build`() = testApplication {
         application { gameServer() }
         val page = client.get("/download").bodyAsText()
-        assertTrue(com.teera.room.APK_URL in page && "نزّل اللعبة" in page)
+        assertTrue("href=\"/teera.apk\"" in page && "نزّل اللعبة" in page && com.teera.room.LatestApp.name in page)
+        assertTrue("{{" !in page, "every blank in the page is filled")
+        assertEquals(page, client.get("/").bodyAsText(), "the bare address is the same page")
+        // The pictures it shows are all there, and nothing else is handed out.
+        Regex("/site/([a-z0-9-]+\\.(?:jpg|png))").findAll(page).map { it.groupValues[1] }.toSet().forEach {
+            val file = client.get("/site/$it")
+            assertEquals(200, file.status.value, it)
+            assertTrue(file.body<ByteArray>().size > 1000, it)
+        }
+        assertEquals(404, client.get("/site/index.html").status.value)
+        assertEquals(404, client.get("/site/..%2Fsite%2Findex.html").status.value)
         val noFollow = createClient { followRedirects = false }
         val apk = noFollow.get("/teera.apk")
         assertEquals(302, apk.status.value)

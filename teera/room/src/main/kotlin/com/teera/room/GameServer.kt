@@ -134,7 +134,12 @@ fun Application.gameServer(
 
         // Rooms still waiting for players. A phone hosting on the Wi-Fi only ever has one,
         // so a friend who typed the host's address can find it without a code.
-        roomLinks()
+        roomLinks(live = {
+            LiveCount(
+                online = registry.online.size,
+                playing = registry.all().count { h -> h.room.game?.let { it.phase != Phase.MATCH_OVER } == true },
+            )
+        })
 
         // The developer's numbers, behind a password kept in Render.
         get("/admin") {

@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>طيرة · الدومنة العراقية</title>
+<meta name="description" content="طيرة: دومنة عراقية، أربعة لاعبين وفريقين. افتح غرفة، دز اللنك لجماعتك، والعبوا أونلاين بالصوت.">
+<meta name="theme-color" content="#1e1309">
+<meta property="og:type" content="website">
+<meta property="og:title" content="طيرة · الدومنة العراقية ويا جماعتك">
+<meta property="og:description" content="أربعة لاعبين، فريقين، أونلاين وبالصوت. نزّلها والعب ويانا.">
+<meta property="og:image" content="{{BASE}}/site/share.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="{{BASE}}/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/site/icon.png">
+<link rel="apple-touch-icon" href="/site/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=El+Messiri:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --wood:#1e1309; --wood-2:#2b1c10; --wood-3:#3a2616; --line:#5a4422;
+  --brass:#d9b166; --brass-hi:#f0d79a; --brass-lo:#a67c2e;
+  --paper:#fbf7ef; --muted:#b9a585; --felt:#1f6b44; --live:#8de8a8;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;color:var(--paper);background:var(--wood);
+  font-family:"El Messiri",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+img{max-width:100%;display:block}
+a{color:var(--brass)}
+.wrap{max-width:1100px;margin:0 auto;padding:0 16px}
+
+/* ---------- hero ---------- */
+.hero{
+  position:relative;overflow:hidden;
+  background:
+    radial-gradient(ellipse 70% 55% at 30% 45%,rgba(31,107,68,.55),transparent 70%),
+    radial-gradient(ellipse 60% 50% at 80% 0%,rgba(217,177,102,.12),transparent 70%),
+    linear-gradient(#24170b,var(--wood));
+  border-bottom:1px solid var(--wood-3);
+}
+.hero .wrap{display:grid;gap:28px;padding-top:28px;padding-bottom:48px;align-items:center}
+.brand{display:flex;align-items:center;gap:12px}
+.brand img{width:56px;height:56px;border-radius:50%;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+.brand span{color:var(--muted);font-size:15px}
+h1{
+  font-family:"Aref Ruqaa",serif;font-weight:700;font-size:clamp(84px,22vw,150px);line-height:1;
+  margin:18px 0 6px;
+  background:linear-gradient(180deg,var(--brass-hi),var(--brass) 55%,var(--brass-lo));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  filter:drop-shadow(0 4px 14px rgba(0,0,0,.45));
+}
+.tag{font-size:clamp(20px,5vw,26px);font-weight:700;margin:0 0 8px}
+.lead{color:var(--muted);font-size:17px;margin:0 0 24px;max-width:520px}
+.cta{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;
+  min-width:260px;padding:16px 28px;border-radius:18px;
+  font:700 21px "El Messiri",sans-serif;color:#14110c;text-decoration:none;
+  background:linear-gradient(var(--brass-hi),var(--brass) 60%,var(--brass-lo));
+  box-shadow:0 10px 30px rgba(217,177,102,.25),inset 0 1px 0 rgba(255,255,255,.5);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.cta:hover{transform:translateY(-2px);box-shadow:0 14px 36px rgba(217,177,102,.35),inset 0 1px 0 rgba(255,255,255,.5)}
+.cta:active{transform:translateY(1px)}
+.cta svg{width:22px;height:22px}
+.meta{color:var(--muted);font-size:14px;margin-top:12px}
+.meta b{color:var(--paper);font-weight:500}
+.live{
+  display:inline-flex;align-items:center;gap:8px;margin-top:14px;padding:6px 14px;border-radius:999px;
+  background:rgba(141,232,168,.08);border:1px solid rgba(141,232,168,.3);color:var(--live);font-size:14px;
+}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 0 0 rgba(141,232,168,.6);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(141,232,168,0)}100%{box-shadow:0 0 0 0 rgba(141,232,168,0)}}
+
+.phones{position:relative;height:500px;max-width:420px;width:100%;margin:0 auto}
+.phone{
+  position:absolute;width:220px;aspect-ratio:540/1176;border-radius:30px;padding:7px;
+  background:#0b0704;box-shadow:0 30px 70px rgba(0,0,0,.65),inset 0 0 0 1px #4a3820;
+}
+.phone img{width:100%;height:100%;object-fit:cover;border-radius:24px}
+.phones .p1{right:6%;top:0;z-index:2}
+.phones .p2{left:4%;top:44px;transform:rotate(-7deg);opacity:.92}
+
+/* ---------- sections ---------- */
+section{padding:56px 0}
+h2{font-size:clamp(26px,6vw,34px);margin:0 0 6px;color:var(--brass-hi)}
+.sub{color:var(--muted);margin:0 0 28px}
+
+.steps{display:grid;gap:14px;counter-reset:step}
+.step{
+  display:flex;gap:16px;align-items:flex-start;padding:18px;border-radius:18px;
+  background:var(--wood-2);border:1px solid var(--line);
+}
+.pip{flex:0 0 auto;width:46px;height:84px;border-radius:9px;background:linear-gradient(#fffaf0,#e9dfc9);
+  box-shadow:0 4px 10px rgba(0,0,0,.4);display:grid;grid-template-rows:1fr 2px 1fr;padding:6px}
+.pip .half{position:relative}
+.pip .bar{background:#bfae8e;margin:0 3px}
+.pip .half i{position:absolute;width:8px;height:8px;border-radius:50%;background:#1d3d7a}
+.step h3{margin:0 0 2px;font-size:19px}
+.step p{margin:0;color:var(--muted)}
+
+.features{display:grid;gap:14px}
+.feat{padding:16px;border-radius:18px;background:linear-gradient(180deg,var(--wood-2),#24170c);border:1px solid var(--line);
+  display:grid;grid-template-columns:44px 1fr;column-gap:14px;align-items:start}
+.feat .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;grid-row:span 2;
+  background:rgba(217,177,102,.12);color:var(--brass)}
+.feat .ic svg{width:24px;height:24px}
+.feat h3{margin:0 0 2px;font-size:18px;line-height:1.5}
+.feat p{margin:0;color:var(--muted);font-size:15px;line-height:1.65}
+.features{gap:10px}
+
+.strip{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;padding:6px 16px 18px;
+  margin:0 -16px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.strip figure{margin:0;flex:0 0 190px;scroll-snap-align:center}
+.strip .phone{position:relative;width:100%;border-radius:26px;padding:6px}
+.strip .phone img{border-radius:20px}
+.strip figcaption{text-align:center;color:var(--muted);font-size:14px;margin-top:10px}
+
+.news{padding:22px;border-radius:18px;background:var(--wood-2);border:1px solid var(--line)}
+.news .ver{display:inline-block;padding:2px 12px;border-radius:999px;background:rgba(217,177,102,.15);color:var(--brass-hi);font-size:14px;margin-bottom:8px}
+.news ul{margin:0;padding-right:20px}
+.news li{margin:4px 0}
+
+.install ol{margin:0;padding-right:22px}
+.install li{margin:8px 0}
+.install li::marker{color:var(--brass);font-weight:700}
+.note{margin-top:16px;padding:14px 16px;border-radius:14px;background:rgba(217,177,102,.08);border:1px solid rgba(217,177,102,.25);color:var(--muted);font-size:15px}
+
+details{border-bottom:1px solid var(--wood-3);padding:14px 2px}
+summary{cursor:pointer;font-weight:700;font-size:17px;list-style:none;display:flex;justify-content:space-between;gap:12px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--brass);font-size:22px;line-height:1}
+details[open] summary::after{content:"−"}
+details p{margin:8px 0 0;color:var(--muted)}
+
+.final{text-align:center;padding:64px 0;
+  background:radial-gradient(ellipse 60% 70% at 50% 100%,rgba(31,107,68,.4),transparent 70%)}
+.final h2{font-family:"Aref Ruqaa",serif;font-size:clamp(34px,9vw,52px);color:var(--brass-hi)}
+footer{text-align:center;color:var(--muted);font-size:13px;padding:22px 16px 34px;border-top:1px solid var(--wood-3)}
+footer b{color:var(--paper);font-weight:500}
+
+.two{display:grid;gap:28px}
+
+@media (min-width:760px){
+  .hero .wrap{grid-template-columns:1.1fr .9fr;padding-top:40px;padding-bottom:72px}
+  .phones{height:560px}
+  .phone{width:250px}
+  .steps{grid-template-columns:repeat(3,1fr)}
+  .step{flex-direction:column}
+  .features{grid-template-columns:repeat(3,1fr);gap:14px}
+  .feat{display:block;padding:20px}
+  .feat .ic{margin-bottom:12px}
+  .strip{margin:0;padding-inline:0}
+  .strip figure{flex-basis:220px}
+  .two{grid-template-columns:1fr 1fr}
+}
+@media (max-width:380px){
+  .phones{height:430px}
+  .phone{width:188px}
+  .cta{min-width:0;width:100%}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.live i{animation:none}.cta{transition:none}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <div class="brand"><img src="/site/icon.png" alt="" width="56" height="56"><span>لعبة للأندرويد</span></div>
+      <h1>طيرة</h1>
+      <p class="tag">الدومنة العراقية، ويا جماعتك</p>
+      <p class="lead">أربعة لاعبين، فريقين. افتح غرفة، دز اللنك بالكروب، والعبوا أونلاين كل واحد من بيته، بالصوت والضحك والطيرات.</p>
+      <a class="cta" href="/teera.apk" download>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        نزّل اللعبة
+      </a>
+      <div class="meta">النسخة <b>{{VERSION}}</b> · مجانية · للأندرويد</div>
+      {{LIVE}}
+    </div>
+    <div class="phones" aria-hidden="true">
+      <div class="phone p2"><img src="/site/celebration.jpg" alt=""></div>
+      <div class="phone p1"><img src="/site/table.jpg" alt=""></div>
+    </div>
+  </div>
+</header>
+
+<main>
+<section>
+  <div class="wrap">
+    <h2>تبدي بثلاث خطوات</h2>
+    <p class="sub">ما تحتاج حساب ولا رقم تليفون. اسمك وصورتك وبس.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="pip"><div class="half"><i style="top:50%;left:50%;transform:translate(-50%,-50%)"></i></div><div class="bar"></div><div class="half"></div></div>
+        <div><h3>نزّل اللعبة</h3><p>دوس «نزّل اللعبة» وثبّتها. تاخذ دقيقة.</p></div>
+      </div>
+      <div class="step">
+        <div class="pip"><div class="half"><i style="top:4px;right:4px"></i><i style="bottom:4px;left:4px"></i></div><div class="bar"></div><div class="half"></div></div>
+        <div><h3>افتح غرفة</h3><p>اكتب اسمك، افتح غرفة، ودز اللنك لجماعتك. يدوسون عليه ويدخلون للطاولة.</p></div>
+      </div>
+      <div class="step">
+        <div class="pip"><div class="half"><i style="top:4px;right:4px"></i><i style="top:50%;left:50%;transform:translate(-50%,-50%)"></i><i style="bottom:4px;left:4px"></i></div><div class="bar"></div><div class="half"></div></div>
+        <div><h3>العبوا</h3><p>انت وشريكك ضد اثنين. وإذا ناقصكم واحد، حطوا بوت مكانه.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <h2>شنو بيها؟</h2>
+    <p class="sub">مسوّاية للگعدة العراقية: الطاولة، الحچي، والزعل الحلو.</p>
+    <div class="features">
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.6 3.3-5.5 6.5-5.5s5.9 1.9 6.5 5.5"/><circle cx="17" cy="9" r="2.6"/><path d="M16.5 14.6c2.6.1 4.5 1.8 5 4.6"/></svg></div>
+        <h3>ويا جماعتك أونلاين</h3>
+        <p>غرفة بكود، واللنك يفتح اللعبة ويدخلك للغرفة مباشرة. تگدر تعزم أصدقاءك من داخل اللعبة.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21.5"/></svg></div>
+        <h3>حچي بالصوت</h3>
+        <p>صوت مباشر وكتابة، وأصوات عراقية: برطو، ابلع، هاااي الزلم، سبلوش، والله دنيييكم.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M7 12h10"/><circle cx="12" cy="7.2" r="1" fill="currentColor"/><circle cx="10" cy="15.5" r="1" fill="currentColor"/><circle cx="14" cy="18" r="1" fill="currentColor"/></svg></div>
+        <h3>الطيرة مثل ما نلعبها</h3>
+        <p>الچفت، الاكس، الطيرة، القفلة، وناخذ خاوة. العبوا على 201 أو 251 أو 10 گيمات.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z"/><path d="M5 21h14"/></svg></div>
+        <h3>الترتيب والألقاب</h3>
+        <p>نقاطك تصعد وتنزل حسب قوة الخصم. ملك الطيرة، ملك الاكس، بطل الخاوات، الحديد… وأقوى ثنائي.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10v5a5 5 0 0 1-10 0z"/><path d="M7 5.5H4a3 3 0 0 0 3 4"/><path d="M17 5.5h3a3 3 0 0 1-3 4"/><path d="M12 13.5V17"/><path d="M8 21h8l-1-4H9z"/></svg></div>
+        <h3>بطولات</h3>
+        <p>4 أو 8 أو 16 فريق، والفايز يتأهل للدور اللي بعده لين يطلع البطل.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/></svg></div>
+        <h3>تفرّج</h3>
+        <p>شوف اللعبات الماشية وادخل تفرّج. والمتفرج يگدر يلعب بدال اللي انقطع النت عنده.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7.5" width="16" height="12" rx="3"/><path d="M12 7.5V4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="13" r="1.2" fill="currentColor"/><circle cx="15" cy="13" r="1.2" fill="currentColor"/><path d="M9.5 16.5h5"/></svg></div>
+        <h3>وحدك؟ العب ضد البوتات</h3>
+        <p>سهل ومتوسط وصعب. واللي جديد عالطيرة، بيها تعليم خطوة بخطوة.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5a9.5 9.5 0 1 0 0 19c1.4 0 2-1 1.6-2.1-.5-1.3.4-2.4 1.8-2.4H18a3.5 3.5 0 0 0 3.5-3.5C21.5 7 17.2 2.5 12 2.5z"/><circle cx="7.5" cy="11" r="1.2" fill="currentColor"/><circle cx="10.5" cy="7" r="1.2" fill="currentColor"/><circle cx="15" cy="7.5" r="1.2" fill="currentColor"/></svg></div>
+        <h3>طاولتك بذوقك</h3>
+        <p>قماش أخضر أو أحمر أو أزرق أو أسود، وبولات عاج أو خشب أو سود.</p>
+      </div>
+      <div class="feat">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 12a8.5 8.5 0 1 1-2.5-6"/><path d="M20.5 3.5v5h-5"/></svg></div>
+        <h3>ما تضيع لعبتك</h3>
+        <p>إذا انقطع النت ترجع لكرسيك. وسجلّك يحفظ كل مباراة، وتگدر تشوف خطوات كل گيم.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <h2>شوفها گبل لا تنزّلها</h2>
+    <p class="sub">صور من اللعبة نفسها. اسحب يمين ويسار.</p>
+    <div class="strip">
+      <figure><div class="phone"><img src="/site/menu.jpg" alt="القائمة" loading="lazy"></div><figcaption>القائمة</figcaption></figure>
+      <figure><div class="phone"><img src="/site/lobby-ali.jpg" alt="الغرفة" loading="lazy"></div><figcaption>الغرفة: اختاروا 201 أو 251</figcaption></figure>
+      <figure><div class="phone"><img src="/site/table.jpg" alt="الطاولة" loading="lazy"></div><figcaption>الطاولة</figcaption></figure>
+      <figure><div class="phone"><img src="/site/teera-offer.jpg" alt="الطيرة" loading="lazy"></div><figcaption>تگدر تطيّر؟</figcaption></figure>
+      <figure><div class="phone"><img src="/site/celebration.jpg" alt="طيرة" loading="lazy"></div><figcaption>طيرررة!</figcaption></figure>
+      <figure><div class="phone"><img src="/site/table-red-wood.jpg" alt="طاولة حمرا وبولات خشب" loading="lazy"></div><figcaption>طاولة حمرا وبولات خشب</figcaption></figure>
+      <figure><div class="phone"><img src="/site/ranking.jpg" alt="الترتيب" loading="lazy"></div><figcaption>الترتيب</figcaption></figure>
+      <figure><div class="phone"><img src="/site/live-games.jpg" alt="اللعبات الماشية" loading="lazy"></div><figcaption>اللعبات الماشية</figcaption></figure>
+      <figure><div class="phone"><img src="/site/tournament.jpg" alt="بطولة" loading="lazy"></div><figcaption>البطولات</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap two">
+    <div class="install" id="install">
+      <h2>شلون أثبّتها؟</h2>
+      <p class="sub">اللعبة مو من المتجر، فالتليفون يسألك مرة وحدة.</p>
+      <ol>
+        <li>دوس «نزّل اللعبة» وانتظر لين يخلص التنزيل.</li>
+        <li>افتح الملف <b>teera.apk</b> من الإشعارات أو من التنزيلات.</li>
+        <li>إذا سألك التليفون، اسمح بالتثبيت من هذا المصدر وكمّل.</li>
+        <li>إذا عندك نسخة قديمة، الجديدة تنزل فوگها وتبقى بياناتك.</li>
+      </ol>
+      <div class="note">إذا طلعلك <b>Play Protect</b>، دوس «تفاصيل أكثر» وبعدين «التثبيت على أي حال». هذا يطلع لأي لعبة مو من Google Play.</div>
+    </div>
+    <div>
+      {{NEWS}}
+      <div style="margin-top:28px">
+        <h2>أسئلة</h2>
+        <details><summary>مجانية؟</summary><p>إي، كلها مجانية.</p></details>
+        <details><summary>تشتغل على الآيفون؟</summary><p>لهسه أندرويد بس.</p></details>
+        <details><summary>أحتاج حساب؟</summary><p>لا. تكتب اسمك، تختار صورة، وتلعب.</p></details>
+        <details><summary>شلون أعرف إذا نزل تحديث؟</summary><p>اللعبة نفسها تگلك، وبيها زر «نزّلها هسه». وهاي الصفحة دايماً بيها آخر نسخة.</p></details>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div class="final">
+  <div class="wrap">
+    <h2>يلا، الزلم ينتظرونك</h2>
+    <p class="sub">نزّلها هسه ودز هاي الصفحة لجماعتك.</p>
+    <a class="cta" href="/teera.apk" download>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      نزّل اللعبة
+    </a>
+    <div class="meta">النسخة <b>{{VERSION}}</b></div>
+  </div>
+</div>
+
+<footer dir="ltr">Designed by <b>Ali Albasseri</b> · Powered by <b>Tech Vision</b></footer>
+</body>
+</html>
