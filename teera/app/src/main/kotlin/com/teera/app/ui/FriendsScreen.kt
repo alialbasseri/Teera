@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -206,8 +207,8 @@ fun FriendRow(friend: Friend, online: Boolean, action: @Composable () -> Unit) {
 }
 
 /**
- * Sharing a room: WhatsApp first, and below it the friends who have the app open right
- * now, each a tap away from an invitation that pops up on their phone.
+ * Sharing a room: WhatsApp first, and below it every friend: those with the app open get
+ * the invitation on screen, the rest as a notification on their phone.
  */
 @Composable
 fun InviteDialog(
@@ -222,14 +223,26 @@ fun InviteDialog(
         Plaque {
             Text("دزّ اللنك", color = Felt.Brass, style = MaterialTheme.typography.titleLarge)
             GoldButton("دزّه بالواتساب", { onClose(); onShareLink() })
-            val here = friends.filter { it.id in online && it.id !in seated }
+            // Open-app friends first; the others still get it, as a notification.
+            val here = friends.filter { it.id !in seated }.sortedByDescending { it.id in online }
             if (here.isNotEmpty()) {
-                Text("أو اعزم اللي فاتحين اللعبة هسه:", color = Felt.Muted, style = MaterialTheme.typography.labelLarge)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    here.take(8).forEach { friend ->
-                        FriendRow(friend, online = true) { BrassButton("اعزم", { onInvite(friend) }) }
+                Text("أو اعزم جماعتك من هنا:", color = Felt.Muted, style = MaterialTheme.typography.labelLarge)
+                androidx.compose.foundation.lazy.LazyColumn(
+                    Modifier.heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(here, key = { it.id }) { friend ->
+                        var sent by remember(friend.id) { mutableStateOf(false) }
+                        FriendRow(friend, online = friend.id in online) {
+                            BrassButton(if (sent) "انرسلت" else "اعزم", { if (!sent) { sent = true; onInvite(friend) } })
+                        }
                     }
                 }
+                Text(
+                    "اللي مو فاتح اللعبة توصله العزيمة إشعار بتليفونه",
+                    color = Felt.Muted,
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
             Text(
                 "سد",

@@ -337,7 +337,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         // as well as WhatsApp; otherwise it goes straight to sharing.
                         onShare = { code ->
                             val seated = room.seats.map { it.playerId }.toSet()
-                            if (state.friends.any { it.id in state.online && it.id !in seated }) inviting = true
+                            if (state.friends.any { it.id !in seated }) inviting = true
                             else shareRoomCode(context, code, viewModel.linkFor(code))
                         },
                         talk = talk,

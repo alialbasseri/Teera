@@ -76,6 +76,8 @@ class AdminState {
     suspend fun load(records: Records) {
         banned.putAll(records.bannedPlayers())
         val saved = records.loadSettings()
+        // Nothing read (a database asleep, or none): keep what is set, rather than wipe it.
+        if (saved.isEmpty()) return
         settings = AdminSettings(
             minAppVersion = saved["minAppVersion"]?.toIntOrNull() ?: 0,
             remindersOn = saved["remindersOn"]?.toBooleanStrictOrNull() ?: true,

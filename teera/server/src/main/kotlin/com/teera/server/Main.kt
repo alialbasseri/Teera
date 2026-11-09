@@ -1,5 +1,6 @@
 package com.teera.server
 
+import kotlinx.coroutines.launch
 import com.teera.room.Records
 import com.teera.room.gameServer
 import io.ktor.server.engine.embeddedServer
@@ -40,6 +41,14 @@ fun main() {
     // Who is barred and what the developer set on the page, from the books.
     val admin = com.teera.room.AdminState()
     kotlinx.coroutines.runBlocking { runCatching { admin.load(records) } }
+    // A free database may be asleep at boot and answer nothing: read the bars and the
+    // settings again once it has woken, so a restart never lets a barred player back in.
+    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO).launch {
+        repeat(3) {
+            kotlinx.coroutines.delay(60_000)
+            runCatching { admin.load(records) }
+        }
+    }
     // The evening reminders need the books (who to reach, what they were sent) and notifications.
     if (records is SqlRecords && pusher !== com.teera.room.Pusher.NONE) {
         Reminders(records, pusher, registry, switchedOn = { admin.settings.remindersOn })
