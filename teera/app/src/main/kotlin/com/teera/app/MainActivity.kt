@@ -274,6 +274,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onForget = viewModel::forget,
                     onShareCode = { shareText(context, "ضيفني بطاولة الدومينا، رمزي: ${state.myCode}") },
                     onClose = viewModel::closeFriends,
+                    blocked = state.blocked,
+                    onUnblock = viewModel::unblock,
                 )
 
                 Screen.Profile -> com.teera.app.ui.ProfileScreen(
@@ -321,6 +323,8 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         },
                         talk = talk,
                         avatarFor = seatPicture,
+                        onKick = if (state.offline) null else { id: String -> viewModel.kick(id) },
+                        onLock = if (state.offline) null else { locked: Boolean -> viewModel.setLocked(locked) },
                     )
                     if (inviting) {
                         com.teera.app.ui.InviteDialog(
@@ -358,6 +362,13 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         onStandIn = { seat -> viewModel.standIn(seat) },
                         onProposeTarget = { target -> viewModel.proposeTarget(target) },
                         onListed = { listed -> viewModel.setListed(listed) },
+                        myId = state.myId,
+                        isHost = state.isHost,
+                        locked = state.room?.locked == true,
+                        onKick = { id -> viewModel.kick(id) },
+                        onLock = { locked -> viewModel.setLocked(locked) },
+                        blocked = state.blocked.keys,
+                        onBlock = { id, name, block -> if (block) viewModel.block(id, name) else viewModel.unblock(id) },
                         onVoteTarget = { yes -> viewModel.voteTarget(yes) },
                         onVoteAlert = { yes -> viewModel.voteAlert(yes) },
                         steps = state.steps,

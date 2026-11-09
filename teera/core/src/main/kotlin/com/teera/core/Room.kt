@@ -107,7 +107,60 @@ class Room(
         started = isStarted,
         spectators = spectatorSeats(),
         listed = listed,
+        locked = locked,
     )
+
+    // -- who may come in -----------------------------------------------------------
+
+    /** Closed to everybody but people invited from inside and people already here. */
+    var locked: Boolean = false
+        private set
+    private val invited = HashSet<String>()
+    private val sentOut = HashSet<String>()
+
+    fun setLocked(playerId: String, locked: Boolean): Output {
+        if (playerId != hostId || this.locked == locked) return Output.NOTHING
+        this.locked = locked
+        return Output(roomChanged = true, viewChanged = isStarted)
+    }
+
+    /** Somebody here invited [playerId]: a locked room lets them in. */
+    fun invited(playerId: String) {
+        invited += playerId
+        sentOut -= playerId
+    }
+
+    /** Why [playerId] may not come in, or null if they may. */
+    fun refusal(playerId: String): ErrorCode? = when {
+        members.containsKey(playerId) || watchers.containsKey(playerId) -> null
+        playerId in sentOut -> ErrorCode.KICKED
+        locked && playerId !in invited -> ErrorCode.ROOM_LOCKED
+        else -> null
+    }
+
+    /**
+     * The host sends somebody out. A watcher, or a player before the deal, just goes; a
+     * player mid-match leaves a bot in their chair, so the game is not spoiled for the
+     * rest. Either way they cannot come back unless somebody here invites them again.
+     */
+    fun kick(playerId: String, target: String): Output {
+        if (playerId != hostId || target == hostId) return Output.NOTHING
+        val told = listOf(target to ServerMessage.Failure(ErrorCode.KICKED, "صاحب الغرفة طلّعك"))
+        if (watchers.containsKey(target)) {
+            watchers.remove(target)
+            standIns.values.remove(target)
+            sentOut += target
+            return Output(direct = told, roomChanged = true, viewChanged = isStarted)
+        }
+        val member = members[target] ?: return Output.NOTHING
+        members.remove(target)
+        showingHands -= target
+        away -= target
+        if (isStarted) bots[member.seat] = Difficulty.NORMAL
+        sentOut += target
+        invited -= target
+        return Output(direct = told, roomChanged = true, viewChanged = isStarted)
+    }
 
     // -- calling people back ------------------------------------------------------
 
@@ -575,6 +628,10 @@ class Room(
         // The deal fixed who sits where; whether each of them is still connected is live.
         val seats = state.seats.map { seat ->
             val member = members[seat.playerId]
+            // Sent out mid-match: a bot has that chair now, and says so.
+            if (member == null && !seat.isBot && bots.containsKey(seat.seat)) {
+                return@map seat.copy(isBot = true, name = "Bot ${seat.seat + 1}", connected = true)
+            }
             seat.copy(
                 connected = seat.isBot || member?.connected == true,
                 avatar = member?.avatar ?: seat.avatar,

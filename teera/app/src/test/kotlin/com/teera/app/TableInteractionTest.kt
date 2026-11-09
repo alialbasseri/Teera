@@ -5,7 +5,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import com.teera.app.ui.TableScreen
@@ -164,5 +166,29 @@ class TableInteractionTest {
         compose.onNodeWithTag("zoom-reset").assertDoesNotExist()
         compose.onNodeWithTag("arm-NORTH").performClick()
         assertEquals(Arm.NORTH, tapped)
+    }
+
+    @Test
+    fun `blocking somebody at the table, and the host sending somebody out, go through the menu`() {
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            TableScreen(
+                yourMove(), onMove = {}, onNextGame = {}, onLeave = {},
+                chat = emptyList(), onChat = {},
+                myId = "p0", isHost = true,
+                onKick = { calls += "kick $it" },
+                onLock = { calls += "lock $it" },
+                onBlock = { id, _, block -> calls += "block $id $block" },
+            )
+        }
+        compose.onNodeWithContentDescription("القائمة").performClick()
+        compose.onNodeWithText("احظر واحد…").performClick()
+        compose.onNodeWithTag("person-p2").performClick()
+        compose.onNodeWithContentDescription("القائمة").performClick()
+        compose.onNodeWithText("طلّع واحد…").performClick()
+        compose.onNodeWithTag("person-p1").performClick()
+        compose.onNodeWithContentDescription("القائمة").performClick()
+        compose.onNodeWithText("اقفل الغرفة على جماعتك").performClick()
+        assertEquals(listOf("block p2 true", "kick p1", "lock true"), calls)
     }
 }

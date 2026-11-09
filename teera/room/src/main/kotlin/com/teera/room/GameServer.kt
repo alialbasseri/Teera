@@ -225,6 +225,15 @@ fun Application.gameServer(
                                 fail(ErrorCode.ROOM_NOT_FOUND, "No room with the code ${message.code.uppercase()}")
                                 return@consumeEach
                             }
+                            val refused = target.lock.withLock { target.room.refusal(me!!) }
+                            if (refused != null) {
+                                fail(
+                                    refused,
+                                    if (refused == ErrorCode.KICKED) "صاحب الغرفة طلّعك من هالغرفة"
+                                    else "الغرفة مقفولة، تحتاج عزيمة من واحد بيها",
+                                )
+                                return@consumeEach
+                            }
                             holder?.let { detach(it, me!!) }
                             holder = target
                             target.sessions[me!!] = this
@@ -250,6 +259,10 @@ fun Application.gameServer(
                         is ClientMessage.Invite -> {
                             val target = registry.online[message.playerId]
                             val code = message.code.uppercase().filter(Char::isLetterOrDigit).take(8)
+                            // Invited from inside the room: a locked room lets them in.
+                            holder?.takeIf { it.room.code == code }?.let { here ->
+                                here.lock.withLock { here.room.invited(message.playerId) }
+                            }
                             val invite = ServerMessage.Invited(me!!, name, avatar, code)
                             target?.sessions?.forEach { it.trySend(invite) }
                             // Not in the app: their phone hears of it anyway, if it can.
@@ -279,7 +292,13 @@ fun Application.gameServer(
                             }
                             current.lastActivity = System.currentTimeMillis()
                             current.lock.withLock {
-                                handleInRoom(current, me!!, message)?.let { publish(current, it, records) }
+                                handleInRoom(current, me!!, message)?.let { output ->
+                                    publish(current, output, records)
+                                    // Told they were sent out, they stop hearing the table.
+                                    if (message is ClientMessage.Kick && output != Room.Output.NOTHING) {
+                                        current.sessions.remove(message.playerId)
+                                    }
+                                }
                             }
                             if (message is ClientMessage.LeaveRoom) {
                                 current.sessions.remove(me)
@@ -396,6 +415,8 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.VoteTarget -> room.voteTarget(playerId, message.yes)
         is ClientMessage.SetListed -> room.setListed(playerId, message.listed)
         is ClientMessage.Away -> room.setAway(playerId, message.away)
+        is ClientMessage.Kick -> room.kick(playerId, message.playerId)
+        is ClientMessage.SetLocked -> room.setLocked(playerId, message.locked)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,

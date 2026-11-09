@@ -39,6 +39,8 @@ data class RoomInfo(
     val spectators: List<Seat> = emptyList(),
     /** A player let the table show in the list of games being played, for anyone to watch. */
     val listed: Boolean = false,
+    /** Only people invited from inside, or already here, may come in. */
+    val locked: Boolean = false,
 )
 
 /** A game being played that its players let anyone watch, as the list shows it. */
@@ -290,6 +292,14 @@ sealed interface ClientMessage {
     @Serializable @SerialName("standIn")
     data class StandIn(val seat: Int?) : ClientMessage
 
+    /** The host sends somebody out of the room, for good. */
+    @Serializable @SerialName("kick")
+    data class Kick(val playerId: String) : ClientMessage
+
+    /** The host closes the room to everybody not invited from inside it, or opens it again. */
+    @Serializable @SerialName("setLocked")
+    data class SetLocked(val locked: Boolean) : ClientMessage
+
     /** Lets anyone watch this table from the list of games being played, or stops it. */
     @Serializable @SerialName("setListed")
     data class SetListed(val listed: Boolean) : ClientMessage
@@ -354,6 +364,10 @@ enum class Emote {
 enum class ErrorCode {
     ROOM_NOT_FOUND, ROOM_FULL, ROOM_ALREADY_STARTED, NOT_HOST, NOT_IN_ROOM,
     SEAT_TAKEN, INVALID_RULES, NOT_ENOUGH_PLAYERS, VERSION_MISMATCH, BAD_MESSAGE, INTERNAL,
+    /** The room is locked to people invited from inside it. */
+    ROOM_LOCKED,
+    /** The host sent this player out of the room. */
+    KICKED,
 }
 
 @Serializable

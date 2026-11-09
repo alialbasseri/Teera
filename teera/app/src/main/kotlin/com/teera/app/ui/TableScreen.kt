@@ -152,6 +152,15 @@ fun TableScreen(
     onVoteTarget: (Boolean) -> Unit = {},
     /** Lets anyone watch this table from the list of games being played; null with bots. */
     onListed: ((Boolean) -> Unit)? = null,
+    /** Who this player is, and whether they run the room: the host sends people out and locks it. */
+    myId: String = "",
+    isHost: Boolean = false,
+    locked: Boolean = false,
+    onKick: ((String) -> Unit)? = null,
+    onLock: ((Boolean) -> Unit)? = null,
+    /** Blocking, kept on this phone: who is blocked, and blocking or unblocking somebody. */
+    blocked: Set<String> = emptySet(),
+    onBlock: ((id: String, name: String, block: Boolean) -> Unit)? = null,
     /** "ناخذ خاوة" on the other team; null where there is nobody to vote (bots). */
     onRaiseAlert: (() -> Unit)? = null,
     onVoteAlert: (Boolean) -> Unit = {},
@@ -205,6 +214,7 @@ fun TableScreen(
     var showRules by remember { mutableStateOf(false) }
     var askAlert by remember { mutableStateOf(false) }
     var askTarget by remember { mutableStateOf(false) }
+    var picking by remember { mutableStateOf<PeopleAction?>(null) }
 
     // The game ends with a moment, and only then the sums.
     val over = view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER
@@ -244,6 +254,15 @@ fun TableScreen(
         } else {
             emptyList()
         } + listOfNotNull(
+            onLock?.takeIf { isHost && onChat != null }?.let { lock ->
+                MenuOption(if (locked) "الغرفة مقفولة لجماعتك" else "اقفل الغرفة على جماعتك", lit = locked) { lock(!locked) }
+            },
+            onKick?.takeIf { isHost && onChat != null && view.others(myId).isNotEmpty() }?.let {
+                MenuOption("طلّع واحد…") { picking = PeopleAction.KICK }
+            },
+            onBlock?.takeIf { onChat != null && view.others(myId).isNotEmpty() }?.let {
+                MenuOption("احظر واحد…") { picking = PeopleAction.BLOCK }
+            },
             onListed?.takeIf { !view.spectating && onChat != null }?.let { set ->
                 MenuOption(if (view.listed) "لعبتنا تبين للكل" else "خلي لعبتنا تبين للكل", lit = view.listed) { set(!view.listed) }
             },
@@ -326,6 +345,21 @@ fun TableScreen(
             onStandIn = onStandIn.takeIf { view.spectating && onChat != null && !over },
             avatar = { size -> avatarFor(view.yourSeat, size) },
         )
+
+    picking?.let { action ->
+        PeopleDialog(
+            title = if (action == PeopleAction.KICK) "طلّع منو؟" else "احظر منو؟",
+            note = if (action == PeopleAction.KICK) "يطلع من الغرفة وما يرجع إلا بعزيمة. إذا جان يلعب، يكمل بوت بكرسيه."
+            else "ما توصلك عزايمه، وما تسمع صوته ولا تشوف كتابته. الحظر بتليفونك بس.",
+            people = view.others(myId),
+            label = { id -> if (action == PeopleAction.KICK) "طلّع" else if (id in blocked) "شيل الحظر" else "احظر" },
+            onPick = { id, name ->
+                if (action == PeopleAction.KICK) onKick?.invoke(id) else onBlock?.invoke(id, name, id !in blocked)
+                picking = null
+            },
+            onClose = { picking = null },
+        )
+    }
 
     if (askTarget) {
         Dialog(onDismissRequest = { askTarget = false }) {
@@ -1447,6 +1481,42 @@ private fun TargetVotePanel(view: PlayerView, vote: com.teera.core.TargetVote, o
                     Text("لا", color = Felt.Parchment)
                 }
             }
+        }
+    }
+}
+
+private enum class PeopleAction { KICK, BLOCK }
+
+/** The other people here, players and watchers, by id and name; no bots. */
+internal fun PlayerView.others(myId: String): List<Pair<String, String>> =
+    (seats.filter { !it.isBot && it.playerId.isNotBlank() } + spectators)
+        .filter { it.playerId != myId && it.playerId.isNotBlank() }
+        .distinctBy { it.playerId }
+        .map { it.playerId to it.name.ifBlank { "لاعب" } }
+
+/** Picks one of the people here for something done to them: sending out, or blocking. */
+@Composable
+private fun PeopleDialog(
+    title: String,
+    note: String,
+    people: List<Pair<String, String>>,
+    label: (String) -> String,
+    onPick: (String, String) -> Unit,
+    onClose: () -> Unit,
+) {
+    Dialog(onDismissRequest = onClose) {
+        Plaque {
+            Text(title, color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
+            Text(note, color = Felt.Muted, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+            people.forEach { (id, name) ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, color = Felt.Parchment, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { onPick(id, name) }, modifier = Modifier.testTag("person-$id")) {
+                        Text(label(id), color = Felt.Parchment)
+                    }
+                }
+            }
+            OutlinedButton(onClick = onClose) { Text("رجوع", color = Felt.Parchment) }
         }
     }
 }

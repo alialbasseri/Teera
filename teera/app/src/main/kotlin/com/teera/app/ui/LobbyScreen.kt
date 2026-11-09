@@ -70,6 +70,9 @@ fun LobbyScreen(
     /** Table talk; null when the other chairs can only hold bots. */
     talk: Talk? = null,
     avatarFor: @Composable (Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size -> Initial(seat?.name.orEmpty(), size) },
+    /** The host's say: sending somebody out, and locking the room to the invited. */
+    onKick: ((String) -> Unit)? = null,
+    onLock: ((Boolean) -> Unit)? = null,
 ) {
     val mySeat = room.seats.firstOrNull { it.playerId == myId }?.seat ?: 0
     val ready = room.seats.all { it.playerId.isNotEmpty() || it.isBot }
@@ -166,17 +169,17 @@ fun LobbyScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                SeatChair(room, (mySeat + 2) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
+                SeatChair(room, (mySeat + 2) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor, onKick = onKick)
                 Row(
                     Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    SeatChair(room, (mySeat + 1) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
+                    SeatChair(room, (mySeat + 1) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor, onKick = onKick)
                     RoundTable(Modifier.size(118.dp))
-                    SeatChair(room, (mySeat + 3) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
+                    SeatChair(room, (mySeat + 3) % 4, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor, onKick = onKick)
                 }
-                SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor)
+                SeatChair(room, mySeat, myId, mySeat, isHost, onTakeSeat, onToggleBot, speaking = talk.speakingSeats(myId, room), avatar = avatarFor, onKick = onKick)
             }
 
           Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -217,6 +220,22 @@ fun LobbyScreen(
                 color = Felt.Muted,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            // The host can close the room to everybody but the people they invite.
+            if (isHost && onLock != null) {
+                Text(
+                    if (room.locked) "🔒 مقفولة: بس اللي تعزمه يدخل" else "🔓 مفتوحة: يدخل أي واحد عنده اللنك",
+                    color = if (room.locked) Felt.GoldLit else Felt.Muted,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier
+                        .padding(top = 6.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onLock(!room.locked) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .testTag("lock"),
+                )
+            } else if (room.locked) {
+                Text("🔒 الغرفة مقفولة", color = Felt.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 6.dp))
+            }
 
             Spacer(Modifier.height(14.dp))
             if (isHost) {
@@ -259,6 +278,7 @@ private fun SeatChair(
     onToggleBot: (Int, Boolean) -> Unit,
     modifier: Modifier = Modifier,
     speaking: Set<Int> = emptySet(),
+    onKick: ((String) -> Unit)? = null,
     avatar: @Composable (Seat?, androidx.compose.ui.unit.Dp) -> Unit = { seat, size -> Initial(seat?.name.orEmpty(), size) },
 ) {
     val info: Seat? = room.seats.firstOrNull { it.seat == seat }
@@ -325,6 +345,20 @@ private fun SeatChair(
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1,
         )
+        // The host can send somebody else out of their chair.
+        if (isHost && onKick != null && info != null && !bot && !empty && info.playerId != myId) {
+            Text(
+                "طلّع",
+                color = Felt.Danger,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { onKick(info.playerId) }
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                    .testTag("kick-${info.playerId}"),
+            )
+        }
         if (isHost && (empty || bot)) {
             Text(
                 if (bot) "شيل البوت" else "حط بوت",

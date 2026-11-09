@@ -204,9 +204,14 @@ class VoiceChat(context: Context) {
     }
 
     /** One relayed packet from the connection. */
+    /** Seats this player has blocked: their voice is not played. */
+    @Volatile
+    var mutedSeats: Set<Int> = emptySet()
+
     fun receive(relayed: ByteArray) {
         if (!_hearing.value) return
         val heard = VoiceWire.unpack(relayed) ?: return
+        if (heard.seat in mutedSeats) return
         val voice = voices.getOrPut(heard.seat) { Voice(heard.seat) }
         voice.inbox.offer(heard.seq, heard.samples, SystemClock.elapsedRealtime())
         voice.wake()

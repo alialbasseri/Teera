@@ -97,6 +97,8 @@ data class UiState(
     val matchLoading: Boolean = false,
     /** Games being played that their players let anyone watch. */
     val liveGames: List<com.teera.core.LiveGame> = emptyList(),
+    /** People this player blocked, by id, with their names: kept on the phone only. */
+    val blocked: Map<String, String> = emptyMap(),
     /** A newer app is out, and this player has not said "later" to it yet. */
     val update: ServerMessage.UpdateAvailable? = null,
     /** Counts screenshots somebody else took of the table; the screen flashes on each. */
@@ -433,6 +435,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                         connecting = false,
                     )
                 }
+                muteBlocked()
             }
 
             is ServerMessage.GameUpdate -> {
@@ -455,6 +458,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 lastView = message.view
                 val steps = gatherSteps(_state.value.steps, before, message.view)
                 _state.update { it.copy(view = message.view, screen = Screen.Table, connecting = false, steps = steps) }
+                muteBlocked()
             }
 
             is ServerMessage.Avatar -> viewModelScope.launch(Dispatchers.Default) {
@@ -480,11 +484,21 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
             is ServerMessage.Failure -> {
                 if (message.code == ErrorCode.ROOM_NOT_FOUND) rememberRoom(null)
+                // Sent out by the host: back to the menu, and no way back offered.
+                if (message.code == ErrorCode.KICKED && _state.value.room != null) {
+                    rememberRoom(null)
+                    leave()
+                    rememberRoom(null)
+                    _state.update { it.copy(notice = message.explain()) }
+                    return
+                }
                 _state.update { it.copy(notice = message.explain(), connecting = false) }
             }
 
             is ServerMessage.ChatMessage -> _state.update {
-                it.copy(chat = (it.chat + ChatLine(message.name, message.text, message.seat, message.atEpochMs)).takeLast(60))
+                // Somebody blocked writes to the table: this phone does not show it.
+                if (idAtSeat(it, message.seat) in it.blocked) it
+                else it.copy(chat = (it.chat + ChatLine(message.name, message.text, message.seat, message.atEpochMs)).takeLast(60))
             }
 
             ServerMessage.Pong -> Unit
@@ -692,7 +706,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var onlinePoll: Job? = null
 
     init {
-        _state.update { it.copy(friends = loadFriends()) }
+        _state.update { it.copy(friends = loadFriends(), blocked = loadBlocked()) }
         // The felt and bones this phone picked.
         runCatching { com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.valueOf(prefs.getString(KEY_FELT, null) ?: "GREEN") }
         runCatching { com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.valueOf(prefs.getString(KEY_BONES, null) ?: "IVORY") }
@@ -758,8 +772,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
             is ServerMessage.Invited -> _state.update {
-                // The same invitation can arrive on both connections; show it once.
-                if (it.invite == message || it.room?.code == message.code) it else it.copy(invite = message)
+                // The same invitation can arrive on both connections; show it once. Nothing
+                // from somebody blocked.
+                if (it.invite == message || it.room?.code == message.code || message.fromId in it.blocked) it
+                else it.copy(invite = message)
             }
             is ServerMessage.UpdateAvailable -> offerUpdate(message)
             is ServerMessage.LiveGames -> _state.update { it.copy(liveGames = message.games) }
@@ -836,6 +852,54 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         saveFriends(next.take(MAX_FRIENDS))
         _state.update { it.copy(friends = next.take(MAX_FRIENDS)) }
     }
+
+    // -- blocking -------------------------------------------------------------------
+
+    /** Blocks [playerId]: no invitations from them, and at a table their voice and writing are hidden. */
+    fun block(playerId: String, name: String) {
+        if (playerId.isBlank() || playerId == this.playerId) return
+        _state.update { it.copy(blocked = it.blocked + (playerId to name), notice = "حظرت $name") }
+        saveBlocked()
+        muteBlocked()
+    }
+
+    fun unblock(playerId: String) {
+        _state.update { it.copy(blocked = it.blocked - playerId) }
+        saveBlocked()
+        muteBlocked()
+    }
+
+    private fun loadBlocked(): Map<String, String> =
+        prefs.getString(KEY_BLOCKED, null).orEmpty().lines().mapNotNull { line ->
+            val parts = line.split('\t')
+            if (parts.size == 2) parts[0] to parts[1] else null
+        }.toMap()
+
+    private fun saveBlocked() {
+        val text = _state.value.blocked.entries.joinToString("\n") { (id, name) -> id + "\t" + name.replace('\t', ' ').replace('\n', ' ') }
+        prefs.edit().putString(KEY_BLOCKED, text).apply()
+    }
+
+    /** Who sits at [seat] (a chair, or a watcher's seat from 4 up), as far as this phone knows. */
+    private fun idAtSeat(state: UiState, seat: Int): String? =
+        state.view?.seats?.firstOrNull { it.seat == seat }?.playerId
+            ?: state.view?.spectators?.firstOrNull { it.seat == seat }?.playerId
+            ?: state.room?.seats?.firstOrNull { it.seat == seat }?.playerId
+            ?: state.room?.spectators?.firstOrNull { it.seat == seat }?.playerId
+
+    /** Keeps blocked people's voices quiet, wherever they sit now. */
+    private fun muteBlocked() {
+        val state = _state.value
+        val seats = (state.view?.seats.orEmpty() + state.view?.spectators.orEmpty() + state.room?.seats.orEmpty() + state.room?.spectators.orEmpty())
+            .filter { it.playerId in state.blocked }.map { it.seat }.toSet()
+        voice.mutedSeats = seats
+    }
+
+    // -- the host's say over the room -------------------------------------------------
+
+    fun kick(playerId: String) = client?.send(ClientMessage.Kick(playerId))
+
+    fun setLocked(locked: Boolean) = client?.send(ClientMessage.SetLocked(locked))
 
     private fun loadFriends(): List<Friend> =
         prefs.getString(KEY_FRIENDS, null).orEmpty().lines().mapNotNull { line ->
@@ -988,6 +1052,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         const val RECORD_WAIT_MS = 75_000L
         const val LIVE_POLL_MS = 8_000L
         const val KEY_TUTORIAL_SEEN = "tutorialSeen"
+        const val KEY_BLOCKED = "blocked"
         const val KEY_FELT = "feltStyle"
         const val KEY_BONES = "boneStyle"
         const val KEY_UPDATE_LATER = "updateLater"

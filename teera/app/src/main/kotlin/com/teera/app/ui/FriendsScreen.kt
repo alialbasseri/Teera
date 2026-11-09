@@ -61,6 +61,9 @@ fun FriendsScreen(
     onForget: (Friend) -> Unit,
     onShareCode: () -> Unit,
     onClose: () -> Unit,
+    /** People this player blocked, and taking a block off. */
+    blocked: Map<String, String> = emptyMap(),
+    onUnblock: (String) -> Unit = {},
 ) {
     var code by remember { mutableStateOf("") }
     WalnutRoom {
@@ -134,6 +137,23 @@ fun FriendsScreen(
                 )
             }
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                if (blocked.isNotEmpty()) {
+                    item(key = "blocked-title") {
+                        Text("المحظورين", color = Felt.Muted, style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    items(blocked.entries.toList(), key = { "blocked-" + it.key }) { (id, name) ->
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(name, color = Felt.Muted, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                            Text(
+                                "شيل الحظر",
+                                color = Felt.Brass,
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onUnblock(id) }.padding(8.dp)
+                                    .testTag("unblock-$id"),
+                            )
+                        }
+                    }
+                }
                 items(friends.sortedByDescending { it.id in online }, key = { it.id }) { friend ->
                     FriendRow(friend, friend.id in online) {
                         IconButton(onClick = { onForget(friend) }) {
