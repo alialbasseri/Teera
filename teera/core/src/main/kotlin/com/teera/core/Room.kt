@@ -283,7 +283,17 @@ class Room(
     private val watchers = LinkedHashMap<String, Watcher>()
 
     private fun spectatorSeats(): List<Seat> = watchers.values.mapIndexed { index, w ->
-        Seat(WATCHER_SEAT_BASE + index, w.playerId, w.name, avatar = w.avatar)
+        Seat(WATCHER_SEAT_BASE + index, w.playerId, w.name, avatar = w.avatar, micOn = w.playerId in micsOn)
+    }
+
+    /** People whose microphone is on. */
+    private val micsOn = HashSet<String>()
+
+    fun setMic(playerId: String, on: Boolean): Output {
+        if (members[playerId] == null && !watchers.containsKey(playerId)) return Output.NOTHING
+        if ((playerId in micsOn) == on) return Output.NOTHING
+        if (on) micsOn += playerId else micsOn -= playerId
+        return Output(roomChanged = true, viewChanged = isStarted)
     }
 
     fun isWatching(playerId: String): Boolean = watchers.containsKey(playerId)
@@ -310,7 +320,10 @@ class Room(
     private fun seatList(): List<Seat> = (0 until Pack.PLAYERS).map { seat ->
         val member = members.values.firstOrNull { it.seat == seat }
         when {
-            member != null -> Seat(seat, member.playerId, member.name, isBot = false, connected = member.connected, avatar = member.avatar)
+            member != null -> Seat(
+                seat, member.playerId, member.name, isBot = false, connected = member.connected, avatar = member.avatar,
+                micOn = member.connected && member.playerId in micsOn,
+            )
             bots.containsKey(seat) -> Seat(seat, "bot-$seat", "Bot ${seat + 1}", isBot = true)
             else -> Seat(seat, "", "", isBot = false, connected = false)
         }
@@ -765,6 +778,7 @@ class Room(
                 connected = seat.isBot || member?.connected == true,
                 avatar = member?.avatar ?: seat.avatar,
                 standIn = standIns[seat.seat]?.let { watchers[it]?.name },
+                micOn = member?.connected == true && member.playerId in micsOn,
             )
         }
         val shared = showingSeats()

@@ -84,7 +84,7 @@ fun MenuScreen(
     onRejoin: (String) -> Unit = onJoin,
     onFriends: () -> Unit = {},
     /** A problem or suggestion for the developer. */
-    onFeedback: ((kind: String, text: String) -> Unit)? = null,
+    onFeedback: ((kind: String, text: String, image: android.graphics.Bitmap?) -> Unit)? = null,
     /** How many of this player's people have the app open, for the link's count. */
     friendsOnline: Int = 0,
     /** The list of games being played that anyone may watch, and how many there are. */
@@ -261,14 +261,14 @@ fun MenuScreen(
                     horizontalArrangement = Arrangement.Center,
                 ) {
                     SmallLink(if (friendsOnline > 0) "جماعتي ($friendsOnline)" else "جماعتي", onFriends, tag = "friends")
-                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
                     // Games being played that anyone may watch.
                     SmallLink(if (liveCount > 0) "تفرّج ($liveCount)" else "تفرّج", onLive, tag = "live")
-                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
                     SmallLink("القوانين", onRules)
-                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
                     SmallLink(
-                        if (wifiTables.isEmpty()) "واي فاي" else "واي فاي (${wifiTables.size})",
+                        if (wifiTables.isEmpty()) "وايفاي" else "وايفاي (${wifiTables.size})",
                         { wifiOpen = true },
                         tag = "wifi",
                     )
@@ -280,10 +280,10 @@ fun MenuScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = Felt.Muted,
                     )
-                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
                     SmallLink("شنو الجديد", { changelogOpen = true }, tag = "changelogLink")
                     if (onFeedback != null) {
-                        Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                        Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
                         SmallLink("بلّغ أو اقترح", { feedbackOpen = true }, tag = "feedbackLink")
                     }
                 }
@@ -319,10 +319,13 @@ private fun SmallLink(text: String, onClick: () -> Unit, tag: String = text) {
         text,
         color = Felt.Brass,
         style = MaterialTheme.typography.labelLarge,
+        // A link never breaks over two lines ("واي / فاي"): it stays one word on the row.
+        maxLines = 1,
+        softWrap = false,
         modifier = Modifier
             .clip(RoundedCornerShape(8.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = 6.dp, vertical = 8.dp)
+            .padding(horizontal = 4.dp, vertical = 8.dp)
             .testTag(tag),
     )
 }

@@ -51,4 +51,17 @@ class SwapTest {
         assertEquals(3, view.yourSeat)
         assertTrue(view.seats.none { it.isBot })
     }
+
+    @Test
+    fun `everyone sees whose microphone is on`() {
+        val room = fullRoom()
+        room.setMic("b", true)
+        assertTrue(room.info().seats.first { it.playerId == "b" }.micOn)
+        room.start("a", seed = 3)
+        assertTrue(assertNotNull(room.viewFor("c")).seats.first { it.playerId == "b" }.micOn)
+        room.setMic("b", false)
+        assertTrue(!assertNotNull(room.viewFor("c")).seats.first { it.playerId == "b" }.micOn)
+        room.setMic("e", true)
+        assertTrue(assertNotNull(room.viewFor("a")).spectators.first { it.playerId == "e" }.micOn, "watchers too")
+    }
 }

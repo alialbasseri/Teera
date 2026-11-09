@@ -10,6 +10,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.respondBytes
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -179,6 +180,13 @@ fun Route.adminApi(context: AdminContext) = route("/admin/api") {
     get("/feedback") {
         if (!call.allowed()) return@get
         call.json(ListSerializer(FeedbackItem.serializer()), records.feedback())
+    }
+
+    get("/feedback/{id}/image") {
+        if (!call.allowed()) return@get
+        val bytes = records.feedbackImage(call.parameters["id"].orEmpty())
+            ?: return@get call.respondText("", status = HttpStatusCode.NotFound)
+        call.respondBytes(bytes, ContentType.Image.JPEG)
     }
 
     post("/feedback/{id}/done") {

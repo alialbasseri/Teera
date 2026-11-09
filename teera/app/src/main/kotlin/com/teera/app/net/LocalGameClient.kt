@@ -91,6 +91,7 @@ class LocalGameClient(
             is ClientMessage.Swap -> room.swap(playerId, message.seated, message.watcher)
             ClientMessage.BackToLobby -> room.backToLobby(playerId)
             is ClientMessage.RenameRoom -> room.rename(playerId, message.name)
+            is ClientMessage.MicState -> room.setMic(playerId, message.on)
             is ClientMessage.SetLocked -> room.setLocked(playerId, message.locked)
             // Friends and invitations live on the internet server, not at a table of bots.
             is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,

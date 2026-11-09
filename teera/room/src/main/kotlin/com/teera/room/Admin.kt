@@ -16,6 +16,8 @@ data class FeedbackItem(
     val roomCode: String? = null,
     val atEpochMs: Long,
     val done: Boolean = false,
+    /** A picture came with it; the page fetches it separately. */
+    val hasImage: Boolean = false,
 )
 
 /** A player as the developer's page lists them. */

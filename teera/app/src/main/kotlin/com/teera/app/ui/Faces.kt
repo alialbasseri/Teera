@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -175,5 +177,37 @@ internal fun FacesTray(onFace: (Emote) -> Unit) {
                 )
             }
         }
+    }
+}
+
+/** The sounds and the faces in one tray, faces first: two tabs over the buttons. */
+@Composable
+internal fun ReactionsTray(onPick: (Emote) -> Unit) {
+    var faces by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(true) }
+    androidx.compose.foundation.layout.Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        androidx.compose.foundation.layout.Row(
+            Modifier.padding(bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            listOf(true to "وجوه", false to "أصوات").forEach { (isFaces, label) ->
+                val on = faces == isFaces
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (on) Felt.Brass else Color.Transparent)
+                        .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                        .clickable { faces = isFaces }
+                        .padding(horizontal = 16.dp, vertical = 4.dp)
+                        .testTag(if (isFaces) "tab-faces" else "tab-sounds"),
+                ) {
+                    androidx.compose.material3.Text(
+                        label,
+                        color = if (on) Felt.Ink else Felt.Parchment,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+        if (faces) FacesTray(onPick) else SoundTray(onPick)
     }
 }

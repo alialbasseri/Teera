@@ -436,6 +436,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 announceIfHosting(message.room)
                 if (onInternet) metAt(message.room.seats)
                 if (onInternet && message.room.code != _state.value.lastRoom) rememberRoom(message.room.code)
+                // A new room hears where this phone's microphone stands.
+                if (message.room.code != _state.value.room?.code && voice.micOn.value) client?.send(ClientMessage.MicState(true))
                 // Once the deal is done nobody else can sit down, so stop advertising it.
                 if (message.room.started) beacon.stopAnnouncing()
                 _state.update {
@@ -920,15 +922,29 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A problem ("problem") or a suggestion ("idea") for the developer. */
-    fun sendFeedback(kind: String, text: String) {
+    fun sendFeedback(kind: String, text: String, image: android.graphics.Bitmap? = null) {
         if (!_state.value.hasInternetServer) {
             _state.update { it.copy(notice = "يحتاج نت حتى يوصل") }
             return
         }
         if (presence == null) startPresence()
-        val message = ClientMessage.Feedback(kind, text.trim(), roomCode = _state.value.room?.code)
-        (presence ?: client)?.send(message)
+        val room = _state.value.room?.code
+        viewModelScope.launch {
+            // A picture goes small: a JPEG no wider than 720, so it travels in one message.
+            val picture = image?.let { withContext(Dispatchers.Default) { feedbackJpeg(it) } }
+            (presence ?: client)?.send(ClientMessage.Feedback(kind, text.trim(), roomCode = room, image = picture))
+        }
     }
+
+    private fun feedbackJpeg(bitmap: android.graphics.Bitmap): String? = runCatching {
+        val scale = minOf(1f, 720f / bitmap.width, 1280f / bitmap.height)
+        val small = if (scale < 1f) {
+            android.graphics.Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+        } else bitmap
+        val out = java.io.ByteArrayOutputStream()
+        small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, out)
+        android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
+    }.getOrNull()
 
     fun dismissAnnouncement() = _state.update { it.copy(announcement = null) }
 
@@ -1050,6 +1066,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var myPhotoBase64: String? = null
 
     init {
+        // The table shows who has their microphone on: tell it whenever ours changes.
+        viewModelScope.launch {
+            voice.micOn.collect { on -> if (_state.value.room != null) client?.send(ClientMessage.MicState(on)) }
+        }
         // Everybody starts with one of the drawn pictures, kept from then on.
         if (prefs.getString(KEY_AVATAR, null) == null) prefs.edit().putString(KEY_AVATAR, _state.value.avatar).apply()
         // A photo chosen on an earlier run.

@@ -288,6 +288,10 @@ sealed interface ClientMessage {
     @Serializable @SerialName("raiseAlert")
     data object RaiseAlert : ClientMessage
 
+    /** This player's microphone went on or off. */
+    @Serializable @SerialName("mic")
+    data class MicState(val on: Boolean) : ClientMessage
+
     /** The host names the room. */
     @Serializable @SerialName("renameRoom")
     data class RenameRoom(val name: String) : ClientMessage
@@ -306,7 +310,13 @@ sealed interface ClientMessage {
 
     /** A problem ("problem") or a suggestion ("idea") sent to the developer. */
     @Serializable @SerialName("feedback")
-    data class Feedback(val kind: String, val text: String, val roomCode: String? = null) : ClientMessage
+    data class Feedback(
+        val kind: String,
+        val text: String,
+        val roomCode: String? = null,
+        /** A picture (the screen, or one from the phone): a JPEG in base64. */
+        val image: String? = null,
+    ) : ClientMessage
 
     /** The host swaps a player (or the bot in a chair, "bot-N") with a watcher. */
     @Serializable @SerialName("swap")

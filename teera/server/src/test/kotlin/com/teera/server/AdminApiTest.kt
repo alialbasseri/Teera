@@ -9,6 +9,7 @@ import com.teera.room.AdminState
 import com.teera.room.gameServer
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
+import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -171,5 +172,34 @@ class AdminApiTest {
         val page = client.get("/admin?key=$key").bodyAsText()
         assertTrue("\"live\":{" in page && "/*INIT*/" !in page, "the overview is put into the page")
         assertTrue("{{LATEST}}" !in page)
+    }
+
+    @Test
+    fun `a report can bring a picture, and only the page with the password sees it`() = testApplication {
+        val books = books()
+        application { gameServer(records = books, adminKey = key) }
+        val ws = createClient { install(WebSockets) }
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        ali.await<ServerMessage.Welcome>()
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 1, 2, 3, 4)
+        ali.say(ClientMessage.Feedback("problem", "الكتابة طالعة فوگ البولات", image = java.util.Base64.getEncoder().encodeToString(jpeg)))
+        assertTrue(ali.await<ServerMessage.FeedbackReceived>().ok)
+        // Not a picture: the words still arrive, without it.
+        ali.say(ClientMessage.Feedback("idea", "ضيفوا بطولات", image = java.util.Base64.getEncoder().encodeToString("hello".toByteArray())))
+        assertTrue(ali.await<ServerMessage.FeedbackReceived>().ok)
+        books.flush()
+
+        val items = Protocol.json.parseToJsonElement(client.get("/admin/api/feedback") { header("X-Admin-Key", key) }.bodyAsText()).jsonArray
+        val withPicture = items.first { it.jsonObject["kind"]!!.jsonPrimitive.content == "problem" }.jsonObject
+        val without = items.first { it.jsonObject["kind"]!!.jsonPrimitive.content == "idea" }.jsonObject
+        assertTrue(withPicture["hasImage"]!!.jsonPrimitive.boolean)
+        assertTrue(without["hasImage"]?.jsonPrimitive?.boolean != true)
+
+        val id = withPicture["id"]!!.jsonPrimitive.content
+        assertEquals(403, client.get("/admin/api/feedback/$id/image").status.value)
+        val got = client.get("/admin/api/feedback/$id/image?key=$key")
+        assertEquals("image/jpeg", got.headers["Content-Type"])
+        assertTrue(jpeg.contentEquals(got.body<ByteArray>()))
     }
 }

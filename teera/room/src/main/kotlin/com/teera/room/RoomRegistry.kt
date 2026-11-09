@@ -51,6 +51,10 @@ class RoomRegistry(
         @Volatile
         var nextBotMoveAt: Long = 0L
 
+        /** The table as it stood when a bot's turn came, so its thinking time starts then. */
+        @Volatile
+        var botTurnOf: Any? = null
+
         /** Stands for this room in the list without giving its code away. */
         val ref: String = UUID.randomUUID().toString().replace("-", "").take(12)
 

@@ -99,9 +99,16 @@ fun Application.gameServer(
                 if (!holder.lock.tryLock()) continue
                 try {
                     var output = holder.room.expireTurnIfDue() + holder.room.expireAlertIfDue()
-                    if (holder.room.awaitingBot() && now >= holder.nextBotMoveAt) {
-                        output += holder.room.stepBot()
-                        holder.nextBotMoveAt = now + botThink()
+                    // A bot thinks from the moment its turn comes, as on the phone, however
+                    // quickly the person before it played.
+                    if (holder.room.awaitingBot()) {
+                        val turn = holder.room.game
+                        if (holder.botTurnOf !== turn) {
+                            holder.botTurnOf = turn
+                            holder.nextBotMoveAt = now + botThink()
+                        } else if (now >= holder.nextBotMoveAt) {
+                            output += holder.room.stepBot()
+                        }
                     }
                     if (output != Room.Output.NOTHING) publish(holder, output, records)
                     // The table is waiting on somebody who is not looking: call them back,
@@ -339,6 +346,10 @@ fun Application.gameServer(
                                 return@consumeEach
                             }
                             feedbackSent.addLast(now)
+                            // A picture only if it is a JPEG of sensible size; otherwise the words alone.
+                            val picture = message.image?.takeIf { it.length <= MAX_FEEDBACK_IMAGE_CHARS }
+                                ?.let { runCatching { java.util.Base64.getDecoder().decode(it) }.getOrNull() }
+                                ?.takeIf { it.size > 3 && it[0] == 0xFF.toByte() && it[1] == 0xD8.toByte() }
                             records.saveFeedback(
                                 FeedbackItem(
                                     id = UUID.randomUUID().toString(),
@@ -349,7 +360,9 @@ fun Application.gameServer(
                                     appVersion = appVersion,
                                     roomCode = message.roomCode?.take(8),
                                     atEpochMs = now,
+                                    hasImage = picture != null,
                                 ),
+                                picture,
                             )
                             trySend(ServerMessage.FeedbackReceived(ok = true))
                         }
@@ -525,6 +538,7 @@ private const val ASK_AGAIN_MS = 60_000L
 private const val MAX_FEEDBACK_PER_WINDOW = 5
 private const val FEEDBACK_WINDOW_MS = 10 * 60 * 1000L
 private const val MAX_FEEDBACK_CHARS = 1_500
+private const val MAX_FEEDBACK_IMAGE_CHARS = 700_000
 
 /**
  * Pictures go round once, not with every view: a newcomer gets everyone else's, and
@@ -616,6 +630,7 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.Swap -> room.swap(playerId, message.seated, message.watcher)
         ClientMessage.BackToLobby -> room.backToLobby(playerId)
         is ClientMessage.RenameRoom -> room.rename(playerId, message.name)
+        is ClientMessage.MicState -> room.setMic(playerId, message.on)
         is ClientMessage.SetLocked -> room.setLocked(playerId, message.locked)
         is ClientMessage.Hello, is ClientMessage.CreateRoom, is ClientMessage.JoinRoom,
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,

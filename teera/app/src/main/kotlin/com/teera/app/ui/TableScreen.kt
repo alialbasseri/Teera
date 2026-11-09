@@ -161,7 +161,7 @@ fun TableScreen(
     locked: Boolean = false,
     onKick: ((String) -> Unit)? = null,
     onSwap: ((seated: String, watcher: String) -> Unit)? = null,
-    onFeedback: ((kind: String, text: String) -> Unit)? = null,
+    onFeedback: ((kind: String, text: String, image: android.graphics.Bitmap?) -> Unit)? = null,
     onLock: ((Boolean) -> Unit)? = null,
     /** Blocking, kept on this phone: who is blocked, and blocking or unblocking somebody. */
     blocked: Set<String> = emptySet(),
@@ -241,35 +241,8 @@ fun TableScreen(
     // A stand-in plays somebody else's chair; they can hand it back.
     val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().background(Felt.Deep)) {
-
-        // Questions, votes and table talk float at the top of the screen, over the scores,
-        // so nothing ever covers the bones on the table or in the hand.
-        androidx.compose.ui.window.Popup(
-            alignment = Alignment.TopCenter,
-            properties = androidx.compose.ui.window.PopupProperties(focusable = false),
-        ) {
-            Column(
-                Modifier.widthIn(max = 520.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Prompt(
-                    view = view,
-                    rescueMode = rescueMode,
-                    onRescueMode = { rescueState.value = it },
-                    onMove = onMove,
-                    modifier = Modifier.padding(horizontal = 8.dp).padding(top = 4.dp),
-                )
-                view.alertVote?.let { vote ->
-                    AlertVotePanel(view, vote, onVoteAlert, Modifier.padding(horizontal = 8.dp))
-                }
-                view.targetVote?.takeIf { view.alertVote == null }?.let { vote ->
-                    TargetVotePanel(view, vote, onVoteTarget, Modifier.padding(horizontal = 8.dp))
-                }
-                if (onChat != null) ChatToast(chat, Modifier.padding(horizontal = 8.dp))
-            }
-        }
 
         // Watchers choose whose shoulder to look over, or take a dropped player's chair;
         // players choose whether to be looked at.
@@ -477,6 +450,25 @@ fun TableScreen(
                     OutlinedButton(onClick = { confirmLeave = false }) { Text("أبقى", color = Felt.Parchment) }
                 }
             }
+        }
+    }
+
+        // Questions, votes and table talk sit over the top of the screen (the scores and
+        // the partner's chair), solid, inside the screen: nothing covers the bones.
+        Column(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Prompt(
+                view = view,
+                rescueMode = rescueMode,
+                onRescueMode = { rescueState.value = it },
+                onMove = onMove,
+            )
+            view.alertVote?.let { vote -> AlertVotePanel(view, vote, onVoteAlert, Modifier) }
+            view.targetVote?.takeIf { view.alertVote == null }?.let { vote -> TargetVotePanel(view, vote, onVoteTarget, Modifier) }
+            if (onChat != null) ChatToast(chat, Modifier)
         }
     }
 }
@@ -965,7 +957,7 @@ private fun Panel(content: @Composable () -> Unit) {
     Column(
         modifier = Modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(Felt.Rail.copy(alpha = 0.96f))
+            .background(Felt.Rail)
             .border(1.dp, Felt.Brass.copy(alpha = 0.85f), RoundedCornerShape(14.dp))
             .padding(horizontal = 20.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -991,7 +983,6 @@ private fun Hand(
     avatar: (@Composable (Dp) -> Unit)? = null,
 ) {
     var trayOpen by remember { mutableStateOf(false) }
-    var facesOpen by remember { mutableStateOf(false) }
     val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null
     var chatOpen by remember { mutableStateOf(false) }
     // Lines that arrived while the chat was closed.
@@ -1039,6 +1030,8 @@ private fun Hand(
                     },
                     color = if (view.isYourMove) Felt.Brass else Felt.Muted,
                     style = MaterialTheme.typography.labelLarge,
+                    maxLines = 2,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 if (onStandIn != null) {
@@ -1058,9 +1051,8 @@ private fun Hand(
                 }
                 if (!view.spectating) {
                     Spacer(Modifier.width(4.dp))
-                    FacesButton(facesOpen) { facesOpen = !facesOpen; trayOpen = false }
-                    Spacer(Modifier.width(4.dp))
-                    SoundboardButton(trayOpen) { trayOpen = !trayOpen; facesOpen = false }
+                    // One button for the sounds and the faces, so the row fits a narrow phone.
+                    FacesButton(trayOpen) { trayOpen = !trayOpen }
                 }
             }
             // The tray floats above the hand rather than pushing it down, so the bones stay
@@ -1078,30 +1070,9 @@ private fun Hand(
                             .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(18.dp))
                             .padding(vertical = 6.dp),
                     ) {
-                        SoundTray { emote ->
+                        ReactionsTray { emote ->
                             onEmote(emote)
                             trayOpen = false
-                        }
-                    }
-                }
-            }
-
-            if (facesOpen) {
-                androidx.compose.ui.window.Popup(
-                    popupPositionProvider = AboveAnchor,
-                    onDismissRequest = { facesOpen = false },
-                ) {
-                    Box(
-                        Modifier
-                            .padding(horizontal = 10.dp)
-                            .clip(RoundedCornerShape(18.dp))
-                            .background(Felt.Rail)
-                            .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(18.dp))
-                            .padding(vertical = 6.dp),
-                    ) {
-                        FacesTray { face ->
-                            onEmote(face)
-                            facesOpen = false
                         }
                     }
                 }
@@ -1274,7 +1245,7 @@ private fun SoundboardButton(open: Boolean, onToggle: () -> Unit) {
 
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun SoundTray(onEmote: (Emote) -> Unit) {
+internal fun SoundTray(onEmote: (Emote) -> Unit) {
     androidx.compose.foundation.layout.FlowRow(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),

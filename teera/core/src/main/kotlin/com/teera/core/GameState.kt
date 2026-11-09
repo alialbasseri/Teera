@@ -17,6 +17,8 @@ data class Seat(
     val avatar: String = "",
     /** A watcher playing this chair while its player is away, by name. */
     val standIn: String? = null,
+    /** Whether this person's microphone is on, so the table can see who can hear them talk back. */
+    val micOn: Boolean = false,
 )
 
 /** Everything a player can be asked to do. */

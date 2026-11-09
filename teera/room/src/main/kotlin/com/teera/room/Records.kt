@@ -23,8 +23,11 @@ interface Records {
 
     // -- the developer's page: problems and suggestions, players, settings --------------
 
-    /** A problem or suggestion sent from the app; must return at once. */
-    fun saveFeedback(item: FeedbackItem) {}
+    /** A problem or suggestion sent from the app, with its picture if any; must return at once. */
+    fun saveFeedback(item: FeedbackItem, image: ByteArray? = null) {}
+
+    /** The picture sent with a problem or suggestion, as JPEG; null if there is none. */
+    suspend fun feedbackImage(id: String): ByteArray? = null
 
     suspend fun feedback(limit: Int = 200): List<FeedbackItem> = emptyList()
 

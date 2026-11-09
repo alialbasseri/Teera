@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MicOff
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -110,14 +112,27 @@ fun SeatAtTable(
     }
     val label = @Composable { align: TextAlign ->
         Column(horizontalAlignment = if (side == Side.TOP) Alignment.Start else Alignment.CenterHorizontally) {
-            Text(
-                name,
-                color = if (acting) Felt.Brass else Felt.Parchment,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = align,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // A person's microphone, on or off, by their name; bots have none.
+                if (info != null && !info.isBot) {
+                    androidx.compose.material3.Icon(
+                        if (info.micOn) androidx.compose.material.icons.Icons.Rounded.Mic else androidx.compose.material.icons.Icons.Rounded.MicOff,
+                        contentDescription = if (info.micOn) "المايك مفتوح" else "المايك مسدود",
+                        tint = if (info.micOn) Felt.Playable else Felt.Muted.copy(alpha = 0.7f),
+                        modifier = Modifier.size(13.dp).testTag("mic-$seat"),
+                    )
+                    Spacer(Modifier.width(2.dp))
+                }
+                Text(
+                    name,
+                    color = if (acting) Felt.Brass else Felt.Parchment,
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = align,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+            }
             if (status.isNotEmpty()) {
                 Text(status, color = statusColour, style = MaterialTheme.typography.labelSmall, textAlign = align)
             }

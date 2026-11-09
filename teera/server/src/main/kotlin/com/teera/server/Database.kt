@@ -301,10 +301,11 @@ class SqlRecords(
 
     // -- the developer's page: problems and suggestions, players, settings --------------
 
-    override fun saveFeedback(item: FeedbackItem) = write("feedback") { db ->
+    override fun saveFeedback(item: FeedbackItem, image: ByteArray?) = write("feedback") { db ->
         db.prepareStatement(
-            "INSERT INTO feedback (id, player_id, name, kind, body, app_version, room_code, at_ms, done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE)",
+            "INSERT INTO feedback (id, player_id, name, kind, body, app_version, room_code, at_ms, done, image) VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?)",
         ).use {
+            if (image == null) it.setNull(9, Types.VARCHAR) else it.setString(9, java.util.Base64.getEncoder().encodeToString(image))
             it.setString(1, item.id); it.setString(2, item.playerId); it.setString(3, item.name.take(48))
             it.setString(4, item.kind); it.setString(5, item.text); it.setInt(6, item.appVersion)
             if (item.roomCode == null) it.setNull(7, Types.VARCHAR) else it.setString(7, item.roomCode)
@@ -315,7 +316,7 @@ class SqlRecords(
 
     override suspend fun feedback(limit: Int): List<FeedbackItem> = read(emptyList()) { db ->
         db.prepareStatement(
-            "SELECT id, player_id, name, kind, body, app_version, room_code, at_ms, done FROM feedback ORDER BY at_ms DESC",
+            "SELECT id, player_id, name, kind, body, app_version, room_code, at_ms, done, CASE WHEN image IS NULL THEN 0 ELSE 1 END FROM feedback ORDER BY at_ms DESC",
         ).use {
             it.maxRows = limit
             it.executeQuery().use { row ->
@@ -325,9 +326,19 @@ class SqlRecords(
                             id = row.getString(1), playerId = row.getString(2), name = row.getString(3),
                             kind = row.getString(4), text = row.getString(5), appVersion = row.getInt(6),
                             roomCode = row.getString(7), atEpochMs = row.getLong(8), done = row.getBoolean(9),
+                            hasImage = row.getInt(10) == 1,
                         ),
                     )
                 }
+            }
+        }
+    }
+
+    override suspend fun feedbackImage(id: String): ByteArray? = read(null) { db ->
+        db.prepareStatement("SELECT image FROM feedback WHERE id = ?").use {
+            it.setString(1, id)
+            it.executeQuery().use { row ->
+                if (row.next()) row.getString(1)?.let { text -> java.util.Base64.getDecoder().decode(text) } else null
             }
         }
     }
@@ -949,6 +960,7 @@ class SqlRecords(
                         at_ms BIGINT NOT NULL,
                         done BOOLEAN NOT NULL DEFAULT FALSE)""",
                 )
+                sql.execute("ALTER TABLE feedback ADD COLUMN IF NOT EXISTS image TEXT")
                 sql.execute(
                     """CREATE TABLE IF NOT EXISTS settings (
                         setting VARCHAR(40) PRIMARY KEY,
