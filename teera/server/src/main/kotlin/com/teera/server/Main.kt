@@ -35,7 +35,8 @@ fun main() {
         }
     } ?: com.teera.room.Pusher.NONE
     LoggerFactory.getLogger("Main").info("notifications: {}", if (pusher === com.teera.room.Pusher.NONE) "off" else "on")
-    val registry = com.teera.room.RoomRegistry()
+    // Every turn at the server's tables gets 30 seconds; then a bot plays it for them.
+    val registry = com.teera.room.RoomRegistry(turnSeconds = TURN_SECONDS)
     // The evening reminders need the books (who to reach, what they were sent) and notifications.
     if (records is SqlRecords && pusher !== com.teera.room.Pusher.NONE) {
         Reminders(records, pusher, registry).start(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()))
@@ -51,3 +52,6 @@ fun main() {
         )
     }.start(wait = true)
 }
+
+/** How long a player has for each turn before a bot plays it for them. */
+const val TURN_SECONDS = 30

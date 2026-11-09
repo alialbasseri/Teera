@@ -12,6 +12,8 @@ class Room(
     var hostId: String,
     rules: Rules = Rules.DEFAULT,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Set by the server for its tables: every turn gets this long, whatever a phone asks for. */
+    private val fixedTurnSeconds: Int? = null,
 ) {
     /** What the caller should put on the wire after handling an inbound message. */
     data class Output(
@@ -45,7 +47,7 @@ class Room(
         var avatar: String = "",
     )
 
-    var rules: Rules = rules
+    var rules: Rules = fixedTurnSeconds?.let { rules.copy(turnSeconds = it) } ?: rules
         private set
 
     private val members = LinkedHashMap<String, Member>()
@@ -182,6 +184,11 @@ class Room(
      * Who the table is waiting on while they are not looking at it (app out of sight, or
      * line dropped), so their phone can call them back; null when nobody is.
      */
+    fun isAbsent(playerId: String): Boolean {
+        val member = members[playerId] ?: return true
+        return !member.connected || playerId in away
+    }
+
     fun absentActing(): String? {
         val state = game ?: return null
         if (state.phase == Phase.GAME_OVER || state.phase == Phase.MATCH_OVER) return null
@@ -392,7 +399,7 @@ class Room(
         if (problems.isNotEmpty()) {
             return Output.error(playerId, ErrorCode.INVALID_RULES, problems.joinToString("; "))
         }
-        rules = next
+        rules = fixedTurnSeconds?.let { next.copy(turnSeconds = it) } ?: next
         return Output.ROOM
     }
 
@@ -478,13 +485,19 @@ class Room(
         return Output.VIEW
     }
 
-    /** A seat that runs out of clock has a move played for it. */
+    private fun PlayerView.withClock(): PlayerView =
+        copy(turnMillisLeft = turnDeadline?.let { (it - clock()).coerceAtLeast(0) })
+
+    /**
+     * A seat that runs out of clock has a move played for it, by a bot playing as well as
+     * it can: the seat is somebody's, and their game should not suffer for a slow minute.
+     */
     fun expireTurnIfDue(): Output {
         val deadline = turnDeadline ?: return Output.NOTHING
         val state = game ?: return Output.NOTHING
         val seat = state.actingSeat ?: return Output.NOTHING
         if (clock() < deadline) return Output.NOTHING
-        val move = Bot.chooseMove(state, seat, Difficulty.EASY) ?: return Output.NOTHING
+        val move = Bot.chooseMove(state, seat, Difficulty.NORMAL) ?: return Output.NOTHING
         val outcome = Engine.apply(state, seat, move)
         if (outcome !is MoveOutcome.Ok) return Output.NOTHING
         game = outcome.state
@@ -510,13 +523,19 @@ class Room(
         val state = game ?: return Output.NOTHING
         val seat = seatOf(playerId) ?: return Output.NOTHING
         if (vote != null || state.phase == Phase.MATCH_OVER) return Output.NOTHING
-        val voters = members.values.filter { it.connected }.map { it.seat }.sorted()
+        val against = 1 - teamOf(seat)
+        // Every chair has a say, so a team cannot carry it on its own by sitting with bots
+        // or with somebody gone. A bot answers at once, the way its team would: it stands
+        // by its own team, and backs its partner.
+        val botSeats = state.seats.filter { s ->
+            s.isBot || (bots.containsKey(s.seat) && members.values.none { it.seat == s.seat } && !standIns.containsKey(s.seat))
+        }.map { it.seat }
         vote = AlertVote(
             raisedBy = seat,
-            againstTeam = 1 - teamOf(seat),
-            voters = voters,
-            yes = listOf(seat),
-            no = emptyList(),
+            againstTeam = against,
+            voters = (0 until Pack.PLAYERS).toList(),
+            yes = (listOf(seat) + botSeats.filter { teamOf(it) != against }).distinct(),
+            no = botSeats.filter { teamOf(it) == against },
             deadlineEpochMs = clock() + rules.alertVoteSeconds * 1000L,
         )
         return settleVoteIfDecided() ?: Output.VIEW
@@ -647,14 +666,14 @@ class Room(
         val shared = showingSeats()
         val seat = seatOf(playerId)
         if (seat != null) {
-            return state.viewFor(seat, code, turnDeadline)
+            return state.viewFor(seat, code, turnDeadline).withClock()
                 .copy(seats = seats, alertVote = vote, spectators = spectatorSeats(), showingHands = shared, targetVote = targetVote, listed = listed)
         }
         // A watcher sees the table from a player's shoulder; their tiles only if that
         // player chose to show them, and never a move to make.
         val watcher = watchers[playerId] ?: return null
         val from = watcher.watching
-        return state.viewFor(from, code, turnDeadline).copy(
+        return state.viewFor(from, code, turnDeadline).withClock().copy(
             seats = seats,
             alertVote = vote,
             hand = if (from in shared) state.handOf(from) else emptyList(),

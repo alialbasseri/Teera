@@ -61,7 +61,7 @@ class RescueTest {
     }
 
     @Test
-    fun `giving hands over a tile and the stuck seat loses its turn entirely`() {
+    fun `a tile that fits nowhere is only carried, and play moves past the stuck seat`() {
         val stuck = assertIs<MoveOutcome.Ok>(
             Engine.apply(stuckTable(), 0, Move.Play(d(3, 5), Arm.NORTH))
         ).state
@@ -69,9 +69,48 @@ class RescueTest {
 
         assertEquals(listOf(d(2, 2)), after.handOf(0))
         assertEquals(setOf(d(4, 4), d(4, 6)), after.handOf(1).toSet())
-        assertEquals(2, after.turn, "rule 16: play carries on past the stuck seat")
+        assertEquals(2, after.turn, "rule 16: 4|6 fits nowhere, so play carries on past the stuck seat")
         assertEquals(Phase.IN_PLAY, after.phase)
         assertTrue(after.events.any { it is GameEvent.Gave })
+    }
+
+    @Test
+    fun `a tile that fits is the stuck player's to lay, straight away`() {
+        val stuck = assertIs<MoveOutcome.Ok>(
+            Engine.apply(stuckTable(), 0, Move.Play(d(3, 5), Arm.NORTH))
+        ).state
+        // Ends show 5, 2, 1, 0: the 2|2 handed over goes on the 2.
+        val after = assertIs<MoveOutcome.Ok>(Engine.apply(stuck, 0, Move.Give(d(2, 2)))).state
+
+        assertEquals(Phase.IN_PLAY, after.phase)
+        assertEquals(1, after.turn, "rule 16: the stuck player plays the tile they were given")
+        assertEquals(listOf(Move.Play(d(2, 2), Arm.EAST)), Engine.legalMoves(after, 1))
+        val laid = assertIs<MoveOutcome.Ok>(Engine.apply(after, 1, Move.Play(d(2, 2), Arm.EAST))).state
+        assertEquals(listOf(d(4, 4)), laid.handOf(1))
+        assertEquals(2, laid.turn, "and then play goes on as usual")
+    }
+
+    @Test
+    fun `a given tile that fits in two places may go in either`() {
+        val state = rig(
+            hands = listOf(
+                listOf(d(5, 2), d(3, 3)),
+                listOf(d(4, 4)),                      // nothing answers 5, 2, 1 or 0
+                listOf(d(4, 5), d(5, 5)),
+                listOf(d(0, 4), d(1, 1)),
+            ),
+            board = openedBoard(d(6, 6), d(6, 5), d(6, 2), d(6, 1), d(6, 0)),
+            turn = 0,
+            phase = Phase.RESCUE,
+            stuckSeat = 1,
+            rescuer = 0,
+        )
+        val after = assertIs<MoveOutcome.Ok>(Engine.apply(state, 0, Move.Give(d(5, 2)))).state
+        assertEquals(1, after.turn)
+        val arms = Engine.legalMoves(after, 1).filterIsInstance<Move.Play>().filter { it.domino == d(5, 2) }.map { it.arm }
+        assertEquals(setOf(Arm.NORTH, Arm.EAST), arms.toSet(), "5|2 answers the 5 and the 2: their choice")
+        val laid = assertIs<MoveOutcome.Ok>(Engine.apply(after, 1, Move.Play(d(5, 2), Arm.NORTH))).state
+        assertEquals(2, laid.board.endOf(Arm.NORTH))
     }
 
     @Test
@@ -319,7 +358,7 @@ class TeeraAfterGivingTest {
                 listOf(d(3, 5)),
                 listOf(d(1, 4)),
                 listOf(d(4, 6), d(5, 5)),
-                listOf(d(4, 4), d(2, 6)),
+                listOf(d(4, 4), d(4, 5)),         // truly stuck on 3, 2, 1 and 0
             ),
             board = openedBoard(d(6, 6), d(6, 3), d(6, 2), d(6, 1), d(6, 0)),
             turn = 2,

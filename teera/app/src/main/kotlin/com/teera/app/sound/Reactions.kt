@@ -98,4 +98,10 @@ fun react(emote: Emote): Reaction = when (emote) {
     Emote.SPLOOSH -> Reaction(listOf(Cue.EMOTE_SLAP), listOf(Line("sploosh", "سبلوش")))
     // Retired: silent even if an older phone sends it.
     Emote.WALLAH -> Reaction()
+    Emote.GHASHANA -> Reaction(listOf(Cue.EMOTE_CLINK), listOf(Line("ghashana", "غشعنا على وجه الخير")))
+    Emote.KHATLA -> Reaction(listOf(Cue.EMOTE_NO_WAY), listOf(Line("khatla", "خاتلة")))
+    // Faces are seen, not heard.
+    Emote.FACE_JOY, Emote.FACE_ROFL, Emote.FACE_SMIRK, Emote.FACE_COOL, Emote.FACE_THINK, Emote.FACE_EYES,
+    Emote.FACE_SCREAM, Emote.FACE_CRY, Emote.FACE_STEAM, Emote.FACE_CLAP, Emote.FACE_MUSCLE, Emote.FACE_FIRE,
+    -> Reaction()
 }

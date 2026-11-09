@@ -463,6 +463,41 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `a player away is called back once, however many of their turns go by`() = testApplication {
+        val told = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+        val pusher = object : com.teera.room.Pusher {
+            override fun canReach(playerId: String) = true
+            override fun notify(playerId: String, title: String, body: String, data: Map<String, String>) {
+                told += playerId to title
+            }
+        }
+        // A one-second clock, so Ali's turns are played for him and come round quickly.
+        application { gameServer(registry = RoomRegistry(turnSeconds = 1), pusher = pusher) }
+        val ws = createClient { install(WebSockets) }
+        val ali = ws.webSocketSession("/ws")
+        ali.say(ClientMessage.Hello("Ali", playerId = "ali", appVersion = 99))
+        ali.await<ServerMessage.Welcome>()
+        ali.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        ali.await<ServerMessage.RoomUpdate>()
+        (1..3).forEach { ali.say(ClientMessage.SetBot(it, enabled = true, difficulty = Difficulty.NORMAL)) }
+        ali.await<ServerMessage.RoomUpdate> { it.room.seats.count { s -> s.isBot } == 3 }
+        ali.say(ClientMessage.StartMatch)
+        ali.say(ClientMessage.Away(true))
+
+        // Count Ali's turns as the table plays them for him.
+        var hisTurns = 0
+        var lastKey = ""
+        withTimeout(40_000) {
+            while (hisTurns < 3) {
+                val view = ali.await<ServerMessage.GameUpdate>().view
+                val key = "${view.gameNumber}:${view.board.size}:${view.phase}"
+                if (view.isYourMove && key != lastKey) { hisTurns++; lastKey = key }
+            }
+        }
+        assertEquals(1, told.count { it == ("ali" to "دورك بطيرة!") }, "three turns away, one notification: $told")
+    }
+
+    @Test
     fun `a tournament is made, its match opens a room with the teams on the chairs, and the organiser settles results`() = testApplication {
         application { gameServer() }
         val ws = createClient { install(WebSockets) }

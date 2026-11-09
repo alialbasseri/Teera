@@ -95,6 +95,11 @@ data class PlayerView(
     val losingTeam: Int? = null,
     val events: List<GameEvent> = emptyList(),
     val turnDeadlineEpochMs: Long? = null,
+    /**
+     * How long the seat acting has left, as the server counted it when sending this view:
+     * phones' clocks drift, so they count down from here rather than from [turnDeadlineEpochMs].
+     */
+    val turnMillisLeft: Long? = null,
     /** A "ناخذ خاوة" being voted on right now, if any. */
     val alertVote: AlertVote? = null,
     /**
@@ -134,7 +139,11 @@ data class PlayerView(
 data class AlertVote(
     val raisedBy: Int,
     val againstTeam: Int,
-    /** Who gets a say: the people at the table, not the bots. */
+    /**
+     * Who gets a say: every chair. A bot votes as its team would (no when its team is
+     * accused, yes when its partner raised it), so it takes somebody from the accused side
+     * agreeing for it to pass.
+     */
     val voters: List<Int>,
     val yes: List<Int>,
     val no: List<Int>,
@@ -375,11 +384,28 @@ enum class Emote {
     SPLOOSH,
     /** "والله دنيييكم": retired from the board and never passed on, kept so an older phone's press is read. */
     WALLAH,
+    /** "غشعنا على وجه الخير" */
+    GHASHANA,
+    /** "خاتلة" */
+    KHATLA,
+
+    // Faces: a picture over the seat rather than a sound. Older phones cannot read these
+    // and pass over them.
+    FACE_JOY, FACE_ROFL, FACE_SMIRK, FACE_COOL, FACE_THINK, FACE_EYES,
+    FACE_SCREAM, FACE_CRY, FACE_STEAM, FACE_CLAP, FACE_MUSCLE, FACE_FIRE,
     ;
+
+    val isFace: Boolean get() = this in FACES
 
     companion object {
         /** What the soundboard offers, in order. */
-        val BOARD = listOf(GULP, NO_WAY, SHEEL, SPLOOSH, CHAT, DRUMROLL, SAD)
+        val BOARD = listOf(GULP, NO_WAY, SHEEL, SPLOOSH, GHASHANA, KHATLA, CHAT, DRUMROLL, SAD)
+
+        /** The faces tray, in order. */
+        val FACES = listOf(
+            FACE_JOY, FACE_ROFL, FACE_SMIRK, FACE_COOL, FACE_THINK, FACE_EYES,
+            FACE_SCREAM, FACE_CRY, FACE_STEAM, FACE_CLAP, FACE_MUSCLE, FACE_FIRE,
+        )
     }
 }
 

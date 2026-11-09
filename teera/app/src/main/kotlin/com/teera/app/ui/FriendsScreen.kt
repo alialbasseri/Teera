@@ -232,7 +232,7 @@ fun InviteDialog(
                 }
             }
             Text(
-                "سكّر",
+                "سد",
                 color = Felt.Muted,
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onClose).padding(8.dp),

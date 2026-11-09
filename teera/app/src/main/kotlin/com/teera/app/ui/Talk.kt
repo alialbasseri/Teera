@@ -66,7 +66,7 @@ fun MicButton(talk: Talk, modifier: Modifier = Modifier, size: Dp = 44.dp) {
         ) {
             Icon(
                 if (talk.micOn) Icons.Rounded.Mic else Icons.Rounded.MicOff,
-                contentDescription = if (talk.micOn) "سكّر المايك" else "افتح المايك",
+                contentDescription = if (talk.micOn) "سد المايك" else "افتح المايك",
                 tint = if (talk.micOn) Felt.Ink else Felt.Muted,
             )
         }

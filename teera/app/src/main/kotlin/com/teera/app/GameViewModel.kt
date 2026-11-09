@@ -319,7 +319,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val code = table.code ?: openRoomAt(table.host, table.port)
             if (code == null) {
-                _state.update { it.copy(notice = "الطاولة بدت أو تسكّرت") }
+                _state.update { it.copy(notice = "الطاولة بدت أو انسدت") }
                 return@launch
             }
             connectTo("ws://${table.host}:${table.port}/ws")
@@ -1158,7 +1158,7 @@ private fun decodePhoto(base64: String): androidx.compose.ui.graphics.ImageBitma
 
 /** The server writes its refusals in English for the logs; the table reads them in Arabic. */
 private fun ServerMessage.Failure.explain(): String = when (code) {
-    ErrorCode.ROOM_NOT_FOUND -> "ماكو غرفة بهذا الكود. يمكن خلصت أو تسكّرت"
+    ErrorCode.ROOM_NOT_FOUND -> "ماكو غرفة بهذا الكود. يمكن خلصت أو انسدت"
     ErrorCode.ROOM_FULL -> "الغرفة مليانة"
     ErrorCode.ROOM_ALREADY_STARTED -> "اللعب بدأ بهذي الغرفة"
     ErrorCode.NOT_HOST -> "بس صاحب الغرفة يقدر يسويها"
@@ -1174,7 +1174,7 @@ private fun com.teera.core.Rejection.explain(): String = when (this) {
     com.teera.core.Rejection.TILE_NOT_IN_HAND -> "هذا البول مو بيدك"
     com.teera.core.Rejection.MUST_OPEN_WITH_A_DOUBLE -> "الگيم يُفتح بچفت"
     com.teera.core.Rejection.MUST_OPEN_WITH_THE_SIX -> "أول گيم يُفتح بالست ست"
-    com.teera.core.Rejection.MUST_OPEN_A_FRESH_SIDE -> "لازم تسكّر جهة جديدة من الچفت"
+    com.teera.core.Rejection.MUST_OPEN_A_FRESH_SIDE -> "لازم تسد جهة جديدة من الچفت"
     com.teera.core.Rejection.TILE_DOES_NOT_MATCH -> "البول ما يطابق الطرف"
     com.teera.core.Rejection.NO_ARM_GIVEN -> "اختر الجهة"
     com.teera.core.Rejection.MUST_PLAY_IF_ABLE -> "عندك بول تلعبه"

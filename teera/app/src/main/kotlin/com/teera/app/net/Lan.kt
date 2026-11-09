@@ -50,7 +50,7 @@ class LanHost {
         engine?.let { return port }
         port = freePort(preferred)
         engine = embeddedServer(CIO, port = port, host = "0.0.0.0") {
-            gameServer(RoomRegistry())
+            gameServer(RoomRegistry(turnSeconds = 30))
         }.start(wait = false)
         return port
     }

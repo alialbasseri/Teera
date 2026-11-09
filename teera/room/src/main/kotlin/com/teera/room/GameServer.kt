@@ -45,6 +45,9 @@ private fun botThink(): Long = BOT_THINK_MS + kotlin.random.Random.nextLong(BOT_
 private const val TICK_MS = 250L
 private const val IDLE_ROOM_MS = 30 * 60 * 1000L
 
+/** At least this long between two call-backs to the same player. */
+private const val CALL_BACK_GAP_MS = 10 * 60 * 1000L
+
 /** How often the cloud server looks for a newer app. */
 private const val LATEST_CHECK_MS = 5 * 60 * 1000L
 
@@ -100,18 +103,18 @@ fun Application.gameServer(
                     }
                     if (output != Room.Output.NOTHING) publish(holder, output, records)
                     // The table is waiting on somebody who is not looking: call them back,
-                    // once per turn.
+                    // once while they are gone (not once a turn), and not again for a while.
+                    holder.calledBack.removeIf { !holder.room.isAbsent(it) }
                     val absent = holder.room.absentActing()
-                    val state = holder.room.game
-                    if (absent != null && state != null) {
-                        val turn = "${state.gameNumber}:${state.board.size}:${state.actingSeat}:${state.phase}"
-                        if (holder.calledBack != turn) {
-                            holder.calledBack = turn
-                            pusher.notify(
-                                absent, "دورك بطيرة!", "الطاولة تنتظرك، ارجع العب",
-                                mapOf("code" to holder.room.code),
-                            )
-                        }
+                    if (absent != null && absent !in holder.calledBack &&
+                        now - (holder.lastCalledAt[absent] ?: 0L) >= CALL_BACK_GAP_MS
+                    ) {
+                        holder.calledBack += absent
+                        holder.lastCalledAt[absent] = now
+                        pusher.notify(
+                            absent, "دورك بطيرة!", "الطاولة تنتظرك، ارجع العب",
+                            mapOf("code" to holder.room.code),
+                        )
                     }
                 } finally {
                     holder.lock.unlock()

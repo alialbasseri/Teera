@@ -283,9 +283,6 @@ fun TableScreen(
             val seat = seatAt(offset)
             Box(modifier, contentAlignment = Alignment.Center) {
                 SeatAtTable(view, seat, side, speaking = seat in speaking, avatar = { size -> avatarFor(seat, size) })
-                emotes.lastOrNull { it.seat == seat }?.let {
-                    EmoteBubble(it, Modifier.align(if (side == Side.TOP) Alignment.BottomCenter else Alignment.Center))
-                }
             }
         }
         Seated(2, Side.TOP, Modifier.fillMaxWidth())
@@ -316,8 +313,17 @@ fun TableScreen(
 
             Celebration(view, visible = over && !showSummary, modifier = Modifier.fillMaxSize())
 
-            emotes.lastOrNull { it.seat == view.yourSeat }?.let {
-                EmoteBubble(it, Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp))
+            // Sounds and faces show over the edge of the table nearest whoever sent them.
+            // The table keeps its size, so a long line never nudges it aside.
+            listOf(
+                seatAt(1) to Alignment.CenterStart,
+                seatAt(2) to Alignment.TopCenter,
+                seatAt(3) to Alignment.CenterEnd,
+                view.yourSeat to Alignment.BottomCenter,
+            ).forEach { (seat, edge) ->
+                emotes.lastOrNull { it.seat == seat }?.let {
+                    EmoteBubble(it, Modifier.align(edge).padding(horizontal = 6.dp, vertical = 8.dp))
+                }
             }
 
             if (onChat != null) ChatToast(chat, Modifier.align(Alignment.BottomCenter).padding(bottom = 64.dp))
@@ -682,11 +688,18 @@ private fun Emote.words(): String = when (this) {
     Emote.SHEEL -> "شيل!"
     Emote.SPLOOSH -> "سبلوش!"
     Emote.WALLAH -> ""
+    Emote.GHASHANA -> "غشعنا على وجه الخير"
+    Emote.KHATLA -> "خاتلة!"
+    else -> ""
 }
 
 /** A soundboard press, popping up over whoever pressed it. */
 @Composable
 private fun EmoteBubble(shown: ShownEmote, modifier: Modifier = Modifier) {
+    if (shown.emote.isFace) {
+        FaceBurst(shown, modifier)
+        return
+    }
     key(shown.id) {
         val pop = remember { Animatable(0.4f) }
         LaunchedEffect(Unit) { pop.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = Spring.StiffnessMedium)) }
@@ -696,9 +709,16 @@ private fun EmoteBubble(shown: ShownEmote, modifier: Modifier = Modifier) {
                 .clip(RoundedCornerShape(14.dp))
                 .background(Felt.Parchment)
                 .border(1.5.dp, Felt.Brass, RoundedCornerShape(14.dp))
+                .widthIn(max = 200.dp)
                 .padding(horizontal = 12.dp, vertical = 4.dp),
         ) {
-            Text(shown.emote.words(), color = Felt.Ink, style = MaterialTheme.typography.titleMedium)
+            Text(
+                shown.emote.words(),
+                color = Felt.Ink,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                maxLines = 2,
+            )
         }
     }
 }
@@ -929,6 +949,7 @@ private fun Hand(
     avatar: (@Composable (Dp) -> Unit)? = null,
 ) {
     var trayOpen by remember { mutableStateOf(false) }
+    var facesOpen by remember { mutableStateOf(false) }
     val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null
     var chatOpen by remember { mutableStateOf(false) }
     // Lines that arrived while the chat was closed.
@@ -942,6 +963,10 @@ private fun Hand(
                 Modifier.fillMaxWidth().padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (view.isYourMove && view.turnMillisLeft != null) {
+                    OwnTurnClock(view)
+                    Spacer(Modifier.width(8.dp))
+                }
                 if (view.spectating && avatar != null) {
                     Box(
                         Modifier.size(32.dp).clip(CircleShape).border(1.dp, Felt.Brass.copy(alpha = 0.7f), CircleShape),
@@ -991,7 +1016,9 @@ private fun Hand(
                 }
                 if (!view.spectating) {
                     Spacer(Modifier.width(4.dp))
-                    SoundboardButton(trayOpen) { trayOpen = !trayOpen }
+                    FacesButton(facesOpen) { facesOpen = !facesOpen; trayOpen = false }
+                    Spacer(Modifier.width(4.dp))
+                    SoundboardButton(trayOpen) { trayOpen = !trayOpen; facesOpen = false }
                 }
             }
             // The tray floats above the hand rather than pushing it down, so the bones stay
@@ -1012,6 +1039,27 @@ private fun Hand(
                         SoundTray { emote ->
                             onEmote(emote)
                             trayOpen = false
+                        }
+                    }
+                }
+            }
+
+            if (facesOpen) {
+                androidx.compose.ui.window.Popup(
+                    popupPositionProvider = AboveAnchor,
+                    onDismissRequest = { facesOpen = false },
+                ) {
+                    Box(
+                        Modifier
+                            .padding(horizontal = 10.dp)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Felt.Rail)
+                            .border(1.dp, Felt.Brass.copy(alpha = 0.8f), RoundedCornerShape(18.dp))
+                            .padding(vertical = 6.dp),
+                    ) {
+                        FacesTray { face ->
+                            onEmote(face)
+                            facesOpen = false
                         }
                     }
                 }
@@ -1550,6 +1598,9 @@ private fun Emote.label(): String = when (this) {
     Emote.DRUMROLL -> "طبل"
     Emote.SAD -> "حسرة"
     Emote.SLAP -> "خذ"
+    Emote.GHASHANA -> "غشعنا على وجه الخير"
+    Emote.KHATLA -> "خاتلة"
+    else -> ""
 }
 
 // -- the sums -----------------------------------------------------------------

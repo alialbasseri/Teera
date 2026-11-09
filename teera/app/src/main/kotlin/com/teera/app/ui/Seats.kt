@@ -22,7 +22,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -88,7 +96,9 @@ fun SeatAtTable(
     val face = @Composable {
         Box(contentAlignment = Alignment.Center) {
             if (speaking) SpeakingHalo(50.dp)
-            if (acting) TurnRing(42.dp)
+            // A clocked table shows the time running out round the picture; otherwise it breathes.
+            if (acting && view.turnMillisLeft != null) TurnClock(view, 48.dp)
+            else if (acting) TurnRing(42.dp)
             Box(
                 Modifier
                     .size(40.dp)
@@ -169,6 +179,64 @@ fun FaceUpTiles(tiles: List<com.teera.core.Domino>, lying: Boolean) {
 
 /** How wide a seat on the side of the table is; the board fits between two of them. */
 val SIDE_WIDTH = 62.dp
+
+/**
+ * The turn's clock as a ring that empties: green while there is time, gold past half,
+ * red near the end. It counts down from what the server said was left when the view
+ * came, so a phone whose clock is off still shows the right time.
+ */
+@Composable
+fun TurnClock(view: PlayerView, size: Dp, stroke: Dp = 3.dp, content: @Composable () -> Unit = {}) {
+    val left = view.turnMillisLeft ?: return
+    val total = view.rules.turnSeconds * 1000L
+    if (total <= 0) return
+    val received = remember(view) { android.os.SystemClock.elapsedRealtime() }
+    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(view) {
+        while (true) withFrameMillis { now = android.os.SystemClock.elapsedRealtime() }
+    }
+    val remaining = (left - (now - received)).coerceIn(0, total)
+    val fraction = remaining / total.toFloat()
+    val colour = when {
+        fraction > 0.5f -> lerp(Felt.Brass, Felt.Playable, (fraction - 0.5f) * 2f)
+        else -> lerp(Felt.Danger, Felt.Brass, (fraction * 2f).coerceIn(0f, 1f))
+    }
+    Box(Modifier.size(size).testTag("turn-clock"), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.size(size)) {
+            val w = stroke.toPx()
+            val inset = w / 2
+            val arcSize = Size(this.size.width - w, this.size.height - w)
+            drawArc(
+                Color.Black.copy(alpha = 0.35f), 0f, 360f, useCenter = false,
+                topLeft = Offset(inset, inset), size = arcSize, style = Stroke(w),
+            )
+            drawArc(
+                colour, -90f, 360f * fraction, useCenter = false,
+                topLeft = Offset(inset, inset), size = arcSize, style = Stroke(w, cap = StrokeCap.Round),
+            )
+        }
+        content()
+    }
+}
+
+/** The turn's clock for yourself, by your bones: the seconds left inside the ring. */
+@Composable
+fun OwnTurnClock(view: PlayerView) {
+    val left = view.turnMillisLeft ?: return
+    val received = remember(view) { android.os.SystemClock.elapsedRealtime() }
+    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    LaunchedEffect(view) {
+        while (true) withFrameMillis { now = android.os.SystemClock.elapsedRealtime() }
+    }
+    val seconds = ((left - (now - received)).coerceAtLeast(0) + 999) / 1000
+    TurnClock(view, 36.dp) {
+        Text(
+            "$seconds",
+            color = if (seconds <= 10) Felt.Danger else Felt.Parchment,
+            style = MaterialTheme.typography.labelLarge,
+        )
+    }
+}
 
 /** The breathing ring round whoever the table is waiting on. */
 @Composable

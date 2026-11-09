@@ -334,10 +334,14 @@ object Engine {
             events = listOf(GameEvent.Gave(rescuer, stuck)),
         )
 
+        // Rule 16: a tile that fits is the stuck player's to lay, wherever it fits; one that
+        // fits nowhere is only carried, and play moves on past them.
+        val next = if (hasPlayable(given, stuck)) stuck else nextSeat(stuck)
+
         // Rule 18: handing over your last tile empties your hand, which wins the game.
         // Rule 20: and if what is left weighs a spot or nothing, the teera is on offer,
         // so a player can hand over the heavy tile and fly on the light one.
-        return MoveOutcome.Ok(afterShedding(given, rescuer, nextSeat(stuck)))
+        return MoveOutcome.Ok(afterShedding(given, rescuer, next))
     }
 
     private fun applyPlayFor(state: GameState, rescuer: Int, move: Move.PlayFor): MoveOutcome {

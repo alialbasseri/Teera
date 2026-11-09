@@ -357,7 +357,7 @@ private fun WifiDialog(
                 Spacer(Modifier.width(8.dp))
                 BrassButton("ادخل", { onJoinAddress(address) }, enabled = address.count { it == '.' } == 3)
             }
-            SmallLink("سكّر", onClose)
+            SmallLink("سد", onClose)
         }
     }
 }

@@ -13,7 +13,11 @@ import kotlinx.coroutines.sync.Mutex
  * One [Mutex] per room: room state is only touched while holding it, so the engine sees
  * a single ordered stream of moves however the sockets interleave.
  */
-class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
+class RoomRegistry(
+    private val clock: () -> Long = System::currentTimeMillis,
+    /** Seconds every turn gets at this server's tables; 0 leaves turns untimed. */
+    private val turnSeconds: Int = 0,
+) {
 
     class Holder(val room: Room) {
         val lock = Mutex()
@@ -29,9 +33,14 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
         @Volatile
         var onMatchFinished: ((losingSide: Int) -> Unit)? = null
 
-        /** The turn whose absent player was last called back by a notification. */
-        @Volatile
-        var calledBack: String? = null
+        /**
+         * Players already called back since they last looked away: one notification per
+         * absence, however many turns pass while they are gone.
+         */
+        val calledBack: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+        /** When each player was last called back, so a flickering connection is not a stream of them. */
+        val lastCalledAt: MutableMap<String, Long> = ConcurrentHashMap()
 
         /** The match being played here, as the books know it; set when it starts. */
         @Volatile
@@ -71,7 +80,7 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
     fun create(hostId: String, rules: Rules): Holder {
         var code = newCode()
         while (rooms.containsKey(code)) code = newCode()
-        val holder = Holder(Room(code, hostId, rules, clock))
+        val holder = Holder(Room(code, hostId, rules, clock, fixedTurnSeconds = turnSeconds.takeIf { it > 0 }))
         rooms[code] = holder
         return holder
     }
@@ -81,7 +90,9 @@ class RoomRegistry(private val clock: () -> Long = System::currentTimeMillis) {
     /** Opens a room under a code that is already known, for players following it back. */
     fun reopen(code: String, hostId: String): Holder {
         val key = code.trim().uppercase()
-        return rooms.computeIfAbsent(key) { Holder(Room(key, hostId, Rules.DEFAULT, clock)) }
+        return rooms.computeIfAbsent(key) {
+            Holder(Room(key, hostId, Rules.DEFAULT, clock, fixedTurnSeconds = turnSeconds.takeIf { it > 0 }))
+        }
     }
 
     /** Whether [code] could be one of ours, so a stray string never becomes a room. */
