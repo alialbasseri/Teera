@@ -67,7 +67,8 @@ fun MenuScreen(
     onNameChange: (String) -> Unit,
     onHost: () -> Unit,
     onJoin: (String) -> Unit,
-    onSolo: () -> Unit,
+    /** A game against bots, at the level picked. */
+    onSolo: (com.teera.core.Difficulty) -> Unit,
     connecting: Boolean,
     onHostWifi: () -> Unit = {},
     wifiTables: List<WifiTable> = emptyList(),
@@ -94,6 +95,7 @@ fun MenuScreen(
     var code by remember { mutableStateOf("") }
     var wifiOpen by remember { mutableStateOf(false) }
     var changelogOpen by remember { mutableStateOf(false) }
+    var pickingLevel by remember { mutableStateOf(false) }
 
     CafeTable {
         // The ranking sits in the corner, costing the menu no height.
@@ -186,7 +188,7 @@ fun MenuScreen(
                 }
 
                 Spacer(Modifier.height(14.dp))
-                GoldButton("العب ضد البوتات", onSolo)
+                GoldButton("العب ضد البوتات", { pickingLevel = true })
                 Spacer(Modifier.height(14.dp))
 
                 // Friends anywhere: the way the game is mostly played.
@@ -284,6 +286,12 @@ fun MenuScreen(
     }
 
     if (changelogOpen) ChangelogDialog(onClose = { changelogOpen = false })
+    if (pickingLevel) {
+        LevelDialog(
+            onPick = { level -> pickingLevel = false; onSolo(level) },
+            onClose = { pickingLevel = false },
+        )
+    }
 
     if (wifiOpen) {
         WifiDialog(
@@ -430,5 +438,29 @@ private fun CreditLine(lead: String, name: String, open: () -> Unit) {
             ),
             modifier = Modifier.clickable(onClick = open).padding(vertical = 2.dp, horizontal = 2.dp),
         )
+    }
+}
+
+/** How hard the bots play: picked before each game against them. */
+@Composable
+private fun LevelDialog(onPick: (com.teera.core.Difficulty) -> Unit, onClose: () -> Unit) {
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose) {
+        Plaque {
+            Text("شگد تريدها صعبة؟", color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
+            listOf(
+                Triple(com.teera.core.Difficulty.EASY, "سهل", "البوت يلعب على البركة، زين للتعلّم"),
+                Triple(com.teera.core.Difficulty.NORMAL, "متوسط", "يفكر قبل لا يلعب"),
+                Triple(com.teera.core.Difficulty.HARD, "صعب", "يگرا الطاولة ويسدّ عليك"),
+            ).forEach { (level, name, line) ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    if (level == com.teera.core.Difficulty.NORMAL) {
+                        GoldButton(name, { onPick(level) }, Modifier.testTag("level-${level.name}"))
+                    } else {
+                        BrassButton(name, { onPick(level) }, modifier = Modifier.fillMaxWidth().testTag("level-${level.name}"))
+                    }
+                    Text(line, color = Felt.Muted, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 2.dp))
+                }
+            }
+        }
     }
 }

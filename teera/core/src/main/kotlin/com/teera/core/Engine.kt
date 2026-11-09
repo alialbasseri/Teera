@@ -465,7 +465,8 @@ object Engine {
             nextOpener = nextOpener,
         )
 
-        val loser = losingTeam(scores, state.rules.target)
+        val gamesPlayed = state.gamesPlayed + if (end == GameEnd.BLOCKED) 0 else 1
+        val loser = losingTeam(scores, state.rules, gamesPlayed)
         val events = state.events + GameEvent.GameEnded(result) +
             listOfNotNull(loser?.let { GameEvent.MatchEnded(it, scores) })
 
@@ -474,6 +475,7 @@ object Engine {
             phase = if (loser != null) Phase.MATCH_OVER else Phase.GAME_OVER,
             lastGame = result,
             losingTeam = loser,
+            gamesPlayed = gamesPlayed,
             stuckSeat = null,
             rescuer = null,
             teeraSeat = null,
@@ -487,6 +489,19 @@ object Engine {
      * teera scores on both sides, and then the heavier score is the losing one; dead
      * level means another game settles it.
      */
+    /**
+     * Who has lost, if anybody yet. Played to a number of games, that is decided only once
+     * they are all played ([gamesPlayed] null means mid-game: an upheld alert's penalty
+     * adds to the score but does not end such a match).
+     */
+    private fun losingTeam(scores: List<Int>, rules: Rules, gamesPlayed: Int?): Int? {
+        if (rules.byGames) {
+            if (gamesPlayed == null || gamesPlayed < rules.games || scores[0] == scores[1]) return null
+            return if (scores[0] > scores[1]) 0 else 1
+        }
+        return losingTeam(scores, rules.target)
+    }
+
     private fun losingTeam(scores: List<Int>, target: Int): Int? {
         val crossed = scores.indices.filter { scores[it] >= target }
         return when (crossed.size) {
@@ -514,7 +529,7 @@ object Engine {
         }
         events += GameEvent.AlertUpheld(againstTeam, count, penalty)
 
-        val loser = losingTeam(scores, state.rules.target)
+        val loser = losingTeam(scores, state.rules, gamesPlayed = null)
         if (loser != null) events += GameEvent.MatchEnded(loser, scores)
 
         return state.copy(

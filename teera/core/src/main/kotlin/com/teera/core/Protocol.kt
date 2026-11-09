@@ -52,6 +52,8 @@ data class LiveGame(
     val target: Int,
     val gameNumber: Int,
     val watchers: Int,
+    /** Played to this many games rather than to [target]; 0 when to the target. */
+    val games: Int = 0,
 )
 
 /**
@@ -76,6 +78,8 @@ data class PlayerView(
     val scores: List<Int>,
     val alerts: List<Int>,
     val gameNumber: Int,
+    /** Games that ended in a score, for a match played to a number of games. */
+    val gamesPlayed: Int = 0,
     val mustOpenWith: Domino? = null,
     val stuckSeat: Int? = null,
     val rescuer: Int? = null,
@@ -166,6 +170,7 @@ fun GameState.viewFor(seat: Int, roomCode: String, turnDeadlineEpochMs: Long? = 
     scores = scores,
     alerts = alerts,
     gameNumber = gameNumber,
+    gamesPlayed = gamesPlayed,
     mustOpenWith = mustOpenWith,
     stuckSeat = stuckSeat,
     rescuer = rescuer,

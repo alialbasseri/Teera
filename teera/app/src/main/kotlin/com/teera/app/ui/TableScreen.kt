@@ -532,7 +532,12 @@ private fun ScoreRail(
             Spacer(Modifier.width(8.dp))
             ScorePlate(view.teamName(1 - view.yourTeam), "$them", if (them < us) Felt.Playable else Felt.Behind, animated = them)
             Spacer(Modifier.width(8.dp))
-            ScorePlate("گيم ${view.gameNumber}", "لـ ${view.rules.target}", Felt.Brass)
+            if (view.rules.byGames) {
+                // Which game of how many: a locked game is played again, so it does not count.
+                ScorePlate("گيم ${minOf(view.gamesPlayed + 1, view.rules.games)}", "من ${view.rules.games}", Felt.Brass)
+            } else {
+                ScorePlate("گيم ${view.gameNumber}", "لـ ${view.rules.target}", Felt.Brass)
+            }
 
             Spacer(Modifier.weight(1f))
 
@@ -1448,7 +1453,8 @@ private fun TargetVotePanel(view: PlayerView, vote: com.teera.core.TargetVote, o
 
 /** Scores the table could move to: off the list, not the current one, above both scores. */
 internal fun PlayerView.targetChoices(): List<Int> =
-    com.teera.core.TARGET_CHOICES.filter { it != rules.target && it > (scores.maxOrNull() ?: 0) && it in 151..301 }
+    if (rules.byGames) emptyList()
+    else com.teera.core.TARGET_CHOICES.filter { it != rules.target && it > (scores.maxOrNull() ?: 0) && it in 151..301 }
 
 /** Puts a popup just above whatever it is anchored to, centred across it. */
 private object AboveAnchor : androidx.compose.ui.window.PopupPositionProvider {
@@ -1548,7 +1554,13 @@ private fun GameSummary(view: PlayerView, steps: List<GameEvent>, onNextGame: ()
             }
             SumRow("المجموع", teams.map { Cell.Points(view.scores.getOrElse(it) { 0 }, signed = false) })
             Text(
-                "اللي يوصل ${view.rules.target} يخسر",
+                if (view.rules.byGames) {
+                    val left = view.rules.games - view.gamesPlayed
+                    if (left > 0) "باقي $left من ${view.rules.games} گيمات، وبالآخر الأكثر نقاط يخسر"
+                    else "خلصت ${view.rules.games} گيمات، والأكثر نقاط يخسر"
+                } else {
+                    "اللي يوصل ${view.rules.target} يخسر"
+                },
                 color = Felt.Muted,
                 style = MaterialTheme.typography.labelSmall,
             )

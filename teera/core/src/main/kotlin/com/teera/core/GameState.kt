@@ -185,6 +185,8 @@ data class GameState(
     val redealOffers: List<Int> = emptyList(),
     val lastGame: GameResult? = null,
     val losingTeam: Int? = null,
+    /** Games that ended in a score (not locked), for a match played to a number of games. */
+    val gamesPlayed: Int = 0,
     val seed: Long = 0L,
     /** Produced by the move that created this state, for the client to animate. */
     val events: List<GameEvent> = emptyList(),

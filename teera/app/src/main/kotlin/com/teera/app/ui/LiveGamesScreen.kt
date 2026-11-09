@@ -104,7 +104,7 @@ private fun LiveGameCard(game: LiveGame, onWatch: (String) -> Unit) {
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "گيم ${game.gameNumber} · لـ ${game.target}" + if (game.watchers > 0) " · ${game.watchers} يتفرجون" else "",
+                "گيم ${game.gameNumber} · " + (if (game.games > 0) "${game.games} گيمات" else "لـ ${game.target}") + if (game.watchers > 0) " · ${game.watchers} يتفرجون" else "",
                 color = Felt.Muted,
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.weight(1f),

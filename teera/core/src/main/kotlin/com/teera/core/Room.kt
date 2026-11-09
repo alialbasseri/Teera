@@ -158,6 +158,7 @@ class Room(
             target = state.rules.target,
             gameNumber = state.gameNumber,
             watchers = watchers.size,
+            games = state.rules.games,
         )
     }
 
@@ -496,7 +497,7 @@ class Room(
         val state = game ?: return Output.NOTHING
         val seat = seatOf(playerId) ?: return Output.NOTHING
         if (targetVote != null || state.phase == Phase.MATCH_OVER) return Output.NOTHING
-        if (target !in TARGET_CHOICES || target == state.rules.target || target <= state.scores.max()) {
+        if (state.rules.byGames || target !in TARGET_CHOICES || target == state.rules.target || target <= state.scores.max()) {
             return Output.NOTHING
         }
         targetVote = TargetVote(

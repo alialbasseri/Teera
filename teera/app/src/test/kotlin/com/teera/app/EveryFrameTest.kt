@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.os.Looper
 import android.view.View
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.lifecycle.ViewModelProvider
@@ -76,6 +77,8 @@ class EveryFrameTest {
     fun `the table survives whole games, frame by frame`() {
         frames(500)
         compose.onNodeWithText("العب ضد البوتات").performClick()
+        frames(300) // the level picker opens
+        compose.onNodeWithTag("level-NORMAL").performClick()
 
         val model = ViewModelProvider(compose.activity)[GameViewModel::class.java]
         var gamesSeen = 0

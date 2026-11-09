@@ -113,6 +113,7 @@ class FullFlowTest {
     @Test
     fun `whole games can be played through the screen`() {
         compose.onNodeWithText("العب ضد البوتات").performClick()
+        compose.onNodeWithTag("level-NORMAL").performClick()
 
         var decisions = 0
         var gamesFinished = 0

@@ -108,6 +108,17 @@ object Bot {
             score += remaining.count { it.matches(end) } * 1.5
         }
 
+        // A hard bot reads the table as a sharp player would: it leaves the next opponent
+        // as little as possible to answer with, and its partner as much as possible.
+        if (difficulty == Difficulty.HARD && arm != null) {
+            val after = if (state.board.isEmpty) state.board.open(domino) else state.board.place(domino, arm)
+            fun answers(other: Int) = state.handOf(other).count { tile -> Arm.ALL.any { after.accepts(tile, it) } }
+            score -= answers((seat + 1) % Pack.PLAYERS) * 0.45
+            score -= answers((seat + 3) % Pack.PLAYERS) * 0.15
+            score += answers((seat + 2) % Pack.PLAYERS) * 0.25
+            if (answers((seat + 1) % Pack.PLAYERS) == 0) score += 1.5
+        }
+
         return score
     }
 

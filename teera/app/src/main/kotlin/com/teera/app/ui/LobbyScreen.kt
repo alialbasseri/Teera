@@ -184,12 +184,14 @@ fun LobbyScreen(
 
             Text("المباراة لـ", style = MaterialTheme.typography.labelLarge, color = Felt.Brass)
             Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Rules.TARGETS.forEach { target ->
-                    val chosen = room.rules.target == target
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                // To a score (the team reaching it loses), or a set number of games.
+                (Rules.TARGETS.map { it to "$it" } + (0 to "${Rules.GAMES} گيمات")).forEach { (target, label) ->
+                    val chosen = if (target == 0) room.rules.byGames else !room.rules.byGames && room.rules.target == target
+                    val pick = if (target == 0) room.rules.copy(games = Rules.GAMES) else room.rules.copy(target = target, games = 0)
                     Box(
                         Modifier
-                            .width(92.dp)
+                            .width(if (target == 0) 104.dp else 84.dp)
                             .height(46.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(
@@ -197,11 +199,12 @@ fun LobbyScreen(
                                 else Brush.verticalGradient(listOf(Color(0x99120B05), Color(0x99120B05))),
                             )
                             .border(1.dp, Felt.Brass.copy(alpha = if (chosen) 0.9f else 0.5f), RoundedCornerShape(12.dp))
-                            .clickable(enabled = isHost) { onSetRules(room.rules.copy(target = target)) },
+                            .clickable(enabled = isHost) { onSetRules(pick) }
+                            .testTag("rules-$label"),
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            "$target",
+                            label,
                             color = if (chosen) Felt.Ink else Felt.Parchment,
                             style = MaterialTheme.typography.titleLarge,
                         )
@@ -209,7 +212,7 @@ fun LobbyScreen(
                 }
             }
             Text(
-                "الفريق اللي يوصل الرقم يخسر",
+                if (room.rules.byGames) "بعد ${Rules.GAMES} گيمات، الفريق الأكثر نقاط يخسر" else "الفريق اللي يوصل الرقم يخسر",
                 style = MaterialTheme.typography.labelSmall,
                 color = Felt.Muted,
                 modifier = Modifier.padding(top = 4.dp),
