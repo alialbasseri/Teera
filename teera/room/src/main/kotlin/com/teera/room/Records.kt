@@ -21,6 +21,34 @@ interface Records {
     /** The developer's numbers; null when no books are kept. */
     suspend fun adminStats(): AdminStats? = null
 
+    // -- the developer's page: problems and suggestions, players, settings --------------
+
+    /** A problem or suggestion sent from the app; must return at once. */
+    fun saveFeedback(item: FeedbackItem) {}
+
+    suspend fun feedback(limit: Int = 200): List<FeedbackItem> = emptyList()
+
+    fun setFeedbackDone(id: String, done: Boolean) {}
+
+    fun deleteFeedback(id: String) {}
+
+    /** Players, most recently seen first; [query] matches a name or a player's short code. */
+    suspend fun players(query: String = "", limit: Int = 100): List<PlayerRow> = emptyList()
+
+    /** Bars a player from playing online, or lifts it; must return at once. */
+    fun setBanned(playerId: String, banned: Boolean, reason: String = "") {}
+
+    /** Everyone barred, read once when the server starts. */
+    suspend fun bannedPlayers(): Map<String, String> = emptyMap()
+
+    /** Settings the developer changed on the page, kept across restarts. */
+    suspend fun loadSettings(): Map<String, String> = emptyMap()
+
+    fun saveSetting(key: String, value: String) {}
+
+    /** Everyone whose phone can be sent a notification. */
+    suspend fun pushable(): List<String> = emptyList()
+
     /** Something happened at a table; [matchId] is the same for one match from start to end. */
     fun happened(matchId: String, roomCode: String, happening: Room.Happening) {}
 

@@ -37,9 +37,13 @@ fun main() {
     LoggerFactory.getLogger("Main").info("notifications: {}", if (pusher === com.teera.room.Pusher.NONE) "off" else "on")
     // Every turn at the server's tables gets 30 seconds; then a bot plays it for them.
     val registry = com.teera.room.RoomRegistry(turnSeconds = TURN_SECONDS)
+    // Who is barred and what the developer set on the page, from the books.
+    val admin = com.teera.room.AdminState()
+    kotlinx.coroutines.runBlocking { runCatching { admin.load(records) } }
     // The evening reminders need the books (who to reach, what they were sent) and notifications.
     if (records is SqlRecords && pusher !== com.teera.room.Pusher.NONE) {
-        Reminders(records, pusher, registry).start(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()))
+        Reminders(records, pusher, registry, switchedOn = { admin.settings.remindersOn })
+            .start(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob()))
         LoggerFactory.getLogger("Main").info("reminders: on")
     }
     embeddedServer(Netty, port = port, host = "0.0.0.0") {
@@ -49,6 +53,7 @@ fun main() {
             latestFrom = com.teera.room.VERSION_URL,
             pusher = pusher,
             adminKey = System.getenv("ADMIN_KEY"),
+            admin = admin,
         )
     }.start(wait = true)
 }

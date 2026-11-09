@@ -61,6 +61,8 @@ data class UiState(
     /** Whatever the host is editing before the deal; the table's rules once it starts. */
     val draftRules: Rules = Rules.DEFAULT,
     val notice: String? = null,
+    /** Words from the developer to everyone with the app open, until dismissed. */
+    val announcement: String? = null,
     val connecting: Boolean = false,
     val offline: Boolean = false,
     /** Soundboard presses still on screen, newest last. */
@@ -536,7 +538,8 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             is ServerMessage.Online, is ServerMessage.PlayerFound,
-            is ServerMessage.Invited, is ServerMessage.InviteSent, is ServerMessage.Record -> onPresence(message)
+            is ServerMessage.Invited, is ServerMessage.InviteSent, is ServerMessage.Record,
+            is ServerMessage.FeedbackReceived, is ServerMessage.Announcement -> onPresence(message)
         }
     }
 
@@ -856,6 +859,10 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
             is ServerMessage.Record -> _state.update {
                 it.copy(record = message.record ?: it.record, recordLoading = false, recordKept = message.record != null)
             }
+            is ServerMessage.FeedbackReceived -> _state.update {
+                it.copy(notice = if (message.ok) "وصل، شكراً! راح نقراه" else "ما وصل. جرّب بعد شوية")
+            }
+            is ServerMessage.Announcement -> _state.update { it.copy(announcement = message.text) }
             is ServerMessage.InviteSent -> if (!message.delivered) {
                 val name = _state.value.friends.firstOrNull { it.id == message.playerId }?.name ?: "صاحبك"
                 _state.update {
@@ -890,6 +897,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         saveFriends(next)
         _state.update { it.copy(friends = next) }
     }
+
+    /** A problem ("problem") or a suggestion ("idea") for the developer. */
+    fun sendFeedback(kind: String, text: String) {
+        if (!_state.value.hasInternetServer) {
+            _state.update { it.copy(notice = "يحتاج نت حتى يوصل") }
+            return
+        }
+        if (presence == null) startPresence()
+        val message = ClientMessage.Feedback(kind, text.trim(), roomCode = _state.value.room?.code)
+        (presence ?: client)?.send(message)
+    }
+
+    fun dismissAnnouncement() = _state.update { it.copy(announcement = null) }
 
     fun invite(friend: Friend) {
         val code = _state.value.room?.code ?: return

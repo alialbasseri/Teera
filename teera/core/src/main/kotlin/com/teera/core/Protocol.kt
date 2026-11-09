@@ -275,6 +275,10 @@ sealed interface ClientMessage {
     @Serializable @SerialName("raiseAlert")
     data object RaiseAlert : ClientMessage
 
+    /** A problem ("problem") or a suggestion ("idea") sent to the developer. */
+    @Serializable @SerialName("feedback")
+    data class Feedback(val kind: String, val text: String, val roomCode: String? = null) : ClientMessage
+
     /** The host swaps a player (or the bot in a chair, "bot-N") with a watcher. */
     @Serializable @SerialName("swap")
     data class Swap(val seated: String, val watcher: String) : ClientMessage
@@ -439,6 +443,14 @@ sealed interface ServerMessage {
 
     @Serializable @SerialName("error")
     data class Failure(val code: ErrorCode, val message: String) : ServerMessage
+
+    /** The developer got the problem or suggestion. */
+    @Serializable @SerialName("feedbackReceived")
+    data class FeedbackReceived(val ok: Boolean) : ServerMessage
+
+    /** A word from the developer to everyone with the app open. */
+    @Serializable @SerialName("announcement")
+    data class Announcement(val text: String) : ServerMessage
 
     @Serializable @SerialName("chat")
     data class ChatMessage(val seat: Int, val name: String, val text: String, val atEpochMs: Long) : ServerMessage

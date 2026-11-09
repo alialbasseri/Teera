@@ -1,6 +1,9 @@
 package com.teera.room
 
+import kotlinx.serialization.Serializable
+
 /** One day's numbers, by Baghdad's calendar. */
+@Serializable
 data class DayStat(
     val day: String,
     /** People who opened the app that day. */
@@ -10,9 +13,12 @@ data class DayStat(
     val matches: Int,
     val games: Int,
     val minutes: Int,
+    /** People seen for the first time that day. */
+    val newPlayers: Int = 0,
 )
 
 /** What the developer wants to know: who comes, who plays, for how long, on which app. */
+@Serializable
 data class AdminStats(
     val totalPlayers: Int,
     val newToday: Int,
@@ -35,4 +41,6 @@ data class AdminStats(
     val reachable: Int,
     val remindersToday: Int,
     val tournaments: Int,
+    /** Matches started today in each hour, midnight first (Baghdad). */
+    val hours: List<Int> = emptyList(),
 )

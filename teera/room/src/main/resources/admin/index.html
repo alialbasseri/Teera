@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#1a1008">
+<title>طيرة · الأرقام</title>
+<link rel="icon" href="/site/icon.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#1a1008; --panel:#24170c; --panel2:#2d1d10; --line:#4a3820; --line2:#3a2817;
+  --gold:#d9b166; --gold-hi:#f0d79a; --text:#fbf7ef; --muted:#a99577;
+  --green:#8de8a8; --red:#ff8f7a; --blue:#8cc4ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif}
+button,input,textarea,select{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:rgba(26,16,8,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line2)}
+.top{display:flex;align-items:center;gap:10px;padding:12px 16px 6px}
+.top img{width:32px;height:32px;border-radius:50%}
+.top h1{margin:0;font-size:20px;color:var(--gold-hi);flex:1}
+.pulse{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px}
+.pulse i{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(141,232,168,.6);animation:p 2s infinite}
+.pulse.off i{background:var(--red);animation:none}
+@keyframes p{70%{box-shadow:0 0 0 7px rgba(141,232,168,0)}100%{box-shadow:0 0 0 0 rgba(141,232,168,0)}}
+nav{display:flex;gap:4px;overflow-x:auto;padding:4px 12px 10px;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{flex:0 0 auto;border:1px solid var(--line);background:transparent;border-radius:999px;padding:6px 14px;cursor:pointer;color:var(--muted)}
+nav button.on{background:var(--gold);color:#1a1008;border-color:var(--gold);font-weight:700}
+nav .badge{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--red);color:#1a1008;font-size:11px;font-weight:700;margin-inline-start:4px}
+main{padding:14px 16px 60px;max-width:1100px;margin:0 auto}
+section.tab{display:none}
+section.tab.on{display:block}
+h2{font-size:16px;color:var(--gold);margin:20px 0 10px}
+h2:first-child{margin-top:4px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px}
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:14px;padding:12px}
+.kpi b{display:block;font-size:26px;color:var(--gold-hi);line-height:1.2}
+.kpi span{font-size:12px;color:var(--muted)}
+.kpi small{display:block;font-size:11px;color:var(--green);margin-top:2px}
+.charts{display:grid;gap:10px;grid-template-columns:1fr}
+.chartbox{position:relative;height:240px}
+.chartbox.small{height:220px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.list{display:grid;gap:8px}
+.item{background:var(--panel);border:1px solid var(--line2);border-radius:12px;padding:10px 12px}
+.item .t{font-weight:700}
+.item .m{color:var(--muted);font-size:12px}
+.tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted)}
+.tag.red{color:var(--red);border-color:rgba(255,143,122,.4)}
+.tag.green{color:var(--green);border-color:rgba(141,232,168,.4)}
+.tag.gold{color:var(--gold);border-color:rgba(217,177,102,.5)}
+.tag.blue{color:var(--blue);border-color:rgba(140,196,255,.4)}
+.btn{border:1px solid var(--line);background:var(--panel2);border-radius:10px;padding:6px 12px;cursor:pointer}
+.btn:hover{border-color:var(--gold)}
+.btn.gold{background:var(--gold);color:#1a1008;border-color:var(--gold);font-weight:700}
+.btn.red{color:var(--red);border-color:rgba(255,143,122,.5)}
+.btn:disabled{opacity:.5;cursor:default}
+input[type=text],input[type=number],input[type=search],textarea{width:100%;background:#120b05;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{min-height:80px;resize:vertical}
+.spacer{flex:1}
+.empty{color:var(--muted);text-align:center;padding:24px}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line2);text-align:start}
+th{color:var(--muted);font-weight:normal;font-size:12px}
+.feedtext{white-space:pre-wrap;margin:6px 0}
+.done{opacity:.55}
+.switch{position:relative;width:46px;height:26px;flex:0 0 auto}
+.switch input{opacity:0;width:0;height:0}
+.switch span{position:absolute;inset:0;background:#3a2817;border-radius:13px;transition:.2s;cursor:pointer}
+.switch span::after{content:"";position:absolute;width:20px;height:20px;top:3px;right:3px;border-radius:50%;background:var(--muted);transition:.2s}
+.switch input:checked+span{background:rgba(141,232,168,.35)}
+.switch input:checked+span::after{right:23px;background:var(--green)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a1008;padding:10px 18px;border-radius:12px;font-weight:700;opacity:0;transition:.25s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chips button{border:1px solid var(--line);background:transparent;border-radius:999px;padding:4px 12px;cursor:pointer;color:var(--muted)}
+.chips button.on{border-color:var(--gold);color:var(--gold)}
+.note{color:var(--muted);font-size:13px}
+@media (min-width:800px){
+  .charts{grid-template-columns:2fr 1fr}
+  .charts .wide{grid-column:1/-1}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <img src="/site/icon.png" alt="">
+    <h1>طيرة · الأرقام</h1>
+    <span class="pulse" id="pulse"><i></i><span id="updated">مباشر</span></span>
+  </div>
+  <nav id="nav">
+    <button data-tab="dash" class="on">لوحة</button>
+    <button data-tab="rooms">الغرف <span id="roomsCount"></span></button>
+    <button data-tab="players">اللاعبين</button>
+    <button data-tab="feedback">الاقتراحات <span id="feedBadge"></span></button>
+    <button data-tab="control">التحكم</button>
+  </nav>
+</header>
+
+<main>
+<!-- ============ dashboard ============ -->
+<section class="tab on" id="tab-dash">
+  <h2>هسه</h2>
+  <div class="grid" id="nowCards"></div>
+  <h2>اليوم</h2>
+  <div class="grid" id="todayCards"></div>
+  <h2>آخر أسبوعين</h2>
+  <div class="charts">
+    <div class="card wide"><div class="chartbox"><canvas id="daysChart"></canvas></div></div>
+    <div class="card"><div class="m note" style="margin-bottom:6px">مباريات بدت اليوم، بالساعة</div><div class="chartbox small"><canvas id="hoursChart"></canvas></div></div>
+    <div class="card"><div class="m note" style="margin-bottom:6px">النسخ (آخر 30 يوم)</div><div class="chartbox small"><canvas id="versionsChart"></canvas></div></div>
+  </div>
+  <h2>الكل</h2>
+  <div class="grid" id="allCards"></div>
+  <h2>أكثر اللعّابين (آخر 30 يوم)</h2>
+  <div class="card"><table id="topTable"><thead><tr><th>#</th><th>اللاعب</th><th>مباريات</th></tr></thead><tbody></tbody></table></div>
+  <p class="note">الأيام بتوقيت بغداد. «فتحوا» = فتحوا التطبيق متصلين بالسيرفر · «لعبوا» = گعدوا بمباراة بدت ذاك اليوم.</p>
+</section>
+
+<!-- ============ rooms ============ -->
+<section class="tab" id="tab-rooms">
+  <h2>الغرف الحية</h2>
+  <div class="list" id="roomList"><div class="empty">…</div></div>
+</section>
+
+<!-- ============ players ============ -->
+<section class="tab" id="tab-players">
+  <h2>اللاعبين</h2>
+  <div class="row" style="margin-bottom:10px">
+    <input type="search" id="playerSearch" placeholder="دوّر بالاسم أو الرمز" style="flex:1">
+    <label class="row note"><input type="checkbox" id="onlyBanned"> المحظورين بس</label>
+  </div>
+  <div class="list" id="playerList"><div class="empty">…</div></div>
+</section>
+
+<!-- ============ feedback ============ -->
+<section class="tab" id="tab-feedback">
+  <h2>المشاكل والاقتراحات</h2>
+  <div class="chips" id="feedChips">
+    <button data-f="open" class="on">الجديدة</button>
+    <button data-f="problem">مشاكل</button>
+    <button data-f="idea">اقتراحات</button>
+    <button data-f="done">المخلّصة</button>
+    <button data-f="all">الكل</button>
+  </div>
+  <div class="list" id="feedList"><div class="empty">…</div></div>
+</section>
+
+<!-- ============ control ============ -->
+<section class="tab" id="tab-control">
+  <h2>رسالة لكل اللي فاتحين اللعبة هسه</h2>
+  <div class="card">
+    <textarea id="announceText" maxlength="400" placeholder="مثلاً: السيرفر راح يطفى 5 دقايق للتحديث"></textarea>
+    <div class="row" style="margin-top:8px"><span class="note">تطلعلهم نافذة بنص اللعبة.</span><span class="spacer"></span><button class="btn gold" id="announceBtn">دز</button></div>
+  </div>
+
+  <h2>إشعار لكل الناس</h2>
+  <div class="card">
+    <input type="text" id="pushTitle" maxlength="60" placeholder="العنوان: مثلاً بطولة الجمعة!">
+    <div style="height:8px"></div>
+    <textarea id="pushBody" maxlength="200" placeholder="الكلام: مثلاً الساعة 9 بالليل، سجّل فريقك"></textarea>
+    <div class="row" style="margin-top:8px"><span class="note" id="pushNote">يوصل لكل تليفون بيه اللعبة، حتى لو مسدودة. لا تكثر منه.</span><span class="spacer"></span><button class="btn gold" id="pushBtn">دز الإشعار</button></div>
+  </div>
+
+  <h2>الإعدادات</h2>
+  <div class="card list">
+    <div class="row">
+      <div style="flex:1"><div class="t">التذكيرات المسائية</div><div class="note">«يلا نلعب»، «وين الزلم»… من العصر لنص الليل.</div></div>
+      <label class="switch"><input type="checkbox" id="remindersOn"><span></span></label>
+    </div>
+    <div class="row">
+      <div style="flex:1"><div class="t">إجبار التحديث</div><div class="note">أي نسخة أقدم من هذا الرقم تنجبر تحدّث. آخر نسخة: <b>{{LATEST}}</b> · 0 = بدون إجبار.</div></div>
+      <input type="number" id="minVersion" min="0" style="width:96px">
+    </div>
+    <div class="row"><span class="spacer"></span><button class="btn gold" id="saveSettings">احفظ</button></div>
+  </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  var INIT = /*INIT*/null;
+  var KEY = new URLSearchParams(location.search).get("key") || "";
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"]/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]; }); };
+  var nf = new Intl.NumberFormat("ar-IQ-u-nu-latn");
+  var n = function (v) { return nf.format(v || 0); };
+  var hours = function (m) { return m < 60 ? n(m) + " د" : (m / 60).toFixed(1) + " س"; };
+  var ago = function (ms) {
+    var s = Math.max(0, (Date.now() - ms) / 1000);
+    if (s < 90) return "هسه";
+    if (s < 3600) return "قبل " + Math.round(s / 60) + " دقيقة";
+    if (s < 86400) return "قبل " + Math.round(s / 3600) + " ساعة";
+    return "قبل " + Math.round(s / 86400) + " يوم";
+  };
+  function toast(text) {
+    var t = $("toast"); t.textContent = text; t.classList.add("on");
+    clearTimeout(toast.timer); toast.timer = setTimeout(function () { t.classList.remove("on"); }, 2200);
+  }
+  function api(path, body) {
+    var opts = { headers: { "X-Admin-Key": KEY } };
+    if (body !== undefined) { opts.method = "POST"; opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+    return fetch("/admin/api" + path, opts).then(function (r) {
+      if (!r.ok) throw new Error("http " + r.status);
+      return r.json();
+    });
+  }
+
+  // ---- tabs --------------------------------------------------------------------------
+  var current = "dash";
+  document.querySelectorAll("nav button").forEach(function (b) {
+    b.addEventListener("click", function () { show(b.dataset.tab); });
+  });
+  function show(tab) {
+    current = tab;
+    document.querySelectorAll("nav button").forEach(function (b) { b.classList.toggle("on", b.dataset.tab === tab); });
+    document.querySelectorAll("section.tab").forEach(function (s) { s.classList.toggle("on", s.id === "tab-" + tab); });
+    if (tab === "rooms") loadRooms();
+    if (tab === "players") loadPlayers();
+    if (tab === "feedback") loadFeedback();
+    try { sessionStorage.setItem("teera-admin-tab", tab); } catch (e) {}
+  }
+
+  // ---- dashboard -----------------------------------------------------------------------
+  function card(value, label, sub) {
+    return '<div class="card kpi"><b>' + value + '</b><span>' + label + '</span>' + (sub ? '<small>' + sub + '</small>' : '') + '</div>';
+  }
+  var charts = {};
+  function chart(id, config) {
+    if (!window.Chart) return;
+    if (charts[id]) { charts[id].data = config.data; charts[id].update("none"); return; }
+    charts[id] = new Chart($(id), config);
+  }
+  if (window.Chart) {
+    Chart.defaults.color = "#a99577";
+    Chart.defaults.borderColor = "rgba(90,68,34,.35)";
+    Chart.defaults.font.family = 'system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif';
+  }
+  function drawOverview(o) {
+    var live = o.live, s = o.stats;
+    $("nowCards").innerHTML =
+      card(n(live.online), "فاتحين اللعبة") + card(n(live.playing), "لعبات ماشية") +
+      card(n(live.rooms), "غرف مفتوحة") + card(n(live.watchers), "يتفرجون") + card(n(live.peakToday), "أعلى عدد اليوم");
+    $("roomsCount").textContent = live.rooms ? "(" + live.rooms + ")" : "";
+    if (!s) {
+      $("todayCards").innerHTML = '<div class="empty">ماكو داتابيس مربوطة، فماكو أرقام محفوظة.</div>';
+      return;
+    }
+    $("todayCards").innerHTML =
+      card(n(s.openedToday), "فتحوا اللعبة") + card(n(s.playedToday), "لعبوا") + card(n(s.newToday), "جدد") +
+      card(n(s.matchesToday), "مباريات بدت", n(s.finishedToday) + " خلصت") + card(n(s.gamesToday), "گيمات") +
+      card(hours(s.minutesToday), "وقت اللعب") + card(n(s.remindersToday), "تذكيرات انرسلت");
+    $("allCards").innerHTML =
+      card(n(s.totalPlayers), "لاعب") + card(n(s.totalMatches), "مباراة") + card(n(s.totalGames), "گيم") +
+      card(n(s.averageMatchMinutes) + " د", "معدل المباراة") + card(n(s.reachable), "توصلهم الإشعارات") + card(n(s.tournaments), "بطولة");
+
+    var days = s.days || [];
+    chart("daysChart", {
+      type: "bar",
+      data: {
+        labels: days.map(function (d) { return d.day.slice(5); }),
+        datasets: [
+          { label: "فتحوا اللعبة", data: days.map(function (d) { return d.opened; }), backgroundColor: "#d9b166", borderRadius: 4 },
+          { label: "لعبوا", data: days.map(function (d) { return d.played; }), backgroundColor: "#8de8a8", borderRadius: 4 },
+          { label: "جدد", type: "line", data: days.map(function (d) { return d.newPlayers || 0; }), borderColor: "#8cc4ff", backgroundColor: "#8cc4ff", tension: .35, pointRadius: 3 },
+          { label: "ساعات لعب", type: "line", yAxisID: "h", data: days.map(function (d) { return +(d.minutes / 60).toFixed(1); }), borderColor: "#ff8f7a", borderDash: [4, 4], pointRadius: 0, tension: .35 }
+        ]
+      },
+      options: {
+        maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+        plugins: { legend: { position: "bottom", labels: { boxWidth: 10 } } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, h: { position: "left", beginAtZero: true, grid: { display: false }, title: { display: true, text: "ساعات" } } }
+      }
+    });
+    var hrs = s.hours && s.hours.length ? s.hours : new Array(24).fill(0);
+    chart("hoursChart", {
+      type: "bar",
+      data: { labels: hrs.map(function (_, i) { return i; }), datasets: [{ label: "مباريات", data: hrs, backgroundColor: "#d9b166", borderRadius: 3 }] },
+      options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+    var vs = Object.keys(s.versions || {}).map(function (k) { return [k, s.versions[k]]; }).sort(function (a, b) { return b[0] - a[0]; });
+    chart("versionsChart", {
+      type: "doughnut",
+      data: {
+        labels: vs.map(function (v) { return v[0] === "0" ? "قبل 1.4.1" : "build " + v[0]; }),
+        datasets: [{ data: vs.map(function (v) { return v[1]; }), backgroundColor: ["#d9b166", "#8de8a8", "#8cc4ff", "#ff8f7a", "#c9a0ff", "#a99577", "#6fd3c8"], borderColor: "#24170c" }]
+      },
+      options: { maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 10 } } } }
+    });
+    var top = s.topPlayers || [];
+    $("topTable").querySelector("tbody").innerHTML = top.length ? top.map(function (p, i) {
+      return "<tr><td>" + (i + 1) + "</td><td>" + esc(p.first) + "</td><td>" + n(p.second) + "</td></tr>";
+    }).join("") : '<tr><td colspan="3" class="empty">بعد ماكو</td></tr>';
+
+    // The settings form follows the server unless it is being edited.
+    if (!settingsDirty) {
+      $("remindersOn").checked = !!o.settings.remindersOn;
+      $("minVersion").value = o.settings.minAppVersion || 0;
+    }
+  }
+  function refresh() {
+    api("/overview").then(function (o) {
+      drawOverview(o);
+      $("pulse").classList.remove("off");
+      $("updated").textContent = "تحدّث " + new Date().toLocaleTimeString("ar-IQ-u-nu-latn", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      if (current === "rooms") loadRooms();
+    }).catch(function () {
+      $("pulse").classList.add("off");
+      $("updated").textContent = "ما وصلت للسيرفر";
+    });
+  }
+
+  // ---- rooms ---------------------------------------------------------------------------
+  var phases = { LOBBY: "بالغرفة", IN_PLAY: "يلعبون", RESCUE: "واحد گلى", TEERA_OFFER: "طيرة؟", REDEAL_OFFER: "خلط؟", GAME_OVER: "خلص الگيم", MATCH_OVER: "خلصت المباراة" };
+  function loadRooms() {
+    api("/rooms").then(function (rooms) {
+      $("roomList").innerHTML = rooms.length ? rooms.map(function (r) {
+        var tags = [
+          r.started ? '<span class="tag green">' + (phases[r.phase] || r.phase) + '</span>' : '<span class="tag">' + phases.LOBBY + '</span>',
+          r.bots ? '<span class="tag">' + r.bots + ' بوت</span>' : "",
+          r.watchers ? '<span class="tag blue">' + r.watchers + ' يتفرج</span>' : "",
+          r.listed ? '<span class="tag gold">تبين للكل</span>' : "",
+          r.locked ? '<span class="tag red">مقفولة</span>' : ""
+        ].join(" ");
+        var score = r.started ? " · " + r.scores.join(" – ") + " لـ " + r.target + " · گيم " + r.game : "";
+        return '<div class="item"><div class="row"><span class="t" dir="ltr">' + esc(r.code) + '</span>' + tags +
+          '<span class="spacer"></span><button class="btn" data-say="' + esc(r.code) + '">رسالة</button>' +
+          '<button class="btn red" data-close="' + esc(r.code) + '">سد</button></div>' +
+          '<div class="m">' + (r.players.length ? esc(r.players.join("، ")) : "بس بوتات") + score + ' · آخر حركة ' + ago(Date.now() - r.idleSeconds * 1000) + '</div></div>';
+      }).join("") : '<div class="empty">ماكو غرف مفتوحة هسه</div>';
+    }).catch(function () { $("roomList").innerHTML = '<div class="empty">ما وصلت للسيرفر</div>'; });
+  }
+  $("roomList").addEventListener("click", function (e) {
+    var say = e.target.dataset.say, close = e.target.dataset.close;
+    if (say) {
+      var text = prompt("رسالة للطاولة " + say + " (تبين بالچات باسم «الإدارة»):");
+      if (text && text.trim()) api("/rooms/" + say + "/say", { text: text.trim() }).then(function () { toast("وصلت"); });
+    }
+    if (close && confirm("تسد الطاولة " + close + "؟ اللي بيها يطلعون للقائمة.")) {
+      api("/rooms/" + close + "/close", {}).then(function () { toast("انسدت"); loadRooms(); refresh(); });
+    }
+  });
+
+  // ---- players -------------------------------------------------------------------------
+  var searchTimer;
+  $("playerSearch").addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(loadPlayers, 300); });
+  $("onlyBanned").addEventListener("change", loadPlayers);
+  function loadPlayers() {
+    var q = $("playerSearch").value.trim();
+    api("/players?q=" + encodeURIComponent(q)).then(function (rows) {
+      if ($("onlyBanned").checked) rows = rows.filter(function (p) { return p.banned; });
+      $("playerList").innerHTML = rows.length ? rows.map(function (p) {
+        var tags = [
+          p.banned ? '<span class="tag red">محظور' + (p.banReason ? ": " + esc(p.banReason) : "") + '</span>' : "",
+          p.reachable ? '<span class="tag blue">إشعارات</span>' : "",
+          p.appVersion ? '<span class="tag">build ' + p.appVersion + '</span>' : '<span class="tag">قديمة</span>'
+        ].join(" ");
+        var action = p.banned
+          ? '<button class="btn" data-unban="' + esc(p.id) + '">شيل الحظر</button>'
+          : '<button class="btn red" data-ban="' + esc(p.id) + '" data-name="' + esc(p.name) + '">احظر</button>';
+        return '<div class="item' + (p.banned ? " done" : "") + '"><div class="row"><span class="t">' + esc(p.name) + '</span>' +
+          '<span class="tag gold" dir="ltr">' + esc(p.code) + '</span>' + tags + '<span class="spacer"></span>' + action + '</div>' +
+          '<div class="m">' + n(p.matches) + ' مباراة · آخر مرة ' + ago(p.lastSeen) + ' · أول مرة ' + new Date(p.firstSeen).toLocaleDateString("ar-IQ-u-nu-latn") + '</div></div>';
+      }).join("") : '<div class="empty">ماكو أحد بهذا الاسم</div>';
+    }).catch(function () { $("playerList").innerHTML = '<div class="empty">ما وصلت للسيرفر</div>'; });
+  }
+  $("playerList").addEventListener("click", function (e) {
+    var ban = e.target.dataset.ban, unban = e.target.dataset.unban;
+    if (ban) {
+      var reason = prompt("ليش تحظر " + e.target.dataset.name + "؟ (يطلع من اللعب أونلاين فوراً)");
+      if (reason !== null) api("/players/" + encodeURIComponent(ban) + "/ban", { reason: reason.trim() }).then(function () { toast("انحظر"); loadPlayers(); });
+    }
+    if (unban) api("/players/" + encodeURIComponent(unban) + "/unban", {}).then(function () { toast("انشال الحظر"); loadPlayers(); });
+  });
+
+  // ---- feedback ------------------------------------------------------------------------
+  var feedFilter = "open", feed = [];
+  document.querySelectorAll("#feedChips button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      feedFilter = b.dataset.f;
+      document.querySelectorAll("#feedChips button").forEach(function (x) { x.classList.toggle("on", x === b); });
+      drawFeedback();
+    });
+  });
+  function loadFeedback() {
+    api("/feedback").then(function (items) { feed = items; drawFeedback(); })
+      .catch(function () { $("feedList").innerHTML = '<div class="empty">ما وصلت للسيرفر</div>'; });
+  }
+  function drawFeedback() {
+    var open = feed.filter(function (f) { return !f.done; }).length;
+    $("feedBadge").innerHTML = open ? '<span class="badge">' + open + '</span>' : "";
+    var shown = feed.filter(function (f) {
+      if (feedFilter === "open") return !f.done;
+      if (feedFilter === "done") return f.done;
+      if (feedFilter === "all") return true;
+      return f.kind === feedFilter;
+    });
+    $("feedList").innerHTML = shown.length ? shown.map(function (f) {
+      var kind = f.kind === "idea" ? '<span class="tag green">اقتراح</span>' : '<span class="tag red">مشكلة</span>';
+      return '<div class="item' + (f.done ? " done" : "") + '"><div class="row">' + kind + '<span class="t">' + esc(f.name) + '</span>' +
+        '<span class="m">' + ago(f.atEpochMs) + (f.appVersion ? " · build " + f.appVersion : "") + (f.roomCode ? ' · غرفة <span dir="ltr">' + esc(f.roomCode) + '</span>' : "") + '</span>' +
+        '<span class="spacer"></span>' +
+        (f.done ? '<button class="btn" data-undone="' + f.id + '">رجّعها</button>' : '<button class="btn gold" data-done="' + f.id + '">تم ✓</button>') +
+        '<button class="btn red" data-del="' + f.id + '">احذف</button></div>' +
+        '<div class="feedtext">' + esc(f.text) + '</div></div>';
+    }).join("") : '<div class="empty">' + (feedFilter === "open" ? "ماكو شي جديد 👌" : "ماكو شي هنا") + '</div>';
+  }
+  $("feedList").addEventListener("click", function (e) {
+    var d = e.target.dataset;
+    if (d.done) api("/feedback/" + d.done + "/done?done=true", {}).then(loadFeedback);
+    if (d.undone) api("/feedback/" + d.undone + "/done?done=false", {}).then(loadFeedback);
+    if (d.del && confirm("تحذفها؟")) api("/feedback/" + d.del + "/delete", {}).then(loadFeedback);
+  });
+
+  // ---- control -------------------------------------------------------------------------
+  var settingsDirty = false;
+  ["remindersOn", "minVersion"].forEach(function (id) { $(id).addEventListener("input", function () { settingsDirty = true; }); });
+  $("saveSettings").addEventListener("click", function () {
+    var body = { minAppVersion: parseInt($("minVersion").value || "0", 10) || 0, remindersOn: $("remindersOn").checked };
+    api("/settings", body).then(function () { settingsDirty = false; toast("انحفظ"); });
+  });
+  $("announceBtn").addEventListener("click", function () {
+    var text = $("announceText").value.trim();
+    if (!text) return;
+    api("/announce", { text: text }).then(function (r) { toast("وصلت لـ " + (r.reached || 0)); $("announceText").value = ""; });
+  });
+  $("pushBtn").addEventListener("click", function () {
+    var title = $("pushTitle").value.trim(), body = $("pushBody").value.trim();
+    if (!title || !body) { toast("اكتب العنوان والكلام"); return; }
+    if (!confirm("يوصل إشعار لكل الناس. متأكد؟")) return;
+    $("pushBtn").disabled = true;
+    api("/push", { title: title, body: body }).then(function (r) {
+      toast("انرسل لـ " + (r.reached || 0)); $("pushTitle").value = ""; $("pushBody").value = "";
+    }).finally(function () { $("pushBtn").disabled = false; });
+  });
+
+  // ---- start ---------------------------------------------------------------------------
+  if (INIT) drawOverview(INIT);
+  try { var saved = sessionStorage.getItem("teera-admin-tab"); if (saved && $("tab-" + saved)) show(saved); } catch (e) {}
+  if (KEY) {
+    loadFeedback();
+    setInterval(refresh, 10000);
+  }
+})();
+</script>
+</body>
+</html>

@@ -83,6 +83,8 @@ fun MenuScreen(
     onProfile: () -> Unit = {},
     onRejoin: (String) -> Unit = onJoin,
     onFriends: () -> Unit = {},
+    /** A problem or suggestion for the developer. */
+    onFeedback: ((kind: String, text: String) -> Unit)? = null,
     /** How many of this player's people have the app open, for the link's count. */
     friendsOnline: Int = 0,
     /** The list of games being played that anyone may watch, and how many there are. */
@@ -95,6 +97,7 @@ fun MenuScreen(
     var code by remember { mutableStateOf("") }
     var wifiOpen by remember { mutableStateOf(false) }
     var changelogOpen by remember { mutableStateOf(false) }
+    var feedbackOpen by remember { mutableStateOf(false) }
     var pickingLevel by remember { mutableStateOf(false) }
 
     CafeTable {
@@ -279,6 +282,10 @@ fun MenuScreen(
                     )
                     Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
                     SmallLink("شنو الجديد", { changelogOpen = true }, tag = "changelogLink")
+                    if (onFeedback != null) {
+                        Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 4.dp))
+                        SmallLink("بلّغ أو اقترح", { feedbackOpen = true }, tag = "feedbackLink")
+                    }
                 }
               }
             }
@@ -286,6 +293,7 @@ fun MenuScreen(
     }
 
     if (changelogOpen) ChangelogDialog(onClose = { changelogOpen = false })
+    if (feedbackOpen && onFeedback != null) FeedbackDialog(onSend = onFeedback, onClose = { feedbackOpen = false })
     if (pickingLevel) {
         LevelDialog(
             onPick = { level -> pickingLevel = false; onSolo(level) },

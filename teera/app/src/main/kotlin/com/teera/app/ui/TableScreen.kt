@@ -158,6 +158,7 @@ fun TableScreen(
     locked: Boolean = false,
     onKick: ((String) -> Unit)? = null,
     onSwap: ((seated: String, watcher: String) -> Unit)? = null,
+    onFeedback: ((kind: String, text: String) -> Unit)? = null,
     onLock: ((Boolean) -> Unit)? = null,
     /** Blocking, kept on this phone: who is blocked, and blocking or unblocking somebody. */
     blocked: Set<String> = emptySet(),
@@ -216,6 +217,8 @@ fun TableScreen(
     var askAlert by remember { mutableStateOf(false) }
     var askTarget by remember { mutableStateOf(false) }
     var picking by remember { mutableStateOf<PeopleAction?>(null) }
+    var feedbackOpen by remember { mutableStateOf(false) }
+    if (feedbackOpen && onFeedback != null) FeedbackDialog(onSend = onFeedback, onClose = { feedbackOpen = false })
 
     // The game ends with a moment, and only then the sums.
     val over = view.phase == Phase.GAME_OVER || view.phase == Phase.MATCH_OVER
@@ -272,6 +275,7 @@ fun TableScreen(
             },
             onProposeTarget?.takeIf { !view.spectating && !over && view.targetVote == null && view.targetChoices().isNotEmpty() }
                 ?.let { MenuOption("غيّر النقاط (هسه ${view.rules.target})") { askTarget = true } },
+            onFeedback?.let { MenuOption("بلّغ عن مشكلة أو اقترح") { feedbackOpen = true } },
         )
         ScoreRail(
             view, sound, onLeave = { if (over || view.spectating || standingIn) onLeave() else confirmLeave = true },

@@ -229,6 +229,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                     onProfile = viewModel::showProfile,
                     onRejoin = viewModel::rejoin,
                     onFriends = viewModel::showFriends,
+                    onFeedback = { kind, text -> viewModel.sendFeedback(kind, text) },
                     onLive = viewModel::showLive,
                     onRanking = viewModel::showRanking,
                     liveCount = state.liveGames.size,
@@ -384,6 +385,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
                         locked = state.room?.locked == true,
                         onKick = { id -> viewModel.kick(id) },
                         onSwap = { seated, watcher -> viewModel.swap(seated, watcher) },
+                        onFeedback = if (state.offline) null else { kind: String, text: String -> viewModel.sendFeedback(kind, text) },
                         onLock = { locked -> viewModel.setLocked(locked) },
                         blocked = state.blocked.keys,
                         onBlock = { id, name, block -> if (block) viewModel.block(id, name) else viewModel.unblock(id) },
@@ -419,6 +421,9 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel = viewModel()) {
             }
 
             // An invitation can arrive on any screen.
+            state.announcement?.let { words ->
+                com.teera.app.ui.AnnouncementDialog(words, onClose = viewModel::dismissAnnouncement)
+            }
             state.invite?.let { invite ->
                 com.teera.app.ui.InvitedDialog(invite, onAccept = viewModel::acceptInvite, onLater = viewModel::dismissInvite)
             }

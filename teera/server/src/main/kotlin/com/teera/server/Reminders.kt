@@ -25,6 +25,8 @@ class Reminders(
     private val pusher: Pusher,
     private val registry: RoomRegistry,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** The developer can stop them all from the page. */
+    private val switchedOn: () -> Boolean = { true },
 ) {
     /** The three windows, by hour of day: from, until (exclusive), in minutes since midnight. */
     private val slots = listOf(16 * 60 to 19 * 60, 19 * 60 to 22 * 60, 22 * 60 to 23 * 60 + 45)
@@ -38,6 +40,7 @@ class Reminders(
 
     /** One look at the clock: who is due a nudge now. */
     fun round(): Int {
+        if (!switchedOn()) return 0
         val now = clock()
         val time = ZonedDateTime.ofInstant(Instant.ofEpochMilli(now), SqlRecords.ZONE)
         val minute = time.hour * 60 + time.minute

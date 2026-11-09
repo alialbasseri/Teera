@@ -284,4 +284,38 @@ class RecordsTest {
         }
         assertNull(answer.record)
     }
+
+    @Test
+    fun `the developer's page keeps problems, bars and settings`() = runBlocking {
+        for ((which, books) in databases()) {
+            val stamp = UUID.randomUUID().toString().take(8)
+            books.playerSeen("p-$stamp", "Hassan $stamp", "", appVersion = 27)
+            books.saveFeedback(
+                com.teera.room.FeedbackItem("f-$stamp", "p-$stamp", "Hassan", "problem", "البول ما ركب", 27, "KHAN", atEpochMs = 1_000),
+            )
+            books.setBanned("p-$stamp", banned = true, reason = "تجربة")
+            books.saveSetting("minAppVersion-$stamp", "26")
+            books.saveSetting("minAppVersion-$stamp", "27")
+            books.flush()
+
+            val item = books.feedback().first { it.id == "f-$stamp" }
+            assertEquals("البول ما ركب" to "KHAN", item.text to item.roomCode, which)
+            books.setFeedbackDone("f-$stamp", true)
+            books.flush()
+            assertTrue(books.feedback().first { it.id == "f-$stamp" }.done, which)
+
+            val row = books.players("hassan $stamp").single()
+            assertEquals(27, row.appVersion, which)
+            assertTrue(row.banned, which)
+            assertEquals(row, books.players(row.code).single(), "found by the short code too ($which)")
+            assertEquals("تجربة", books.bannedPlayers()["p-$stamp"], which)
+            assertEquals("27", books.loadSettings()["minAppVersion-$stamp"], which)
+
+            books.setBanned("p-$stamp", banned = false)
+            books.deleteFeedback("f-$stamp")
+            books.flush()
+            assertTrue("p-$stamp" !in books.bannedPlayers().keys, which)
+            assertTrue(books.feedback().none { it.id == "f-$stamp" }, which)
+        }
+    }
 }

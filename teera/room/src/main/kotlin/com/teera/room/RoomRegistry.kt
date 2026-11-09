@@ -104,6 +104,9 @@ class RoomRegistry(
     fun size(): Int = rooms.size
 
     /** Drops rooms nobody has touched for [idleMillis]. */
+    /** Takes a room off the server at once (the developer closed it). */
+    fun remove(code: String): Holder? = rooms.remove(code.trim().uppercase())
+
     fun evictIdle(idleMillis: Long) {
         val cutoff = clock() - idleMillis
         rooms.entries.removeIf { (_, holder) ->

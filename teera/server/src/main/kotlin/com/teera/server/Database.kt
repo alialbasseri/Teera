@@ -13,6 +13,8 @@ import com.teera.core.Protocol
 import com.teera.core.Room
 import com.teera.core.teamOf
 import com.teera.room.AdminStats
+import com.teera.room.FeedbackItem
+import com.teera.room.PlayerRow
 import com.teera.room.DayStat
 import com.teera.room.Records
 import java.util.concurrent.ConcurrentHashMap
@@ -235,6 +237,11 @@ class SqlRecords(
             it.setString(1, dayOf(since))
             it.executeQuery().use { row -> while (row.next()) openedByDay[row.getString(1)] = row.getInt(2) }
         }
+        val newByDay = HashMap<String, Int>()
+        db.prepareStatement("SELECT first_seen FROM players WHERE first_seen >= ?").use {
+            it.setLong(1, since)
+            it.executeQuery().use { row -> while (row.next()) newByDay.merge(dayOf(row.getLong(1)), 1, Int::plus) }
+        }
         val days = (13 downTo 0).map { back ->
             val day = dayOf(now - back * 24L * 3600 * 1000)
             val ofDay = matches.filter { dayOf(it.started) == day }
@@ -245,7 +252,13 @@ class SqlRecords(
                 matches = ofDay.size,
                 games = gamesByDay[day] ?: 0,
                 minutes = ofDay.sumOf(::minutes),
+                newPlayers = newByDay[day] ?: 0,
             )
+        }
+        // Today's matches by the hour they started, Baghdad time.
+        val hours = IntArray(24)
+        matches.filter { dayOf(it.started) == today }.forEach {
+            hours[java.time.Instant.ofEpochMilli(it.started).atZone(ZONE).hour]++
         }
         val todays = days.last()
         val finished = matches.filter { it.ended != null }
@@ -282,7 +295,138 @@ class SqlRecords(
             reachable = count("SELECT COUNT(*) FROM players WHERE push_token IS NOT NULL AND (reminders_off IS NULL OR reminders_off = FALSE)"),
             remindersToday = count("SELECT COUNT(*) FROM reminders WHERE on_day = ?", today),
             tournaments = count("SELECT COUNT(*) FROM tournaments"),
+            hours = hours.toList(),
         )
+    }
+
+    // -- the developer's page: problems and suggestions, players, settings --------------
+
+    override fun saveFeedback(item: FeedbackItem) = write("feedback") { db ->
+        db.prepareStatement(
+            "INSERT INTO feedback (id, player_id, name, kind, body, app_version, room_code, at_ms, done) VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE)",
+        ).use {
+            it.setString(1, item.id); it.setString(2, item.playerId); it.setString(3, item.name.take(48))
+            it.setString(4, item.kind); it.setString(5, item.text); it.setInt(6, item.appVersion)
+            if (item.roomCode == null) it.setNull(7, Types.VARCHAR) else it.setString(7, item.roomCode)
+            it.setLong(8, item.atEpochMs)
+            it.executeUpdate()
+        }
+    }
+
+    override suspend fun feedback(limit: Int): List<FeedbackItem> = read(emptyList()) { db ->
+        db.prepareStatement(
+            "SELECT id, player_id, name, kind, body, app_version, room_code, at_ms, done FROM feedback ORDER BY at_ms DESC",
+        ).use {
+            it.maxRows = limit
+            it.executeQuery().use { row ->
+                buildList {
+                    while (row.next()) add(
+                        FeedbackItem(
+                            id = row.getString(1), playerId = row.getString(2), name = row.getString(3),
+                            kind = row.getString(4), text = row.getString(5), appVersion = row.getInt(6),
+                            roomCode = row.getString(7), atEpochMs = row.getLong(8), done = row.getBoolean(9),
+                        ),
+                    )
+                }
+            }
+        }
+    }
+
+    override fun setFeedbackDone(id: String, done: Boolean) = write("feedback done") { db ->
+        db.prepareStatement("UPDATE feedback SET done = ? WHERE id = ?").use {
+            it.setBoolean(1, done); it.setString(2, id)
+            it.executeUpdate()
+        }
+    }
+
+    override fun deleteFeedback(id: String) = write("feedback delete") { db ->
+        db.prepareStatement("DELETE FROM feedback WHERE id = ?").use {
+            it.setString(1, id)
+            it.executeUpdate()
+        }
+    }
+
+    override suspend fun players(query: String, limit: Int): List<PlayerRow> = read(emptyList()) { db ->
+        val all = db.prepareStatement(
+            """SELECT p.id, p.name, p.first_seen, p.last_seen, COALESCE(p.app_version, 0),
+                      CASE WHEN p.push_token IS NULL THEN 0 ELSE 1 END,
+                      CASE WHEN p.banned = TRUE THEN 1 ELSE 0 END, COALESCE(p.ban_reason, ''),
+                      (SELECT COUNT(*) FROM match_seats s WHERE s.player_id = p.id)
+               FROM players p ORDER BY p.last_seen DESC""",
+        ).use {
+            it.maxRows = 5_000
+            it.executeQuery().use { row ->
+                buildList {
+                    while (row.next()) add(
+                        PlayerRow(
+                            id = row.getString(1), code = com.teera.core.shortCodeOf(row.getString(1)), name = row.getString(2),
+                            firstSeen = row.getLong(3), lastSeen = row.getLong(4), appVersion = row.getInt(5),
+                            reachable = row.getInt(6) == 1, banned = row.getInt(7) == 1, banReason = row.getString(8),
+                            matches = row.getInt(9),
+                        ),
+                    )
+                }
+            }
+        }
+        val q = query.trim()
+        (if (q.isEmpty()) all else all.filter { it.name.contains(q, ignoreCase = true) || it.code.equals(q, ignoreCase = true) })
+            .take(limit)
+    }
+
+    override fun setBanned(playerId: String, banned: Boolean, reason: String) = write("ban") { db ->
+        val updated = db.prepareStatement("UPDATE players SET banned = ?, ban_reason = ? WHERE id = ?").use {
+            it.setBoolean(1, banned); it.setString(2, reason.take(200)); it.setString(3, playerId)
+            it.executeUpdate()
+        }
+        if (updated == 0 && banned) {
+            // Barred before the books ever saw them: keep a row so the bar survives a restart.
+            val now = clock()
+            db.prepareStatement("INSERT INTO players (id, name, avatar, first_seen, last_seen, banned, ban_reason) VALUES (?, '', '', ?, ?, TRUE, ?)").use {
+                it.setString(1, playerId); it.setLong(2, now); it.setLong(3, now); it.setString(4, reason.take(200))
+                it.executeUpdate()
+            }
+        }
+    }
+
+    override suspend fun bannedPlayers(): Map<String, String> = read(emptyMap()) { db ->
+        db.prepareStatement("SELECT id, COALESCE(ban_reason, '') FROM players WHERE banned = TRUE").use {
+            it.executeQuery().use { row -> buildMap { while (row.next()) put(row.getString(1), row.getString(2)) } }
+        }
+    }
+
+    override suspend fun loadSettings(): Map<String, String> = read(emptyMap()) { db ->
+        db.prepareStatement("SELECT setting, content FROM settings").use {
+            it.executeQuery().use { row -> buildMap { while (row.next()) put(row.getString(1), row.getString(2)) } }
+        }
+    }
+
+    override fun saveSetting(key: String, value: String) = write("setting") { db ->
+        val updated = db.prepareStatement("UPDATE settings SET content = ? WHERE setting = ?").use {
+            it.setString(1, value); it.setString(2, key)
+            it.executeUpdate()
+        }
+        if (updated == 0) {
+            db.prepareStatement("INSERT INTO settings (setting, content) VALUES (?, ?)").use {
+                it.setString(1, key); it.setString(2, value)
+                it.executeUpdate()
+            }
+        }
+    }
+
+    override suspend fun pushable(): List<String> = read(emptyList()) { db ->
+        db.prepareStatement("SELECT id FROM players WHERE push_token IS NOT NULL").use {
+            it.executeQuery().use { row -> buildList { while (row.next()) add(row.getString(1)) } }
+        }
+    }
+
+    /** A read for the developer's page: off the game's threads, and empty rather than failing. */
+    private suspend fun <T> read(fallback: T, block: (Connection) -> T): T = withContext(Dispatchers.IO) {
+        try {
+            withConnection(block)
+        } catch (e: Exception) {
+            log.warn("could not read for the page: {}", e.message)
+            fallback
+        }
     }
 
     override fun happened(matchId: String, roomCode: String, happening: Room.Happening) = when (happening) {
@@ -791,6 +935,25 @@ class SqlRecords(
                 sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS push_token VARCHAR(512)")
                 sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS app_version INT")
                 sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS reminders_off BOOLEAN")
+                sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS banned BOOLEAN")
+                sql.execute("ALTER TABLE players ADD COLUMN IF NOT EXISTS ban_reason VARCHAR(200)")
+                sql.execute(
+                    """CREATE TABLE IF NOT EXISTS feedback (
+                        id VARCHAR(36) PRIMARY KEY,
+                        player_id VARCHAR(64) NOT NULL,
+                        name VARCHAR(48) NOT NULL,
+                        kind VARCHAR(16) NOT NULL,
+                        body TEXT NOT NULL,
+                        app_version INT NOT NULL,
+                        room_code VARCHAR(8),
+                        at_ms BIGINT NOT NULL,
+                        done BOOLEAN NOT NULL DEFAULT FALSE)""",
+                )
+                sql.execute(
+                    """CREATE TABLE IF NOT EXISTS settings (
+                        setting VARCHAR(40) PRIMARY KEY,
+                        content TEXT NOT NULL)""",
+                )
                 sql.execute(
                     """CREATE TABLE IF NOT EXISTS visits (
                         player_id VARCHAR(64) NOT NULL,

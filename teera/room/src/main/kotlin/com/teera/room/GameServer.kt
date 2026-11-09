@@ -59,6 +59,8 @@ fun Application.gameServer(
     pusher: Pusher = Pusher.NONE,
     /** The password to the developer's page (/admin?key=…); none, and the page does not exist. */
     adminKey: String? = null,
+    /** Who is barred and what the developer set; loaded from the books by the caller. */
+    admin: AdminState = AdminState(),
 ) {
     val tournaments = Tournaments(records)
     // The most people with the app open at once today, for the developer's page.
@@ -166,16 +168,14 @@ fun Application.gameServer(
                 call.respondText(adminGatePage(gate), ContentType.Text.Html, status)
                 return@get
             }
-            val holders = registry.all()
-            val live = LiveNow(
-                online = registry.online.size,
-                rooms = holders.size,
-                playing = holders.count { h -> h.room.game?.let { it.phase != Phase.MATCH_OVER } == true },
-                watchers = holders.sumOf { it.room.info().spectators.size },
-                peakToday = peak,
+            call.respondText(
+                adminPage(AdminOverview(liveNow(registry, peak), records.adminStats(), admin.settings)),
+                ContentType.Text.Html,
             )
-            call.respondText(adminPage(live, records.adminStats()), ContentType.Text.Html)
         }
+
+        // The page's controls; they answer only with the password.
+        adminApi(AdminContext(registry, records, pusher, admin, adminKey?.trim().orEmpty(), peak = { peak }))
 
         get("/rooms") {
             val open = registry.all().filter { !it.room.isStarted }.map { it.room.code }
@@ -193,6 +193,9 @@ fun Application.gameServer(
             var holder: RoomRegistry.Holder? = null
             // An app too old to show the update window: it may say hello, but not sit at a table.
             var tooOld = false
+            var appVersion = 0
+            // Problems and suggestions sent recently, so one phone cannot flood the inbox.
+            val feedbackSent = ArrayDeque<Long>()
 
             suspend fun fail(code: ErrorCode, message: String) =
                 send(Protocol.encode(ServerMessage.Failure(code, message)))
@@ -250,6 +253,12 @@ fun Application.gameServer(
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
                             tooOld = message.appVersion < OLDEST_PLAYABLE_APP
+                            appVersion = message.appVersion
+                            if (admin.isBanned(playerId)) {
+                                fail(ErrorCode.INTERNAL, BANNED_WORDS)
+                                close(CloseReason(CloseReason.Codes.NORMAL, "banned"))
+                                return@consumeEach
+                            }
                             registry.arrived(playerId!!, name, avatar, this)
                             records.playerSeen(playerId!!, name, avatar, message.appVersion)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
@@ -260,7 +269,7 @@ fun Application.gameServer(
                                 message.appVersion < LatestApp.code -> trySend(
                                     ServerMessage.UpdateAvailable(
                                         LatestApp.code, LatestApp.name, APK_URL,
-                                        required = message.appVersion < LatestApp.minimum,
+                                        required = message.appVersion < admin.minimumApp(),
                                     ),
                                 )
                             }
@@ -320,6 +329,31 @@ fun Application.gameServer(
                                 else ServerMessage.PlayerFound(message.shortCode.uppercase(), found.first, found.second.name, found.second.avatar),
                             )
                         }
+                        is ClientMessage.Feedback -> {
+                            val now = System.currentTimeMillis()
+                            while (feedbackSent.isNotEmpty() && now - feedbackSent.first() > FEEDBACK_WINDOW_MS) feedbackSent.removeFirst()
+                            val text = message.text.trim().take(MAX_FEEDBACK_CHARS)
+                            val kind = if (message.kind == "idea") "idea" else "problem"
+                            if (text.length < 2 || feedbackSent.size >= MAX_FEEDBACK_PER_WINDOW) {
+                                trySend(ServerMessage.FeedbackReceived(ok = false))
+                                return@consumeEach
+                            }
+                            feedbackSent.addLast(now)
+                            records.saveFeedback(
+                                FeedbackItem(
+                                    id = UUID.randomUUID().toString(),
+                                    playerId = me!!,
+                                    name = name,
+                                    kind = kind,
+                                    text = text,
+                                    appVersion = appVersion,
+                                    roomCode = message.roomCode?.take(8),
+                                    atEpochMs = now,
+                                ),
+                            )
+                            trySend(ServerMessage.FeedbackReceived(ok = true))
+                        }
+
                         is ClientMessage.Invite -> {
                             val target = registry.online[message.playerId]
                             val code = message.code.uppercase().filter(Char::isLetterOrDigit).take(8)
@@ -439,6 +473,11 @@ fun Application.gameServer(
 /** A player's own picture: a small JPEG, base64. About 12 KB is what the app sends. */
 private const val MAX_PHOTO_CHARS = 48_000
 
+/** A phone may send this many problems or suggestions in [FEEDBACK_WINDOW_MS]. */
+private const val MAX_FEEDBACK_PER_WINDOW = 5
+private const val FEEDBACK_WINDOW_MS = 10 * 60 * 1000L
+private const val MAX_FEEDBACK_CHARS = 1_500
+
 /**
  * Pictures go round once, not with every view: a newcomer gets everyone else's, and
  * everyone else gets theirs.
@@ -532,7 +571,8 @@ private fun handleInRoom(holder: RoomRegistry.Holder, playerId: String, message:
         is ClientMessage.WhoIsOnline, is ClientMessage.FindPlayer, is ClientMessage.Invite,
         ClientMessage.MyRecord, ClientMessage.ListLiveGames, ClientMessage.AskLeaderboard,
         is ClientMessage.AskMatch, is ClientMessage.PushToken, is ClientMessage.Reminders, is ClientMessage.CreateTournament,
-        is ClientMessage.AskTournament, is ClientMessage.PlayTournamentMatch, is ClientMessage.SetTournamentWinner -> null
+        is ClientMessage.AskTournament, is ClientMessage.PlayTournamentMatch, is ClientMessage.SetTournamentWinner,
+        is ClientMessage.Feedback -> null
     }
 }
 
@@ -570,7 +610,7 @@ private suspend fun publish(holder: RoomRegistry.Holder, output: Room.Output, re
 }
 
 /** A dead socket must never take a room down with it. */
-private suspend fun WebSocketSession.trySend(message: ServerMessage) {
+internal suspend fun WebSocketSession.trySend(message: ServerMessage) {
     try {
         send(Protocol.encode(message))
     } catch (e: CancellationException) {
