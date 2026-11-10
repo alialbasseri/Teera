@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-public enum ConnectionState {
+public enum ConnectionState: Equatable {
     case disconnected
     case connecting
     case connected

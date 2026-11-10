@@ -24,6 +24,7 @@ public enum Felt {
     public static let brass = Color(hex: 0xD9B166)
     public static let brassDim = Color(hex: 0x8A6A2A)
     public static let muted = Color(hex: 0xA79274)
+    public static let lapis = Color(hex: 0x16355F)
 
     // Ivory bone tones
     public static let ivory = Color(hex: 0xFBF6EC)
