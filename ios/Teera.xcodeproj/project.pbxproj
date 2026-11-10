@@ -1,0 +1,393 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000012900000100000001 /* TeeraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000001 /* TeeraApp.swift */; };
+		A10000012900000100000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000002 /* ContentView.swift */; };
+		A10000012900000100000003 /* Domino.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000003 /* Domino.swift */; };
+		A10000012900000100000004 /* Rules.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000004 /* Rules.swift */; };
+		A10000012900000100000005 /* Board.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000005 /* Board.swift */; };
+		A10000012900000100000006 /* GameState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000006 /* GameState.swift */; };
+		A10000012900000100000007 /* Protocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000007 /* Protocol.swift */; };
+		A10000012900000100000008 /* Engine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000008 /* Engine.swift */; };
+		A10000012900000100000009 /* WebSocketClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000009 /* WebSocketClient.swift */; };
+		A10000012900000100000010 /* SoundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000010 /* SoundManager.swift */; };
+		A10000012900000100000011 /* TileArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000011 /* TileArt.swift */; };
+		A10000012900000100000012 /* FeltTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000012 /* FeltTheme.swift */; };
+		A10000012900000100000013 /* DominoTileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000013 /* DominoTileView.swift */; };
+		A10000012900000100000014 /* BoardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000014 /* BoardView.swift */; };
+		A10000012900000100000015 /* HandView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000015 /* HandView.swift */; };
+		A10000012900000100000016 /* SeatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000016 /* SeatsView.swift */; };
+		A10000012900000100000017 /* TableScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000017 /* TableScreen.swift */; };
+		A10000012900000100000018 /* LobbyView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000018 /* LobbyView.swift */; };
+		A10000012900000100000019 /* RulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000019 /* RulesView.swift */; };
+		A10000012900000100000020 /* MenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000020 /* MenuView.swift */; };
+		A10000012900000100000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000021 /* Assets.xcassets */; };
+		A10000012900000100000022 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000022 /* Resources */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A10000032900000100000001 /* Teera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Teera.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000022900000100000001 /* TeeraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeeraApp.swift; sourceTree = "<group>"; };
+		A10000022900000100000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A10000022900000100000003 /* Domino.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Domino.swift; sourceTree = "<group>"; };
+		A10000022900000100000004 /* Rules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Rules.swift; sourceTree = "<group>"; };
+		A10000022900000100000005 /* Board.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Board.swift; sourceTree = "<group>"; };
+		A10000022900000100000006 /* GameState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameState.swift; sourceTree = "<group>"; };
+		A10000022900000100000007 /* Protocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Protocol.swift; sourceTree = "<group>"; };
+		A10000022900000100000008 /* Engine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Engine.swift; sourceTree = "<group>"; };
+		A10000022900000100000009 /* WebSocketClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketClient.swift; sourceTree = "<group>"; };
+		A10000022900000100000010 /* SoundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundManager.swift; sourceTree = "<group>"; };
+		A10000022900000100000011 /* TileArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TileArt.swift; sourceTree = "<group>"; };
+		A10000022900000100000012 /* FeltTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeltTheme.swift; sourceTree = "<group>"; };
+		A10000022900000100000013 /* DominoTileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DominoTileView.swift; sourceTree = "<group>"; };
+		A10000022900000100000014 /* BoardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoardView.swift; sourceTree = "<group>"; };
+		A10000022900000100000015 /* HandView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HandView.swift; sourceTree = "<group>"; };
+		A10000022900000100000016 /* SeatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeatsView.swift; sourceTree = "<group>"; };
+		A10000022900000100000017 /* TableScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TableScreen.swift; sourceTree = "<group>"; };
+		A10000022900000100000018 /* LobbyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LobbyView.swift; sourceTree = "<group>"; };
+		A10000022900000100000019 /* RulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RulesView.swift; sourceTree = "<group>"; };
+		A10000022900000100000020 /* MenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuView.swift; sourceTree = "<group>"; };
+		A10000022900000100000021 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A10000022900000100000022 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		A10000022900000100000023 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A10000042900000100000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A10000052900000100000001 = {
+			isa = PBXGroup;
+			children = (
+				A10000062900000100000001 /* Teera */,
+				A10000072900000100000001 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A10000062900000100000001 /* Teera */ = {
+			isa = PBXGroup;
+			children = (
+				A10000082900000100000001 /* App */,
+				A10000082900000100000002 /* Models */,
+				A10000082900000100000003 /* Engine */,
+				A10000082900000100000004 /* Network */,
+				A10000082900000100000005 /* Audio */,
+				A10000082900000100000006 /* Theme */,
+				A10000082900000100000007 /* Views */,
+				A10000022900000100000021 /* Assets.xcassets */,
+				A10000022900000100000022 /* Resources */,
+			);
+			path = Teera;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000001 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000001 /* TeeraApp.swift */,
+				A10000022900000100000023 /* Info.plist */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000002 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000003 /* Domino.swift */,
+				A10000022900000100000004 /* Rules.swift */,
+				A10000022900000100000005 /* Board.swift */,
+				A10000022900000100000006 /* GameState.swift */,
+				A10000022900000100000007 /* Protocol.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000003 /* Engine */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000008 /* Engine.swift */,
+			);
+			path = Engine;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000004 /* Network */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000009 /* WebSocketClient.swift */,
+			);
+			path = Network;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000005 /* Audio */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000010 /* SoundManager.swift */,
+			);
+			path = Audio;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000006 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000011 /* TileArt.swift */,
+				A10000022900000100000012 /* FeltTheme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		A10000082900000100000007 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A10000022900000100000002 /* ContentView.swift */,
+				A10000022900000100000013 /* DominoTileView.swift */,
+				A10000022900000100000014 /* BoardView.swift */,
+				A10000022900000100000015 /* HandView.swift */,
+				A10000022900000100000016 /* SeatsView.swift */,
+				A10000022900000100000017 /* TableScreen.swift */,
+				A10000022900000100000018 /* LobbyView.swift */,
+				A10000022900000100000019 /* RulesView.swift */,
+				A10000022900000100000020 /* MenuView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		A10000072900000100000001 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A10000032900000100000001 /* Teera.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A10000092900000100000001 /* Teera */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000102900000100000001 /* Build configuration list for PBXNativeTarget "Teera" */;
+			buildPhases = (
+				A10000112900000100000001 /* Sources */,
+				A10000042900000100000001 /* Frameworks */,
+				A10000122900000100000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Teera;
+			productName = Teera;
+			productReference = A10000032900000100000001 /* Teera.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A10000132900000100000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A10000092900000100000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A10000142900000100000001 /* Build configuration list for PBXProject "Teera" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = ar;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				ar,
+				Base,
+			);
+			mainGroup = A10000052900000100000001;
+			productRefGroup = A10000072900000100000001 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A10000092900000100000001 /* Teera */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A10000122900000100000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000012900000100000021 /* Assets.xcassets in Resources */,
+				A10000012900000100000022 /* Resources in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A10000112900000100000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000012900000100000001 /* TeeraApp.swift in Sources */,
+				A10000012900000100000002 /* ContentView.swift in Sources */,
+				A10000012900000100000003 /* Domino.swift in Sources */,
+				A10000012900000100000004 /* Rules.swift in Sources */,
+				A10000012900000100000005 /* Board.swift in Sources */,
+				A10000012900000100000006 /* GameState.swift in Sources */,
+				A10000012900000100000007 /* Protocol.swift in Sources */,
+				A10000012900000100000008 /* Engine.swift in Sources */,
+				A10000012900000100000009 /* WebSocketClient.swift in Sources */,
+				A10000012900000100000010 /* SoundManager.swift in Sources */,
+				A10000012900000100000011 /* TileArt.swift in Sources */,
+				A10000012900000100000012 /* FeltTheme.swift in Sources */,
+				A10000012900000100000013 /* DominoTileView.swift in Sources */,
+				A10000012900000100000014 /* BoardView.swift in Sources */,
+				A10000012900000100000015 /* HandView.swift in Sources */,
+				A10000012900000100000016 /* SeatsView.swift in Sources */,
+				A10000012900000100000017 /* TableScreen.swift in Sources */,
+				A10000012900000100000018 /* LobbyView.swift in Sources */,
+				A10000012900000100000019 /* RulesView.swift in Sources */,
+				A10000012900000100000020 /* MenuView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A10000152900000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A10000152900000100000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A10000162900000100000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Teera/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.teera.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000162900000100000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Teera/App/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.teera.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A10000142900000100000001 /* Build configuration list for PBXProject "Teera" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000152900000100000001 /* Debug */,
+				A10000152900000100000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A10000102900000100000001 /* Build configuration list for PBXNativeTarget "Teera" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000162900000100000001 /* Debug */,
+				A10000162900000100000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = A10000132900000100000001 /* Project object */;
+}
