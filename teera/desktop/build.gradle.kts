@@ -74,6 +74,8 @@ tasks.test {
     // No friends list, invitations or tutorial in tests: nothing reaches the real server.
     systemProperty("teera.noPresence", "true")
     systemProperty("teera.live", (project.findProperty("teera.live") != null).toString())
+    systemProperty("teera.icon", project.findProperty("teera.icon")?.toString() ?: "")
+    systemProperty("teera.res", rootProject.file("app/src/main/res").absolutePath)
     systemProperty("teera.shots", layout.buildDirectory.dir("shots").get().asFile.absolutePath)
     testLogging { events("passed", "failed", "skipped"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
