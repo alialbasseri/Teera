@@ -117,9 +117,12 @@ inline fun <T> Lock.locked(block: () -> T): T {
 @Composable
 fun BackPress(enabled: Boolean, onBack: () -> Unit) = Unit
 
-/** A file shipped in the app, under Resources/ in the Xcode project. */
+/**
+ * A file shipped in the app, under GameFiles/ in the Xcode project. (Not "Resources": iOS
+ * takes a folder of that name at the top of an app for a Mac-style bundle and cannot read it.)
+ */
 fun bundled(folder: String, name: String, type: String): ByteArray? {
-    val path = NSBundle.mainBundle.pathForResource(name, ofType = type, inDirectory = "Resources/$folder")
+    val path = NSBundle.mainBundle.pathForResource(name, ofType = type, inDirectory = "GameFiles/$folder")
         ?: return null
     return NSData.dataWithContentsOfFile(path)?.toByteArray()
 }

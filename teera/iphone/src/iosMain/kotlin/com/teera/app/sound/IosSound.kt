@@ -19,7 +19,7 @@ enum class Cue {
 enum class Mood { CALM, TENSE }
 
 /**
- * Plays the game on an iPhone: the phone's own sounds (as .m4a, in Resources/Sounds of the
+ * Plays the game on an iPhone: the phone's own sounds (as .m4a, in GameFiles/Sounds of the
  * Xcode project), and spoken lines in the iPhone's Arabic voice. The app's audio session
  * mixes with the player's own music (TeeraApp.swift).
  */
@@ -52,7 +52,7 @@ class SoundEngine(private val prefs: IosPrefs) {
     private val playing = ArrayDeque<AVAudioPlayer>()
 
     private fun player(name: String): AVAudioPlayer? {
-        val path = NSBundle.mainBundle.pathForResource(name, ofType = "m4a", inDirectory = "Resources/Sounds") ?: return null
+        val path = NSBundle.mainBundle.pathForResource(name, ofType = "m4a", inDirectory = "GameFiles/Sounds") ?: return null
         return AVAudioPlayer(contentsOfURL = NSURL.fileURLWithPath(path), error = null)
     }
 

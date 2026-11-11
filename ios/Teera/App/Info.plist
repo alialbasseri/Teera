@@ -46,10 +46,10 @@
 	</dict>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Resources/Fonts/aref_ruqaa_bold.ttf</string>
-		<string>Resources/Fonts/aref_ruqaa_regular.ttf</string>
-		<string>Resources/Fonts/el_messiri_bold.ttf</string>
-		<string>Resources/Fonts/el_messiri_medium.ttf</string>
+		<string>GameFiles/Fonts/aref_ruqaa_bold.ttf</string>
+		<string>GameFiles/Fonts/aref_ruqaa_regular.ttf</string>
+		<string>GameFiles/Fonts/el_messiri_bold.ttf</string>
+		<string>GameFiles/Fonts/el_messiri_medium.ttf</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>

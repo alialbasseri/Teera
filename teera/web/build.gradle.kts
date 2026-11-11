@@ -60,7 +60,7 @@ kotlin {
 tasks.named<ProcessResources>("wasmJsProcessResources") {
     from(rootProject.file("app/src/main/res/drawable-nodpi")) { into("faces"); include("face_*.png") }
     from(rootProject.file("app/src/main/res/font")) { into("fonts"); include("el_messiri_*.ttf", "aref_ruqaa_*.ttf") }
-    from(rootProject.file("../ios/Teera/Resources/Sounds")) { into("sounds") }
+    from(rootProject.file("../ios/Teera/GameFiles/Sounds")) { into("sounds") }
     from(rootProject.file("room/src/main/resources/site/icon.png"))
 }
 

@@ -9,14 +9,14 @@
 /* Begin PBXBuildFile section */
 		A10000012900000100000001 /* TeeraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000001 /* TeeraApp.swift */; };
 		A10000012900000100000021 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000021 /* Assets.xcassets */; };
-		A10000012900000100000022 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000022 /* Resources */; };
+		A10000012900000100000022 /* GameFiles in Resources */ = {isa = PBXBuildFile; fileRef = A10000022900000100000022 /* GameFiles */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A10000032900000100000001 /* Teera.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Teera.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000022900000100000001 /* TeeraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TeeraApp.swift; sourceTree = "<group>"; };
 		A10000022900000100000021 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A10000022900000100000022 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		A10000022900000100000022 /* GameFiles */ = {isa = PBXFileReference; lastKnownFileType = folder; path = GameFiles; sourceTree = "<group>"; };
 		A10000022900000100000023 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -44,7 +44,7 @@
 			children = (
 				A10000082900000100000001 /* App */,
 				A10000022900000100000021 /* Assets.xcassets */,
-				A10000022900000100000022 /* Resources */,
+				A10000022900000100000022 /* GameFiles */,
 			);
 			path = Teera;
 			sourceTree = "<group>";
@@ -126,7 +126,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000012900000100000021 /* Assets.xcassets in Resources */,
-				A10000012900000100000022 /* Resources in Resources */,
+				A10000012900000100000022 /* GameFiles in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
