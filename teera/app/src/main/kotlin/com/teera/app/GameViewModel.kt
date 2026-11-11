@@ -193,7 +193,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     // Read from the microphone's thread as well as the main one.
-    @kotlin.concurrent.Volatile
+    @SharedVolatile
     private var client: GameClient? = null
     private var pump: Job? = null
     private var linkWatch: Job? = null

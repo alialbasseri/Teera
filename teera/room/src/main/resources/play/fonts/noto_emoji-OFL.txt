@@ -1,0 +1,6 @@
+Noto Emoji (noto_emoji.ttf), Copyright 2013 Google LLC.
+Licensed under the SIL Open Font License, Version 1.1: https://openfontlicense.org
+Used unmodified to draw emoji in the browser version of Teera.
+
+symbols_a.ttf, symbols_b.ttf, symbols_c.ttf: the few symbols the game's words use (check marks, the pencil,
+arrows, ⋮), cut from Noto Sans Symbols 2, Noto Sans Symbols and Noto Sans Math (Google LLC), under the same licence.

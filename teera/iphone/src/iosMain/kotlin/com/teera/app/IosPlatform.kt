@@ -70,7 +70,17 @@ object AppInfo {
     const val VERSION_NAME = "1.0.0"
     const val SERVER_URL = "wss://teera-xfvr.onrender.com/ws"
     const val PLATFORM = "ios"
+
+    /** Whether this app can play a table on the Wi-Fi (the menu's «وايفاي»). */
+    const val HAS_WIFI = true
 }
+
+/** Shared state read from more than one thread. */
+typealias SharedVolatile = kotlin.concurrent.Volatile
+
+/** The iPhone's voice touches its packets under its own lock (IosVoice.kt). */
+@Target(AnnotationTarget.FUNCTION)
+annotation class SharedSynchronized
 
 fun nowMillis(): Long = (NSDate().timeIntervalSince1970 * 1000).toLong()
 

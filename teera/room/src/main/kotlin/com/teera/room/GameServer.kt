@@ -271,10 +271,11 @@ fun Application.gameServer(
                             }
                             registry.arrived(playerId!!, name, avatar, this)
                             // The books keep each platform's builds apart: 10000+n is iOS build n,
-                            // 20000+n Windows build n.
+                            // 20000+n Windows build n, 30000+n the web's.
                             val booked = when (message.platform) {
                                 "ios" -> IOS_BUILD_BASE + message.appVersion
                                 "windows" -> WINDOWS_BUILD_BASE + message.appVersion
+                                "web" -> WEB_BUILD_BASE + message.appVersion
                                 else -> message.appVersion
                             }
                             records.playerSeen(playerId!!, name, avatar, booked)
@@ -543,6 +544,9 @@ const val IOS_BUILD_BASE = 10_000
 
 /** Windows builds likewise. */
 const val WINDOWS_BUILD_BASE = 20_000
+
+/** The browser version (/play) likewise. */
+const val WEB_BUILD_BASE = 30_000
 
 /** The first app build that can ask to come into a room from the list. */
 const val ASK_TO_JOIN_APP = 28

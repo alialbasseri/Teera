@@ -19,6 +19,7 @@ import io.ktor.server.routing.get
  * button hands the code to the app instead.
  */
 fun Route.roomLinks(live: () -> LiveCount = { LiveCount(0, 0) }) {
+    webApp()
     get("/.well-known/assetlinks.json") {
         call.respondText(ASSET_LINKS, ContentType.Application.Json)
     }
@@ -92,6 +93,8 @@ private fun joinPage(code: String): String {
   .code{font-size:56px;letter-spacing:6px;color:#d9b166;font-weight:800;margin:8px 0 18px;direction:ltr}
   a.go{display:block;padding:16px;border-radius:16px;font-size:20px;font-weight:700;text-decoration:none;
        color:#14110c;background:linear-gradient(#f0d79a,#d9b166,#a67c2e)}
+  a.web{display:block;margin-top:12px;padding:12px;border-radius:14px;font-size:16px;text-decoration:none;
+       color:#f0d79a;border:1px solid #d9b166}
   p{color:#a79274;line-height:1.7}
 </style>
 </head>
@@ -99,11 +102,23 @@ private fun joinPage(code: String): String {
 <div class="card">
   <p>جماعتك يعزمونك على الطاولة</p>
   <div class="code">$code</div>
-  <a class="go" href="$intent">ادخل الغرفة</a>
-  <p>إذا ما انفتح التطبيق: افتحه، ودوس «العب ويا جماعتك»، واكتب الكود.</p>
+  <a class="go" id="go" href="$intent">ادخل الغرفة</a>
+  <a class="web" id="web" href="/play/?room=$code">🌐 العب من المتصفح، بدون تنزيل</a>
+  <p id="how">إذا ما انفتح التطبيق: افتحه، ودوس «العب ويا جماعتك»، واكتب الكود.</p>
   <p><a href="/download" style="color:#d9b166">ما عندك اللعبة؟ نزّلها من هنا</a></p>
 </div>
-<script>setTimeout(function(){location.href="$intent"},300)</script>
+<script>
+// Android opens the app straight into the room. Anywhere else (iPhone, a computer) the
+// browser is the quickest way in, so it becomes the main button.
+if (/Android/.test(navigator.userAgent)) {
+  setTimeout(function(){location.href="$intent"},300)
+} else {
+  var go = document.getElementById("go"), web = document.getElementById("web");
+  go.href = web.href; go.textContent = "ادخل الغرفة من المتصفح";
+  web.href = "/ios"; web.textContent = "عندك آيفون؟ شلون تنصّب اللعبة";
+  document.getElementById("how").textContent = "إذا عندك اللعبة: افتحها، ودوس «العب ويا جماعتك»، واكتب الكود.";
+}
+</script>
 </body>
 </html>"""
 }

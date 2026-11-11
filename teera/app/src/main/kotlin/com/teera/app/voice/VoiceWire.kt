@@ -1,6 +1,6 @@
 package com.teera.app.voice
 
-import kotlin.jvm.Synchronized
+import com.teera.app.SharedSynchronized
 import kotlin.math.max
 import kotlin.math.sqrt
 
@@ -93,7 +93,7 @@ class Inbox(private val keep: Int = 6, private val forgetAfterMillis: Long = 1_5
     private var lastPlayed: Int? = null
     private var lastHeardAt = Long.MIN_VALUE / 2
 
-    @Synchronized
+    @SharedSynchronized
     fun offer(seq: Int, samples: ShortArray, now: Long) {
         // After a pause the sender may have started counting again (a restarted app);
         // the order only matters within one stretch of talking.
@@ -107,10 +107,10 @@ class Inbox(private val keep: Int = 6, private val forgetAfterMillis: Long = 1_5
         while (waiting.size > keep) waiting.removeAt(0)
     }
 
-    @Synchronized
+    @SharedSynchronized
     fun size(): Int = waiting.size
 
-    @Synchronized
+    @SharedSynchronized
     fun take(): ShortArray? {
         if (waiting.isEmpty()) return null
         val (seq, samples) = waiting.removeAt(0)

@@ -15,6 +15,7 @@ import com.teera.core.ServerMessage
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.call.body
 import io.ktor.server.testing.testApplication
@@ -663,6 +664,24 @@ class RoomLinkTest {
         assertEquals(com.teera.room.IOS_URL, noFollow.get("/ios.ipa").headers["Location"])
         val ios = client.get("/ios").bodyAsText()
         assertTrue("Sideloadly" in ios && "href=\"/ios.ipa\"" in ios && "{{" !in ios)
+    }
+
+    @Test
+    fun `the game in the browser is handed out at play, gzipped`() = testApplication {
+        application { gameServer() }
+        val noFollow = createClient { followRedirects = false }
+        assertEquals("/play/?room=KHAN", noFollow.get("/play?room=KHAN").headers["Location"])
+        val page = client.get("/play/")
+        assertEquals(200, page.status.value)
+        assertTrue("teera.js" in page.bodyAsText())
+        val wasm = noFollow.get("/play/teera.wasm") { header(io.ktor.http.HttpHeaders.AcceptEncoding, "gzip") }
+        assertEquals(200, wasm.status.value)
+        assertEquals("gzip", wasm.headers[io.ktor.http.HttpHeaders.ContentEncoding])
+        assertEquals("application/wasm", wasm.headers[io.ktor.http.HttpHeaders.ContentType]?.substringBefore(';'))
+        assertEquals(200, noFollow.get("/play/fonts/el_messiri_bold.ttf").status.value)
+        assertEquals(200, noFollow.get("/play/sounds/sfx_teera.m4a").status.value)
+        assertEquals(404, noFollow.get("/play/../site/index.html").status.value)
+        assertEquals(404, noFollow.get("/play/nothing.js").status.value)
     }
 
     @Test

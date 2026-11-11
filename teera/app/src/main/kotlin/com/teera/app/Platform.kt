@@ -32,7 +32,15 @@ object AppInfo {
     val VERSION_NAME: String get() = BuildConfig.VERSION_NAME
     val SERVER_URL: String get() = BuildConfig.SERVER_URL
     const val PLATFORM = "android"
+
+    /** Whether this app can play a table on the Wi-Fi (the menu's «وايفاي»). */
+    const val HAS_WIFI = true
 }
+
+/** Shared state read from more than one thread (the phone's microphone, sockets). */
+typealias SharedVolatile = kotlin.jvm.Volatile
+
+typealias SharedSynchronized = kotlin.jvm.Synchronized
 
 /** Milliseconds since 1970, by the wall clock. */
 fun nowMillis(): Long = System.currentTimeMillis()

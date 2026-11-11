@@ -22,6 +22,11 @@ kotlin {
     }
     // A quick check on Linux that the shared code builds for native too: -Pteera.native
     if (project.hasProperty("teera.native")) linuxX64()
+    // The browser (teera/web). Not in the server's image.
+    if (System.getenv("TEERA_SERVER_ONLY") != "1") {
+        @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+        wasmJs { browser() }
+    }
 
     sourceSets {
         commonMain {

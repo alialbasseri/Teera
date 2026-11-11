@@ -18,6 +18,8 @@ include(":room")
 include(":server")
 // Teera for Windows. The server's Docker image sets TEERA_SERVER_ONLY and leaves it out.
 if (System.getenv("TEERA_SERVER_ONLY") != "1") include(":desktop")
+// Teera in the browser (WebAssembly).
+if (System.getenv("TEERA_SERVER_ONLY") != "1") include(":web")
 // Teera for iPhone: Kotlin compiles for iOS on a Mac only.
 if (System.getenv("TEERA_SERVER_ONLY") != "1" && System.getProperty("os.name").startsWith("Mac")) include(":iphone")
 

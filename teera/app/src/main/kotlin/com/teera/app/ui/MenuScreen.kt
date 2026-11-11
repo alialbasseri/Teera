@@ -266,12 +266,15 @@ fun MenuScreen(
                     SmallLink(if (liveCount > 0) "تفرّج ($liveCount)" else "تفرّج", onLive, tag = "live")
                     Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
                     SmallLink("القوانين", onRules)
-                    Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
-                    SmallLink(
-                        if (wifiTables.isEmpty()) "وايفاي" else "وايفاي (${wifiTables.size})",
-                        { wifiOpen = true },
-                        tag = "wifi",
-                    )
+                    // A browser can neither host a table nor reach one on the Wi-Fi.
+                    if (com.teera.app.AppInfo.HAS_WIFI) {
+                        Text("·", color = Felt.Muted, modifier = Modifier.padding(horizontal = 2.dp))
+                        SmallLink(
+                            if (wifiTables.isEmpty()) "وايفاي" else "وايفاي (${wifiTables.size})",
+                            { wifiOpen = true },
+                            tag = "wifi",
+                        )
+                    }
                 }
                 Credits()
                 Row(verticalAlignment = Alignment.CenterVertically) {
