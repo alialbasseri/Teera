@@ -23,6 +23,15 @@ public final class WebSocketClient: NSObject, ObservableObject {
     private var pingTimer: Timer?
     private let serverURL = URL(string: "wss://teera-xfvr.onrender.com/ws")!
 
+    /// This app's own build number, sent with "platform": "ios" so the server never
+    /// mistakes it for an Android build (whose numbers it uses to offer APK updates).
+    public static let iosBuild = 1
+
+    /// Set when the player leaves on purpose; otherwise a dropped line is retried.
+    private var wantsConnection = false
+    private var reconnectAttempts = 0
+    private var reconnectWork: DispatchWorkItem?
+
     override private init() {
         super.init()
         self.urlSession = URLSession(configuration: .default, delegate: self, delegateQueue: .main)
@@ -52,22 +61,48 @@ public final class WebSocketClient: NSObject, ObservableObject {
     }
 
     public func connect() {
+        wantsConnection = true
         guard webSocketTask == nil else { return }
         state = .connecting
 
-        webSocketTask = urlSession.webSocketTask(with: serverURL)
-        webSocketTask?.resume()
+        // The free server sleeps; waking it can take most of a minute.
+        var request = URLRequest(url: serverURL)
+        request.timeoutInterval = 90
+        let task = urlSession.webSocketTask(with: request)
+        webSocketTask = task
+        task.resume()
 
-        receiveMessage()
+        receiveMessage(on: task)
         startPingTimer()
     }
 
     public func disconnect() {
+        wantsConnection = false
+        reconnectWork?.cancel()
+        tearDown()
+        state = .disconnected
+    }
+
+    private func tearDown() {
         pingTimer?.invalidate()
         pingTimer = nil
         webSocketTask?.cancel(with: .normalClosure, reason: nil)
         webSocketTask = nil
-        state = .disconnected
+    }
+
+    /// A line that dropped (or a server still waking) is tried again, waiting a little
+    /// longer each time; back at the table, the room is rejoined into the same chair.
+    private func lineDropped(_ reason: String) {
+        tearDown()
+        guard wantsConnection else { state = .disconnected; return }
+        state = .connecting
+        reconnectAttempts += 1
+        let wait = min(15.0, pow(2.0, Double(min(reconnectAttempts, 4))))
+        reconnectWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.connect() }
+        reconnectWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + wait, execute: work)
+        print("Teera: connection lost (\(reason)); retrying in \(wait)s")
     }
 
     private func startPingTimer() {
@@ -84,7 +119,8 @@ public final class WebSocketClient: NSObject, ObservableObject {
             "playerId": playerId,
             "version": 2,
             "avatar": "p:0",
-            "appVersion": 30
+            "appVersion": WebSocketClient.iosBuild,
+            "platform": "ios"
         ]
         send(jsonDict: msg)
     }
@@ -145,6 +181,11 @@ public final class WebSocketClient: NSObject, ObservableObject {
         send(jsonDict: ["t": "nextGame"])
     }
 
+    /// After the match: the whole table goes back to the room's lobby for another.
+    public func backToLobby() {
+        send(jsonDict: ["t": "backToLobby"])
+    }
+
     public func sendEmote(_ emote: Emote) {
         send(jsonDict: ["t": "emote", "emote": emote.rawValue])
     }
@@ -171,8 +212,8 @@ public final class WebSocketClient: NSObject, ObservableObject {
         }
     }
 
-    private func receiveMessage() {
-        webSocketTask?.receive { [weak self] result in
+    private func receiveMessage(on task: URLSessionWebSocketTask) {
+        task.receive { [weak self] result in
             guard let self = self else { return }
 
             switch result {
@@ -187,15 +228,21 @@ public final class WebSocketClient: NSObject, ObservableObject {
                 @unknown default:
                     break
                 }
-                self.receiveMessage()
+                self.receiveMessage(on: task)
 
             case .failure(let error):
                 DispatchQueue.main.async {
-                    self.state = .error(error.localizedDescription)
+                    // Only the line in use: an old one closing late changes nothing.
+                    guard self.webSocketTask === task else { return }
+                    self.lineDropped(error.localizedDescription)
                 }
             }
         }
     }
+
+    /// The server wraps what it sends: {"t":"room","room":{...}}, {"t":"view","view":{...}}.
+    private struct RoomEnvelope: Decodable { let room: RoomInfo }
+    private struct ViewEnvelope: Decodable { let view: PlayerView }
 
     private func handleIncoming(text: String) {
         guard let data = text.data(using: .utf8),
@@ -212,23 +259,44 @@ public final class WebSocketClient: NSObject, ObservableObject {
                     UserDefaults.standard.set(pid, forKey: "teera_player_id")
                 }
                 self.state = .connected
+                self.reconnectAttempts = 0
+                // Back after a dropped line: sit down in the same chair again.
+                if let room = self.currentRoom {
+                    self.send(jsonDict: ["t": "joinRoom", "code": room.code, "rejoin": true])
+                }
 
             case "room":
-                if let room = try? JSONDecoder().decode(RoomInfo.self, from: data) {
+                do {
+                    let room = try JSONDecoder().decode(RoomEnvelope.self, from: data).room
                     self.currentRoom = room
+                    // Back in the lobby (a new room, or after a match): no table to show.
+                    if !room.started { self.playerView = nil }
+                } catch {
+                    print("Teera: could not read a room: \(error)")
                 }
 
             case "view":
-                if let view = try? JSONDecoder().decode(PlayerView.self, from: data) {
-                    self.playerView = view
+                do {
+                    self.playerView = try JSONDecoder().decode(ViewEnvelope.self, from: data).view
+                } catch {
+                    print("Teera: could not read a view: \(error)")
                 }
 
             case "error":
-                if let codeStr = json["code"] as? String,
-                   let code = ErrorCode(rawValue: codeStr) {
+                let codeStr = json["code"] as? String
+                let message = json["message"] as? String
+                // The server says important things in plain words under INTERNAL
+                // (barred, too old, a notice): show its words, not a generic error.
+                if let codeStr = codeStr, let code = ErrorCode(rawValue: codeStr), code != .INTERNAL {
                     self.errorMessage = code.localizedDescriptionArabic
-                } else if let msg = json["message"] as? String {
-                    self.errorMessage = msg
+                } else if let message = message, !message.isEmpty {
+                    self.errorMessage = message
+                } else {
+                    self.errorMessage = ErrorCode.INTERNAL.localizedDescriptionArabic
+                }
+                if codeStr == ErrorCode.KICKED.rawValue {
+                    self.currentRoom = nil
+                    self.playerView = nil
                 }
 
             case "emote":
@@ -254,7 +322,8 @@ extension WebSocketClient: URLSessionWebSocketDelegate {
 
     public func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
         DispatchQueue.main.async {
-            self.state = .disconnected
+            guard self.webSocketTask === webSocketTask else { return }
+            self.lineDropped("closed \(closeCode.rawValue)")
         }
     }
 }

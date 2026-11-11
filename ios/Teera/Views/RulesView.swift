@@ -31,7 +31,7 @@ public struct RulesView: View {
                         • كل جيم يُفتح بدبل.
                         • الجيم الأول يفتحه من بيده ٦|٦ حصراً.
                         • الجيمات التالية يفتحها الفائز بالجيم السابق بأي دبل.
-                        • الدبل المفتوح يُلعب عليه من ٤ جهات، ويجب أن تُسكّر الجهات الأربع قبل أي لعب آخر.
+                        • الدبل المفتوح يُلعب عليه من ٤ جهات، ويجب أن تنسد الجهات الأربع قبل أي لعب آخر.
                         """
                     )
 
@@ -60,7 +60,7 @@ public struct RulesView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("إغلاق") {
+                    Button("سد") {
                         dismiss()
                     }
                     .foregroundColor(Felt.goldLit)

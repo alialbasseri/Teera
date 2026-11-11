@@ -58,21 +58,37 @@ public final class SoundManager: ObservableObject {
         playSound(named: "sfx_match_lost")
     }
 
+    /// A soundboard press: its sound, as on Android, and its words said aloud.
+    /// Faces are seen, not heard; the retired line stays silent.
     public func playEmote(_ emote: Emote) {
-        guard soundEnabled else { return }
+        guard soundEnabled, !emote.isFace, emote != .WALLAH else { return }
         switch emote {
         case .GULP: playSound(named: "emote_gulp")
-        case .NO_WAY: playSound(named: "emote_no_way")
+        case .NO_WAY, .KHATLA: playSound(named: "emote_no_way")
         case .DRUMROLL: playSound(named: "emote_drumroll")
         case .SAD: playSound(named: "emote_sad")
-        case .SLAP: playSound(named: "emote_slap")
+        case .SLAP, .SPLOOSH: playSound(named: "emote_slap")
+        case .SHEEL: playSound(named: "emote_whoosh")
         default: playSound(named: "emote_clink")
         }
+        let words = emote.titleArabic
+        if !words.isEmpty && emote != .DRUMROLL { say(words) }
+    }
+
+    private let voice = AVSpeechSynthesizer()
+
+    /// Says a line in the phone's Arabic voice, as the Android app does with its own.
+    private func say(_ words: String) {
+        let line = AVSpeechUtterance(string: words)
+        line.voice = AVSpeechSynthesisVoice(language: "ar-SA")
+        line.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
+        voice.speak(line)
     }
 
     private func playSound(named name: String) {
-        guard let url = Bundle.main.url(forResource: name, withExtension: "ogg") ??
-                        Bundle.main.url(forResource: name, withExtension: "wav") ??
+        // The sounds sit in the bundle's Resources/Sounds folder (a folder reference),
+        // as AAC: iOS cannot play the Android app's Ogg files.
+        guard let url = Bundle.main.url(forResource: name, withExtension: "m4a", subdirectory: "Resources/Sounds") ??
                         Bundle.main.url(forResource: name, withExtension: "m4a") else {
             return
         }

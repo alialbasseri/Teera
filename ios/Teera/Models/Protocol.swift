@@ -9,6 +9,9 @@ public enum Emote: String, Codable, CaseIterable, Hashable {
         rawValue.starts(with: "FACE_")
     }
 
+    /// What the soundboard offers, in the Android app's order (SLAP and WALLAH are retired).
+    public static let board: [Emote] = [.GULP, .NO_WAY, .SHEEL, .SPLOOSH, .GHASHANA, .KHATLA, .CHAT, .DRUMROLL, .SAD]
+
     public var titleArabic: String {
         switch self {
         case .GULP: return "ابلع"
@@ -19,9 +22,9 @@ public enum Emote: String, Codable, CaseIterable, Hashable {
         case .KHATLA: return "خاتلة"
         case .CHAT: return "يلا شباب خلي نسولف"
         case .DRUMROLL: return "طبل"
-        case .SAD: return "حزين"
-        case .SLAP: return "طگة"
-        case .WALLAH: return "والله"
+        case .SAD: return "حسرة"
+        case .SLAP: return "خذ"
+        case .WALLAH: return ""
         default: return ""
         }
     }

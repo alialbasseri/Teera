@@ -4,6 +4,21 @@ public struct TableScreen: View {
     @ObservedObject var client = WebSocketClient.shared
     @State private var selectedTile: Domino? = nil
     @State private var showEmoteSheet = false
+    /// When the player before a stuck one decides: give a bone, or play one in their place.
+    @State private var rescueMode: RescueMode? = nil
+
+    private enum RescueMode { case give, playFor }
+
+    /// The moves the hand and the board offer right now: while rescuing, only those of
+    /// the chosen kind, so a bone that could go either way does what the player picked.
+    private func offeredMoves(in view: PlayerView) -> [Move] {
+        guard view.phase == .RESCUE, view.isYourMove else { return view.legalMoves }
+        switch rescueMode {
+        case .give: return view.legalMoves.filter { $0.type == .give }
+        case .playFor: return view.legalMoves.filter { $0.type == .playFor }
+        case nil: return []
+        }
+    }
 
     public var body: some View {
         ZStack {
@@ -58,7 +73,7 @@ public struct TableScreen: View {
                     // Player Hand
                     HandView(
                         hand: view.hand,
-                        legalMoves: view.legalMoves,
+                        legalMoves: offeredMoves(in: view),
                         selectedTile: $selectedTile,
                         onPlayTile: { tile, arm in
                             playTile(tile, arm: arm, in: view)
@@ -154,26 +169,45 @@ public struct TableScreen: View {
     private func statusBannerView(view: PlayerView) -> some View {
         HStack {
             if view.phase == .TEERA_OFFER && view.actingSeat == view.yourSeat {
-                Button("أعلن طيرة!") {
+                Button("طيّر") {
                     SoundManager.shared.playTeera()
                     client.makeMove(.teera)
                 }
                 .buttonStyle(TeeraButtonStyle(color: Felt.goldDeep))
 
-                Button("استمر للاكس") {
+                Button("كمّل للاكس") {
                     client.makeMove(.carryOn)
                 }
                 .buttonStyle(TeeraButtonStyle(color: Felt.rail))
             } else if view.phase == .REDEAL_OFFER && view.actingSeat == view.yourSeat {
-                Button("إعادة التوزيع (4 دبلات)") {
+                Button("أعد الخلط (4 چفتات)") {
                     client.makeMove(.redeal)
                 }
                 .buttonStyle(TeeraButtonStyle(color: Felt.danger))
 
-                Button("إبقاء اليد") {
+                Button("كمّل بإيدك") {
                     client.makeMove(.keepHand)
                 }
                 .buttonStyle(TeeraButtonStyle(color: Felt.rail))
+            } else if view.phase == .RESCUE && view.isYourMove {
+                let stuck = view.stuckSeat.flatMap { view.seatInfo($0)?.name } ?? ""
+                switch rescueMode {
+                case nil:
+                    Text("\(stuck) گلى — تلعب تنطي؟")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(Felt.brass)
+                    Button("العب بداله") { rescueMode = .playFor; selectedTile = nil }
+                        .buttonStyle(TeeraButtonStyle(color: Felt.goldDeep))
+                        .disabled(!view.legalMoves.contains { $0.type == .playFor })
+                    Button("انطيه بول") { rescueMode = .give; selectedTile = nil }
+                        .buttonStyle(TeeraButtonStyle(color: Felt.rail))
+                case .some(let mode):
+                    Text(mode == .give ? "اختر البول اللي تنطيه" : "اختر البول اللي تلعبه")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(Felt.playable)
+                    Button("رجوع") { rescueMode = nil; selectedTile = nil }
+                        .buttonStyle(TeeraButtonStyle(color: Felt.rail))
+                }
             } else {
                 Text(statusText(for: view))
                     .font(.system(size: 14, weight: .bold))
@@ -181,18 +215,22 @@ public struct TableScreen: View {
             }
         }
         .padding(.vertical, 6)
+        // A new decision starts with no choice made.
+        .onChange(of: view.phase) { _ in rescueMode = nil }
     }
 
     private func statusText(for view: PlayerView) -> String {
         if view.isYourMove {
-            if view.phase == .RESCUE {
-                return "البول: خصمك مسدود، أعطه حجراً أو العب بدله!"
-            }
-            return "دورك تلعب"
+            if view.board.isEmpty { return "افتح الگيم بچفت" }
+            if selectedTile != nil { return "دوس على الجهة اللي تريدها" }
+            return "دورك — اختر بول"
+        } else if view.phase == .RESCUE && view.stuckSeat == view.yourSeat {
+            let rescuer = view.actingSeat.flatMap { view.seatInfo($0)?.name } ?? ""
+            return "گليت — \(rescuer) إما ينطيك بول أو يلعب بدالك"
         } else if let acting = view.actingSeat, let seat = view.seatInfo(acting) {
-            return "بانتظار دور: \(seat.name)"
+            return "\(seat.name) يفكّر…"
         }
-        return "جاري اللعب..."
+        return " "
     }
 
     private func candidateArms(for tile: Domino?, in view: PlayerView) -> [Arm] {
@@ -217,6 +255,7 @@ public struct TableScreen: View {
             client.makeMove(.play(tile, arm: arm))
         }
         selectedTile = nil
+        rescueMode = nil
     }
 
     private func gameEndOverlay(result: GameResult, view: PlayerView) -> some View {
@@ -224,19 +263,21 @@ public struct TableScreen: View {
             Color.black.opacity(0.65).ignoresSafeArea()
 
             VStack(spacing: 16) {
-                Text(result.end == .X ? "اكس!" : (result.end == .TEERA ? "طيرة!" : "مسدودة!"))
+                Text(view.phase == .MATCH_OVER
+                     ? (view.losingTeam == view.yourTeam ? "خسرتوا المباراة" : "فزتوا بالمباراة")
+                     : (result.end == .X ? "اكس!" : (result.end == .TEERA ? "طيرة!" : "قفلت")))
                     .font(.system(size: 38, weight: .bold))
                     .foregroundColor(Felt.goldLit)
 
                 if let winner = result.winnerSeat, let seat = view.seatInfo(winner) {
-                    Text("الفائز: \(seat.name)")
+                    Text(result.end == .TEERA ? "\(seat.name) طيّر" : "\(seat.name) خلّص")
                         .font(.system(size: 18, weight: .medium))
                         .foregroundColor(Felt.parchment)
                 }
 
                 HStack(spacing: 30) {
                     VStack {
-                        Text("فريق ١")
+                        Text(teamName(0, in: view))
                             .foregroundColor(Felt.muted)
                         Text("+\(result.scored[0])")
                             .font(.system(size: 20, weight: .bold))
@@ -244,7 +285,7 @@ public struct TableScreen: View {
                     }
 
                     VStack {
-                        Text("فريق ٢")
+                        Text(teamName(1, in: view))
                             .foregroundColor(Felt.muted)
                         Text("+\(result.scored[1])")
                             .font(.system(size: 20, weight: .bold))
@@ -255,10 +296,22 @@ public struct TableScreen: View {
                 .background(Felt.railFoot)
                 .cornerRadius(12)
 
-                Button("الجيم التالي") {
-                    client.nextGame()
+                if view.phase == .MATCH_OVER {
+                    // The whole table goes back to the room together, for another match.
+                    Button("ارجع للغرفة") {
+                        client.backToLobby()
+                    }
+                    .buttonStyle(TeeraButtonStyle(color: Felt.brass))
+                    Button("اطلع من الغرفة") {
+                        client.leaveRoom()
+                    }
+                    .buttonStyle(TeeraButtonStyle(color: Felt.rail))
+                } else {
+                    Button("الگيم الجاي") {
+                        client.nextGame()
+                    }
+                    .buttonStyle(TeeraButtonStyle(color: Felt.brass))
                 }
-                .buttonStyle(TeeraButtonStyle(color: Felt.brass))
             }
             .padding(24)
             .background(Felt.rail)
@@ -268,18 +321,24 @@ public struct TableScreen: View {
         }
     }
 
+    /// A team as the table names it: its two players.
+    private func teamName(_ team: Int, in view: PlayerView) -> String {
+        let names = view.seats.filter { teamOf($0.seat) == team }.map { $0.isBot ? "بوت" : $0.name }
+        return names.isEmpty ? "فريق \(team + 1)" : names.joined(separator: "/")
+    }
+
     private var emoteSelectionSheet: some View {
         VStack(spacing: 16) {
-            Text("لوحة الصوت والرياكشن")
+            Text("الأصوات")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundColor(Felt.parchment)
                 .padding(.top, 16)
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
-                ForEach(Emote.allCases.filter { !$0.isFace }, id: \.self) { emote in
+                ForEach(Emote.board, id: \.self) { emote in
                     Button(emote.titleArabic) {
+                        // The server sends it back to everyone, this phone included: it plays then.
                         client.sendEmote(emote)
-                        SoundManager.shared.playEmote(emote)
                         showEmoteSheet = false
                     }
                     .font(.system(size: 14, weight: .medium))

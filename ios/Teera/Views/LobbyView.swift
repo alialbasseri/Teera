@@ -155,7 +155,7 @@ public struct LobbyView: View {
                         .foregroundColor(Felt.playable)
                 }
             } else {
-                Button("اجلس هنا") {
+                Button("اگعد هنا") {
                     client.takeSeat(seatIndex)
                 }
                 .font(.system(size: 13, weight: .bold))
@@ -166,7 +166,7 @@ public struct LobbyView: View {
                 .cornerRadius(6)
 
                 if isHost {
-                    Button("+ بوت") {
+                    Button("حط بوت") {
                         client.setBot(seat: seatIndex, enabled: true)
                     }
                     .font(.system(size: 11))
