@@ -95,9 +95,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp build/Teera-unsigned.ipa build/Teera.ipa
-          gh release delete ios-latest --cleanup-tag --yes 2>/dev/null || true
-          gh release create ios-latest build/Teera.ipa --target "$GITHUB_SHA" --title "طيرة للآيفون" \
-            --notes "طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios" --latest=false
+          # Replace the file in place; never delete the release first.
+          if gh release view ios-latest > /dev/null 2>&1; then
+            gh release upload ios-latest build/Teera.ipa --clobber
+          else
+            gh release create ios-latest build/Teera.ipa --target "$GITHUB_SHA" --title "طيرة للآيفون" \
+              --notes "طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios" --latest=false
+          fi
 
   # Opens the app on an iPhone simulator and takes a picture of it, to see it run, not
   # just build. The picture is attached to the ios-latest release (simulator.png).

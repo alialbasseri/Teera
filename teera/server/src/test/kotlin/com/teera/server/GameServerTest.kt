@@ -659,10 +659,22 @@ class RoomLinkTest {
         assertEquals(com.teera.room.APK_URL, apk.headers["Location"])
         // Three ways in: Android, iPhone (a page on installing it) and Windows.
         assertTrue("href=\"/ios\"" in page && "href=\"/windows\"" in page)
-        assertEquals(com.teera.room.WINDOWS_URL, noFollow.get("/windows").headers["Location"])
+        assertTrue(noFollow.get("/windows").headers["Location"].orEmpty().endsWith(".msi"))
         assertEquals(com.teera.room.IOS_URL, noFollow.get("/ios.ipa").headers["Location"])
         val ios = client.get("/ios").bodyAsText()
         assertTrue("Sideloadly" in ios && "href=\"/ios.ipa\"" in ios && "{{" !in ios)
+    }
+
+    @Test
+    fun `the Windows link follows the newest version that has an installer`() {
+        val releases = """[
+          {"tag_name":"ios-latest","assets":[{"browser_download_url":"https://x/ios-latest/Teera.ipa"}]},
+          {"tag_name":"windows-v1.1.0","assets":[{"browser_download_url":"https://x/windows-v1.1.0/Teera-1.1.0.exe"},{"browser_download_url":"https://x/windows-v1.1.0/Teera-1.1.0.msi"}]},
+          {"tag_name":"windows-v1.10.0","assets":[]},
+          {"tag_name":"windows-v1.0.0","assets":[{"browser_download_url":"https://x/windows-v1.0.0/Teera-1.0.0.msi"}]}
+        ]"""
+        assertEquals("https://x/windows-v1.1.0/Teera-1.1.0.msi", com.teera.room.WindowsDownload.newestMsi(releases))
+        assertEquals(null, com.teera.room.WindowsDownload.newestMsi("[]"))
     }
 
     @Test

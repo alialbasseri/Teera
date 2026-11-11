@@ -45,7 +45,7 @@ fun Route.roomLinks(live: () -> LiveCount = { LiveCount(0, 0) }) {
         call.respondRedirect(APK_URL)
     }
     get("/windows") {
-        call.respondRedirect(WINDOWS_URL)
+        call.respondRedirect(WindowsDownload.url())
     }
     get("/ios") {
         call.respondText(iosPage(siteBase(call.request.host())), ContentType.Text.Html)
@@ -172,12 +172,58 @@ const val MIN_APP_VERSION = 0
 const val APK_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/teera.apk"
 
-/**
- * The newest Windows installer: .github/workflows/windows-build.yml publishes every build
- * under this fixed tag and name, so the address never changes.
- */
+/** The Windows installer known to exist, for when GitHub cannot be asked. */
 const val WINDOWS_URL =
-    "https://github.com/alialbasseri/Teera/releases/download/windows-latest/Teera.msi"
+    "https://github.com/alialbasseri/Teera/releases/download/windows-v1.0.0/Teera-1.0.0.msi"
+
+/**
+ * Where /windows sends people: the .msi of the newest windows-v<version> release on GitHub,
+ * looked up at most every ten minutes, so a new build is offered without touching the server
+ * and a release that is missing or being replaced never leaves the link pointing at nothing.
+ */
+object WindowsDownload {
+    private const val RELEASES = "https://api.github.com/repos/alialbasseri/Teera/releases?per_page=30"
+    private const val EVERY_MS = 10 * 60_000L
+
+    @Volatile private var cached: String = WINDOWS_URL
+    @Volatile private var checkedAt = 0L
+
+    fun url(now: Long = System.currentTimeMillis()): String {
+        if (now - checkedAt > EVERY_MS) {
+            checkedAt = now
+            newest()?.let { cached = it }
+        }
+        return cached
+    }
+
+    /** The newest version's .msi, or null if GitHub did not answer. */
+    private fun newest(): String? = runCatching {
+        val connection = java.net.URI(RELEASES).toURL().openConnection() as java.net.HttpURLConnection
+        connection.connectTimeout = 4_000
+        connection.readTimeout = 4_000
+        connection.setRequestProperty("Accept", "application/vnd.github+json")
+        val body = connection.inputStream.use { it.readBytes().decodeToString() }
+        newestMsi(body)
+    }.getOrNull()
+
+    /** From GitHub's list of releases: the .msi of the highest windows-v<version>. */
+    fun newestMsi(releasesJson: String): String? {
+        val releases = com.teera.core.Protocol.json.parseToJsonElement(releasesJson) as? kotlinx.serialization.json.JsonArray ?: return null
+        return releases.mapNotNull { element ->
+            val release = element as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
+            val tag = (release["tag_name"] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: return@mapNotNull null
+            val version = tag.removePrefix("windows-v").takeIf { tag.startsWith("windows-v") }
+                ?.split('.')?.map { it.toIntOrNull() ?: return@mapNotNull null } ?: return@mapNotNull null
+            val msi = (release["assets"] as? kotlinx.serialization.json.JsonArray).orEmpty()
+                .mapNotNull { (it as? kotlinx.serialization.json.JsonObject)?.get("browser_download_url") as? kotlinx.serialization.json.JsonPrimitive }
+                .map { it.content }
+                .firstOrNull { it.endsWith(".msi") } ?: return@mapNotNull null
+            version to msi
+        }.maxWithOrNull { a, b ->
+            a.first.zip(b.first).map { (x, y) -> x.compareTo(y) }.firstOrNull { it != 0 } ?: a.first.size.compareTo(b.first.size)
+        }?.second
+    }
+}
 
 /**
  * The iPhone build, unsigned (Sideloadly signs it with the player's own Apple ID), published

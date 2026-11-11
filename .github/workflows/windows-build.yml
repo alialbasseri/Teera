@@ -63,9 +63,10 @@ jobs:
             teera/desktop/build/compose/binaries/main/exe/*.exe
           if-no-files-found: error
 
-      # Each build replaces the release of its version, and windows-latest, whose fixed
-      # address the game page links to: .../releases/download/windows-latest/Teera.msi
-      - name: Publish the releases
+      # Each version has its release, windows-v<version>; the game page's /windows finds the
+      # newest one by itself. Never deleted first: a refused create must not leave the link
+      # with nothing behind it. A rebuild of the same version replaces its files.
+      - name: Publish the release
         if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
         shell: bash
         env:
@@ -74,10 +75,10 @@ jobs:
         run: |
           msi=$(ls desktop/build/compose/binaries/main/msi/*.msi | head -1)
           exe=$(ls desktop/build/compose/binaries/main/exe/*.exe | head -1)
-          cp "$msi" desktop/build/Teera.msi
-          notes="طيرة على الكمبيوتر (Windows 10/11). نزّل الملف وشغّله. إذا طلع \"Windows protected your PC\" دوس More info ← Run anyway."
-          for tag in "windows-v$VERSION" windows-latest; do
-            gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
-          done
-          gh release create "windows-v$VERSION" "$msi" "$exe" --target "$GITHUB_SHA" --title "طيرة للويندوز $VERSION" --notes "$notes" --latest=false
-          gh release create windows-latest desktop/build/Teera.msi --target "$GITHUB_SHA" --title "طيرة للويندوز (آخر نسخة)" --notes "$notes" --latest=false
+          tag="windows-v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release upload "$tag" "$msi" "$exe" --clobber
+          else
+            gh release create "$tag" "$msi" "$exe" --target "$GITHUB_SHA" --title "طيرة للويندوز $VERSION" --latest=false \
+              --notes "طيرة على الكمبيوتر (Windows 10/11). نزّل الملف وشغّله. إذا طلع \"Windows protected your PC\" دوس More info ← Run anyway."
+          fi
