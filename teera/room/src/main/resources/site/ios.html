@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>طيرة على الآيفون · طريقة التنصيب</title>
+<meta name="description" content="شلون تنصب طيرة على الآيفون بدون App Store وبدون TestFlight، بحسابك بآبل.">
+<meta name="theme-color" content="#1e1309">
+<meta property="og:title" content="طيرة على الآيفون · طريقة التنصيب">
+<meta property="og:image" content="{{BASE}}/site/share.jpg">
+<link rel="icon" href="/site/icon.png">
+<link rel="apple-touch-icon" href="/site/icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=El+Messiri:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{--wood:#1e1309;--wood-2:#2b1c10;--wood-3:#3a2616;--line:#5a4422;--brass:#d9b166;--brass-hi:#f0d79a;--brass-lo:#a67c2e;--paper:#fbf7ef;--muted:#b9a585;--warn:#e8a26b}
+*{box-sizing:border-box}
+body{margin:0;color:var(--paper);background:var(--wood);font-family:"El Messiri",system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif;line-height:1.75;-webkit-font-smoothing:antialiased}
+a{color:var(--brass)}
+.wrap{max-width:760px;margin:0 auto;padding:0 16px}
+header{padding:26px 0 30px;border-bottom:1px solid var(--wood-3);
+  background:radial-gradient(ellipse 70% 60% at 30% 40%,rgba(31,107,68,.45),transparent 70%),linear-gradient(#24170b,var(--wood))}
+.back{display:inline-block;color:var(--muted);text-decoration:none;font-size:15px;margin-bottom:14px}
+h1{font-family:"Aref Ruqaa",serif;font-size:clamp(40px,10vw,58px);line-height:1.2;margin:0 0 8px;
+  background:linear-gradient(180deg,var(--brass-hi),var(--brass) 55%,var(--brass-lo));-webkit-background-clip:text;background-clip:text;color:transparent}
+.lead{color:var(--muted);font-size:17px;margin:0}
+section{padding:30px 0}
+h2{color:var(--brass-hi);font-size:clamp(23px,5.5vw,28px);margin:0 0 8px}
+.sub{color:var(--muted);margin:0 0 18px}
+.need{display:grid;gap:10px}
+.need>div{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:var(--wood-2);border:1px solid var(--line)}
+.need>div>span{font-size:22px;line-height:1.3}
+ol.steps{list-style:none;margin:0;padding:0;counter-reset:s;display:grid;gap:12px}
+ol.steps>li{counter-increment:s;position:relative;padding:16px 16px 16px 16px;padding-right:62px;border-radius:16px;background:var(--wood-2);border:1px solid var(--line)}
+ol.steps>li::before{content:counter(s);position:absolute;right:14px;top:14px;width:34px;height:34px;border-radius:50%;
+  display:grid;place-items:center;font-weight:700;color:#14110c;background:linear-gradient(var(--brass-hi),var(--brass))}
+ol.steps h3{margin:0 0 4px;font-size:18px}
+ol.steps p{margin:0;color:var(--muted)}
+ol.steps ul{margin:6px 0 0;padding-right:18px;color:var(--muted)}
+.path{display:inline-block;direction:rtl;padding:1px 8px;border-radius:8px;background:rgba(217,177,102,.12);color:var(--paper);font-size:15px}
+code{direction:ltr;unicode-bidi:embed;padding:1px 6px;border-radius:6px;background:#120b05;color:var(--brass-hi);font-size:14px}
+.btn{display:inline-flex;align-items:center;gap:8px;margin-top:10px;padding:10px 18px;border-radius:12px;font-weight:700;text-decoration:none;color:#14110c;
+  background:linear-gradient(var(--brass-hi),var(--brass) 60%,var(--brass-lo))}
+.btn.ghost{background:none;color:var(--brass);border:1px solid var(--brass)}
+.note{margin-top:14px;padding:14px 16px;border-radius:14px;background:rgba(217,177,102,.08);border:1px solid rgba(217,177,102,.25);color:var(--muted)}
+.warn{background:rgba(232,162,107,.08);border-color:rgba(232,162,107,.35)}
+.warn b{color:var(--warn)}
+details{border-bottom:1px solid var(--wood-3);padding:12px 2px}
+summary{cursor:pointer;font-weight:700;font-size:17px}
+details p{margin:8px 0 0;color:var(--muted)}
+footer{text-align:center;color:var(--muted);font-size:13px;padding:22px 16px 34px;border-top:1px solid var(--wood-3)}
+@media print{body{background:#fff;color:#000}header{background:none}h1,h2{color:#000;-webkit-text-fill-color:#000}
+  ol.steps>li,.need div,.note{background:#fff;border-color:#999}ol.steps p,.sub,.lead,details p{color:#333}.btn{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <a class="back" href="/">→ صفحة اللعبة</a>
+    <h1>طيرة على الآيفون</h1>
+    <p class="lead">اللعبة لهسه مو بالـ App Store ولا TestFlight، فتنصبها من الكمبيوتر بحسابك بآبل (Apple ID). الطريقة مجانية وتاخذ ربع ساعة أول مرة.</p>
+  </div>
+</header>
+
+<main class="wrap">
+<section>
+  <h2>شنو تحتاج</h2>
+  <div class="need">
+    <div><span>💻</span><div>كمبيوتر <b>ويندوز</b> أو <b>ماك</b>، وكيبل الآيفون.</div></div>
+    <div><span>🍎</span><div>حسابك بآبل (Apple ID) وكلمة سره. إذا تحب، سوّي حساب ثاني بس لهالشغلة.</div></div>
+    <div><span>📦</span><div>ملف اللعبة <b>Teera.ipa</b>:<br><a class="btn" href="/ios.ipa" download>نزّل Teera.ipa</a></div></div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <h2>الطريقة: Sideloadly</h2>
+  <p class="sub">برنامج مجاني ومعروف، ينصب اللعبة على تليفونك ويوقّعها بحسابك.</p>
+  <ol class="steps">
+    <li>
+      <h3>نزّل ملف اللعبة على الكمبيوتر</h3>
+      <p>من الزر فوگ: <b>Teera.ipa</b>. خليه بالـ Downloads.</p>
+    </li>
+    <li>
+      <h3>على الويندوز بس: نصّب iTunes و iCloud</h3>
+      <p>نزّلهن من موقع آبل نفسه، <b>مو</b> من Microsoft Store، لأن Sideloadly يحتاج نسخة الموقع. على الماك ما تحتاج هالخطوة.</p>
+      <a class="btn ghost" href="https://www.apple.com/itunes/download/win64" rel="noopener">iTunes للويندوز</a>
+      <a class="btn ghost" href="https://support.apple.com/en-us/103232" rel="noopener">iCloud للويندوز</a>
+    </li>
+    <li>
+      <h3>نصّب Sideloadly</h3>
+      <p>من موقعه الرسمي <code>sideloadly.io</code>، واختار نسخة جهازك.</p>
+      <a class="btn ghost" href="https://sideloadly.io" rel="noopener">sideloadly.io</a>
+    </li>
+    <li>
+      <h3>شبّك الآيفون بالكيبل</h3>
+      <p>إذا سألك الآيفون <span class="path">تثق بهذا الكمبيوتر؟</span> دوس <b>Trust / ثقة</b> واكتب رمز التليفون.</p>
+    </li>
+    <li>
+      <h3>نصّب اللعبة</h3>
+      <ul>
+        <li>افتح Sideloadly، تلگى اسم الآيفون مالتك فوگ.</li>
+        <li>اسحب ملف <b>Teera.ipa</b> لداخل البرنامج (أو دوس على أيقونة الـ IPA واختاره).</li>
+        <li>اكتب إيميل حسابك بآبل بخانة <b>Apple ID</b>، ودوس <b>Start</b>.</li>
+        <li>يطلب كلمة سر الحساب، وإذا عندك تحقق بخطوتين يطلب الرمز اللي يوصلك. اكتبهن.</li>
+        <li>انتظر لين يكتب <b>Done</b>.</li>
+      </ul>
+    </li>
+    <li>
+      <h3>خلي الآيفون يثق باللعبة</h3>
+      <p><span class="path">الإعدادات ← عام ← إدارة VPN والجهاز</span> ← دوس على إيميلك ← <b>ثقة</b>.</p>
+    </li>
+    <li>
+      <h3>iOS 16 وأحدث: شغّل وضع المطوّر</h3>
+      <p><span class="path">الإعدادات ← الخصوصية والأمان ← وضع المطوّر (Developer Mode)</span> ← شغّله، والتليفون يعيد التشغيل ويسألك تأكد. إذا ما تلگاه، افتح اللعبة مرة وارجع، يطلع.</p>
+    </li>
+    <li>
+      <h3>العب</h3>
+      <p>افتح <b>طيرة</b> من الشاشة. نفس اللعبة اللي على الأندرويد والويندوز، وتلعبون سوه بنفس الغرفة.</p>
+    </li>
+  </ol>
+
+  <div class="note warn"><b>كل 7 أيام:</b> الحساب المجاني بآبل يخلي اللعبة تشتغل 7 أيام بس. بعدها ما تنفتح، ولازم تعيد خطوة 5 (شبّك، اسحب الملف، Start). <b>ما تنمسح بياناتك</b>. حتى ما تنسى، فعّل <b>Automatic Refresh</b> بإعدادات Sideloadly، فيجددها لحاله إذا الكمبيوتر والتليفون على نفس الواي فاي.</div>
+  <div class="note">الحساب المجاني يسمح بـ 3 تطبيقات من هذا النوع بنفس الوقت. اللعبة ما تاخذ منك شي غير توقيعها باسمك، وما توصل لحسابك.</div>
+</section>
+
+<section style="padding-top:0">
+  <h2>طرق ثانية</h2>
+  <details><summary>AltStore أو SideStore (بدل Sideloadly)</summary>
+    <p>نفس الفكرة: تنصب <b>AltServer</b> على الكمبيوتر من <code>altstore.io</code>، ومنه تنصب AltStore على التليفون، وبعدين تفتح Teera.ipa بـ AltStore. يجدد اللعبة لحاله كل ما يكون الكمبيوتر شغّال على نفس الواي فاي. SideStore يجدد بدون كمبيوتر بعد أول مرة، بس إعداده أطول.</p>
+  </details>
+  <details><summary>عندي حساب مطوّر بآبل (99$ بالسنة)</summary>
+    <p>بهذا الحساب تشتغل اللعبة سنة كاملة بدل 7 أيام، ونگدر نوزعها بـ TestFlight. لهسه ماكو حساب، فالطريقة فوگ هي الوحيدة.</p>
+  </details>
+  <details><summary>طلعلي «Untrusted Developer» أو اللعبة ما تنفتح</summary>
+    <p>سوّي الخطوة 6 (الثقة) والخطوة 7 (وضع المطوّر). إذا كان صار أكثر من 7 أيام، عيد الخطوة 5.</p>
+  </details>
+  <details><summary>Sideloadly يگول «Your session has expired» أو يطلب الرمز</summary>
+    <p>طبيعي، اكتب الرمز اللي يوصل لأجهزتك بآبل. إذا ظل يرفض، سجّل خروج من الحساب ببرنامج Sideloadly (Apple ID ← Delete) وجرّب مرة ثانية.</p>
+  </details>
+  <details><summary>ما عندي كمبيوتر</summary>
+    <p>لازم كمبيوتر بس أول مرة وكل 7 أيام (أو مرة وحدة إذا استخدمت SideStore). استعير لابتوب صديق، وبعدها العب عادي.</p>
+  </details>
+</section>
+</main>
+
+<footer dir="ltr">Designed by <b>Ali Albasseri</b> · Powered by <b>Tech Vision</b></footer>
+</body>
+</html>

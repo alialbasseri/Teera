@@ -657,6 +657,12 @@ class RoomLinkTest {
         val apk = noFollow.get("/teera.apk")
         assertEquals(302, apk.status.value)
         assertEquals(com.teera.room.APK_URL, apk.headers["Location"])
+        // Three ways in: Android, iPhone (a page on installing it) and Windows.
+        assertTrue("href=\"/ios\"" in page && "href=\"/windows\"" in page)
+        assertEquals(com.teera.room.WINDOWS_URL, noFollow.get("/windows").headers["Location"])
+        assertEquals(com.teera.room.IOS_URL, noFollow.get("/ios.ipa").headers["Location"])
+        val ios = client.get("/ios").bodyAsText()
+        assertTrue("Sideloadly" in ios && "href=\"/ios.ipa\"" in ios && "{{" !in ios)
     }
 
     @Test

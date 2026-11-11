@@ -1,5 +1,8 @@
 name: Build iOS App
 
+permissions:
+  contents: write
+
 on:
   push:
     paths:
@@ -47,3 +50,19 @@ jobs:
           name: Teera-iOS-IPA
           path: build/Teera-unsigned.ipa
           retention-days: 14
+
+      - name: Publish for the game page (/ios.ipa)
+        if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        run: cp build/Teera-unsigned.ipa build/Teera.ipa
+
+      # A fixed tag, so the address the game page points at never changes:
+      # .../releases/download/ios-latest/Teera.ipa. Sideloadly signs it with the player's Apple ID.
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        with:
+          tag_name: ios-latest
+          name: طيرة للآيفون
+          body: |
+            طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios
+          files: build/Teera.ipa
+          make_latest: false

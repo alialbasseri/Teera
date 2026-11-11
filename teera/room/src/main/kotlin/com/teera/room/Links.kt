@@ -47,6 +47,12 @@ fun Route.roomLinks(live: () -> LiveCount = { LiveCount(0, 0) }) {
     get("/windows") {
         call.respondRedirect(WINDOWS_URL)
     }
+    get("/ios") {
+        call.respondText(iosPage(siteBase(call.request.host())), ContentType.Text.Html)
+    }
+    get("/ios.ipa") {
+        call.respondRedirect(IOS_URL)
+    }
 
     get("/j/{code}") {
         val code = call.parameters["code"].orEmpty().uppercase().filter { it.isLetterOrDigit() }.take(8)
@@ -172,3 +178,10 @@ const val APK_URL =
  */
 const val WINDOWS_URL =
     "https://github.com/alialbasseri/Teera/releases/download/windows-v1.0.0/Teera-1.0.0.msi"
+
+/**
+ * The iPhone build, unsigned (Sideloadly signs it with the player's own Apple ID), published
+ * by .github/workflows/ios-build.yml under a fixed tag so this address never changes.
+ */
+const val IOS_URL =
+    "https://github.com/alialbasseri/Teera/releases/download/ios-latest/Teera.ipa"

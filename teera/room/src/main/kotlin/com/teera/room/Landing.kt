@@ -54,3 +54,10 @@ fun landingPage(base: String, live: LiveCount): String {
         .replace("{{LIVE}}", liveLine)
         .replace("{{NEWS}}", news)
 }
+
+private val iosTemplate: String by lazy {
+    LatestApp::class.java.getResourceAsStream("/site/ios.html")!!.use { it.readBytes().decodeToString() }
+}
+
+/** How to put the game on an iPhone without the App Store: Sideloadly with one's own Apple ID. */
+fun iosPage(base: String): String = iosTemplate.replace("{{BASE}}", esc(base))
