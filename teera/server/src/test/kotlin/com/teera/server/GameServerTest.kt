@@ -340,6 +340,26 @@ class RoomLinkTest {
     }
 
     @Test
+    fun `the iPhone app is never offered the Android update nor turned away as old`() = testApplication {
+        application { gameServer() }
+        val ws = createClient { install(WebSockets) }
+        val phone = ws.webSocketSession("/ws")
+        phone.say(ClientMessage.Hello("Ali", playerId = "ali-ios", appVersion = 1, platform = "ios"))
+        phone.await<ServerMessage.Welcome>()
+        phone.say(ClientMessage.CreateRoom(Rules.DEFAULT))
+        // The room comes straight back: no "your version is old", no APK to download.
+        val first = withTimeout(10_000) {
+            while (true) {
+                val frame = phone.incoming.receive() as? Frame.Text ?: continue
+                val message = Protocol.decodeServer(frame.readText())
+                if (message !is ServerMessage.Pong) return@withTimeout message
+            }
+            @Suppress("UNREACHABLE_CODE") error("unreachable")
+        }
+        assertTrue(first is ServerMessage.RoomUpdate, "got $first")
+    }
+
+    @Test
     fun `an app from before update windows cannot sit at a table until it is updated`() = testApplication {
         application { gameServer() }
         val ws = createClient { install(WebSockets) }

@@ -259,21 +259,25 @@ fun Application.gameServer(
                             avatar = message.avatar.take(12).filter { it.isLetterOrDigit() || it == ':' }
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
-                            tooOld = message.appVersion < OLDEST_PLAYABLE_APP
-                            appVersion = message.appVersion
+                            // The iPhone app counts its own builds and is updated its own way:
+                            // never measured against the Android numbers, never sent the APK.
+                            val ios = message.platform == "ios"
+                            tooOld = !ios && message.appVersion < OLDEST_PLAYABLE_APP
+                            appVersion = if (ios) LatestApp.code else message.appVersion
                             if (admin.isBanned(playerId)) {
                                 fail(ErrorCode.INTERNAL, BANNED_WORDS)
                                 close(CloseReason(CloseReason.Codes.NORMAL, "banned"))
                                 return@consumeEach
                             }
                             registry.arrived(playerId!!, name, avatar, this)
-                            records.playerSeen(playerId!!, name, avatar, message.appVersion)
+                            // The books keep iPhone builds apart: 10000 and up is iOS build (n - 10000).
+                            records.playerSeen(playerId!!, name, avatar, if (ios) IOS_BUILD_BASE + message.appVersion else message.appVersion)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                             when {
                                 // Apps before 1.4.1 cannot show an update window, but they do
                                 // show the words of an error: that is how they hear of it.
                                 tooOld -> refuseOld()
-                                message.appVersion < LatestApp.code -> trySend(
+                                !ios && message.appVersion < LatestApp.code -> trySend(
                                     ServerMessage.UpdateAvailable(
                                         LatestApp.code, LatestApp.name, APK_URL,
                                         required = message.appVersion < admin.minimumApp(),
@@ -527,6 +531,9 @@ fun Application.gameServer(
 
 /** A player's own picture: a small JPEG, base64. About 12 KB is what the app sends. */
 private const val MAX_PHOTO_CHARS = 48_000
+
+/** iPhone builds are kept in the books as this plus their own number, apart from Android's. */
+const val IOS_BUILD_BASE = 10_000
 
 /** The first app build that can ask to come into a room from the list. */
 const val ASK_TO_JOIN_APP = 28
