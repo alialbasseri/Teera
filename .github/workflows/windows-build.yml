@@ -76,9 +76,14 @@ jobs:
           msi=$(ls desktop/build/compose/binaries/main/msi/*.msi | head -1)
           exe=$(ls desktop/build/compose/binaries/main/exe/*.exe | head -1)
           tag="windows-v$VERSION"
-          if gh release view "$tag" > /dev/null 2>&1; then
-            gh release upload "$tag" "$msi" "$exe" --clobber
-          else
-            gh release create "$tag" "$msi" "$exe" --target "$GITHUB_SHA" --title "طيرة للويندوز $VERSION" --latest=false \
-              --notes "طيرة على الكمبيوتر (Windows 10/11). نزّل الملف وشغّله. إذا طلع \"Windows protected your PC\" دوس More info ← Run anyway."
-          fi
+          # GitHub now and then refuses the token for a moment: try a few times.
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$tag" > /dev/null 2>&1; then
+              gh release upload "$tag" "$msi" "$exe" --clobber && exit 0
+            else
+              gh release create "$tag" "$msi" "$exe" --target "$GITHUB_SHA" --title "طيرة للويندوز $VERSION" --latest=false \
+                --notes "طيرة على الكمبيوتر (Windows 10/11). نزّل الملف وشغّله. إذا طلع \"Windows protected your PC\" دوس More info ← Run anyway." && exit 0
+            fi
+            echo "Refused (attempt $attempt); trying again shortly"; sleep $((attempt * 30))
+          done
+          exit 1

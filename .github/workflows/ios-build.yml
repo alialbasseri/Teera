@@ -96,12 +96,17 @@ jobs:
         run: |
           cp build/Teera-unsigned.ipa build/Teera.ipa
           # Replace the file in place; never delete the release first.
-          if gh release view ios-latest > /dev/null 2>&1; then
-            gh release upload ios-latest build/Teera.ipa --clobber
-          else
-            gh release create ios-latest build/Teera.ipa --target "$GITHUB_SHA" --title "طيرة للآيفون" \
-              --notes "طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios" --latest=false
-          fi
+          # GitHub now and then refuses the token for a moment: try a few times.
+          for attempt in 1 2 3 4 5; do
+            if gh release view ios-latest > /dev/null 2>&1; then
+              gh release upload ios-latest build/Teera.ipa --clobber && exit 0
+            else
+              gh release create ios-latest build/Teera.ipa --target "$GITHUB_SHA" --title "طيرة للآيفون" \
+                --notes "طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios" --latest=false && exit 0
+            fi
+            echo "Refused (attempt $attempt); trying again shortly"; sleep $((attempt * 30))
+          done
+          exit 1
 
   # Opens the app on an iPhone simulator and takes a picture of it, to see it run, not
   # just build. The picture is attached to the ios-latest release (simulator.png).
