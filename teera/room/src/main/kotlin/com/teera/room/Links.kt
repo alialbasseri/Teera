@@ -173,11 +173,11 @@ const val APK_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/teera.apk"
 
 /**
- * The Windows installer, built and published by .github/workflows/windows-build.yml as the
- * release windows-v<version>. Point this at the new one when the version goes up.
+ * The newest Windows installer: .github/workflows/windows-build.yml publishes every build
+ * under this fixed tag and name, so the address never changes.
  */
 const val WINDOWS_URL =
-    "https://github.com/alialbasseri/Teera/releases/download/windows-v1.0.0/Teera-1.0.0.msi"
+    "https://github.com/alialbasseri/Teera/releases/download/windows-latest/Teera.msi"
 
 /**
  * The iPhone build, unsigned (Sideloadly signs it with the player's own Apple ID), published
