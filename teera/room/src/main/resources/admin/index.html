@@ -288,7 +288,7 @@ th{color:var(--muted);font-weight:normal;font-size:12px}
     chart("versionsChart", {
       type: "doughnut",
       data: {
-        labels: vs.map(function (v) { return v[0] === "0" ? "قبل 1.4.1" : (+v[0] >= 10000 ? "iOS " + (v[0] - 10000) : "build " + v[0]); }),
+        labels: vs.map(function (v) { return v[0] === "0" ? "قبل 1.4.1" : (+v[0] >= 20000 ? "Windows " + (v[0] - 20000) : +v[0] >= 10000 ? "iOS " + (v[0] - 10000) : "build " + v[0]); }),
         datasets: [{ data: vs.map(function (v) { return v[1]; }), backgroundColor: ["#d9b166", "#8de8a8", "#8cc4ff", "#ff8f7a", "#c9a0ff", "#a99577", "#6fd3c8"], borderColor: "#24170c" }]
       },
       options: { maintainAspectRatio: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 10 } } } }
@@ -359,6 +359,7 @@ th{color:var(--muted);font-weight:normal;font-size:12px}
         var tags = [
           p.banned ? '<span class="tag red">محظور' + (p.banReason ? ": " + esc(p.banReason) : "") + '</span>' : "",
           p.reachable ? '<span class="tag blue">إشعارات</span>' : "",
+          p.appVersion >= 20000 ? '<span class="tag blue">Windows ' + (p.appVersion - 20000) + '</span>' :
           p.appVersion >= 10000 ? '<span class="tag blue">iOS ' + (p.appVersion - 10000) + '</span>' :
             (p.appVersion ? '<span class="tag">build ' + p.appVersion + '</span>' : '<span class="tag">قديمة</span>')
         ].join(" ");

@@ -259,9 +259,9 @@ fun Application.gameServer(
                             avatar = message.avatar.take(12).filter { it.isLetterOrDigit() || it == ':' }
                             photo = message.photo?.takeIf { avatar == "photo" && it.length <= MAX_PHOTO_CHARS }
                             if (avatar == "photo" && photo == null) avatar = ""
-                            // The iPhone app counts its own builds and is updated its own way:
-                            // never measured against the Android numbers, never sent the APK.
-                            val ios = message.platform == "ios"
+                            // The iPhone and Windows apps count their own builds and are updated
+                            // their own way: never measured against Android's numbers, never sent the APK.
+                            val ios = message.platform != "android"
                             tooOld = !ios && message.appVersion < OLDEST_PLAYABLE_APP
                             appVersion = if (ios) LatestApp.code else message.appVersion
                             if (admin.isBanned(playerId)) {
@@ -270,8 +270,14 @@ fun Application.gameServer(
                                 return@consumeEach
                             }
                             registry.arrived(playerId!!, name, avatar, this)
-                            // The books keep iPhone builds apart: 10000 and up is iOS build (n - 10000).
-                            records.playerSeen(playerId!!, name, avatar, if (ios) IOS_BUILD_BASE + message.appVersion else message.appVersion)
+                            // The books keep each platform's builds apart: 10000+n is iOS build n,
+                            // 20000+n Windows build n.
+                            val booked = when (message.platform) {
+                                "ios" -> IOS_BUILD_BASE + message.appVersion
+                                "windows" -> WINDOWS_BUILD_BASE + message.appVersion
+                                else -> message.appVersion
+                            }
+                            records.playerSeen(playerId!!, name, avatar, booked)
                             send(Protocol.encode(ServerMessage.Welcome(playerId!!)))
                             when {
                                 // Apps before 1.4.1 cannot show an update window, but they do
@@ -534,6 +540,9 @@ private const val MAX_PHOTO_CHARS = 48_000
 
 /** iPhone builds are kept in the books as this plus their own number, apart from Android's. */
 const val IOS_BUILD_BASE = 10_000
+
+/** Windows builds likewise. */
+const val WINDOWS_BUILD_BASE = 20_000
 
 /** The first app build that can ask to come into a room from the list. */
 const val ASK_TO_JOIN_APP = 28

@@ -223,7 +223,7 @@ sealed interface ClientMessage {
         val photo: String? = null,
         /** The app's own build number, so the server can say when a newer one is out. 0 from apps before 1.4.1. */
         val appVersion: Int = 0,
-        /** "android" or "ios": build numbers and updates are each platform's own. */
+        /** "android", "ios" or "windows": build numbers and updates are each platform's own. */
         val platform: String = "android",
     ) : ClientMessage
 
