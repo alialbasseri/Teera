@@ -25,6 +25,7 @@ import platform.AVFAudio.AVAudioSessionCategoryPlayAndRecord
 import platform.AVFAudio.AVAudioSessionModeDefault
 import platform.AVFAudio.AVAudioSessionModeVoiceChat
 import platform.AVFAudio.AVAudioSessionRecordPermissionGranted
+import platform.AVFAudio.setActive
 
 /**
  * Talking across the table from an iPhone: the same packets as the phone ([VoiceWire]),
