@@ -36,6 +36,7 @@ import platform.Foundation.NSURL
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIViewController
+import platform.UIKit.popoverPresentationController
 
 /** One app, one view model, for as long as the app is open. */
 private val app by lazy { IosApp() }

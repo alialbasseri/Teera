@@ -39,9 +39,13 @@ kotlin {
     }
 
     sourceSets {
-        commonMain {
+        // The phone's files and the iPhone's own compile as one: the shared screens call the
+        // iOS answers (IosPlatform.kt) directly, as on the phone they call Platform.kt.
+        iosMain {
             kotlin.srcDir(shared)
             kotlin.exclude(notOnIos)
+        }
+        commonMain {
             dependencies {
                 implementation(project(":core"))
                 implementation(compose.runtime)

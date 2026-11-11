@@ -48,7 +48,7 @@ suspend fun knock(url: String): Boolean? {
 
 private class KtorLine(url: String, private val listener: LineListener) : Line {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val outgoing = Channel<Frame>(Channel.UNLIMITED)
+    private val queue = Channel<Frame>(Channel.UNLIMITED)
 
     @Volatile private var waiting = 0L
     @Volatile private var shut = false
@@ -59,9 +59,9 @@ private class KtorLine(url: String, private val listener: LineListener) : Line {
                 client.webSocket(urlString = url) {
                     listener.onOpen(this@KtorLine)
                     val writer = launch {
-                        for (frame in outgoing) {
+                        for (frame in queue) {
                             send(frame)
-                            waiting = (waiting - frame.data.size).coerceAtLeast(0)
+                            waiting = (waiting - frame.data.size).coerceAtLeast(0L)
                             if (frame is Frame.Close) break
                         }
                     }
@@ -88,7 +88,7 @@ private class KtorLine(url: String, private val listener: LineListener) : Line {
     private fun queue(frame: Frame): Boolean {
         if (shut) return false
         waiting += frame.data.size
-        return outgoing.trySend(frame).isSuccess
+        return queue.trySend(frame).isSuccess
     }
 
     override fun send(text: String) = queue(Frame.Text(text))
@@ -97,6 +97,6 @@ private class KtorLine(url: String, private val listener: LineListener) : Line {
 
     override fun close(code: Int, reason: String?) {
         queue(Frame.Close(CloseReason(code.toShort(), reason.orEmpty())))
-        outgoing.close()
+        queue.close()
     }
 }
