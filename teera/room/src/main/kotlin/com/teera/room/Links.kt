@@ -44,6 +44,9 @@ fun Route.roomLinks(live: () -> LiveCount = { LiveCount(0, 0) }) {
     get("/teera.apk") {
         call.respondRedirect(APK_URL)
     }
+    get("/windows") {
+        call.respondRedirect(WINDOWS_URL)
+    }
 
     get("/j/{code}") {
         val code = call.parameters["code"].orEmpty().uppercase().filter { it.isLetterOrDigit() }.take(8)
@@ -162,3 +165,10 @@ const val MIN_APP_VERSION = 0
  */
 const val APK_URL =
     "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/downloads/teera.apk"
+
+/**
+ * The Windows installer, built and published by .github/workflows/windows-build.yml as the
+ * release windows-v<version>. Point this at the new one when the version goes up.
+ */
+const val WINDOWS_URL =
+    "https://github.com/alialbasseri/Teera/releases/download/windows-v1.0.0/Teera-1.0.0.msi"
