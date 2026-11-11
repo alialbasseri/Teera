@@ -101,7 +101,7 @@ jobs:
             if gh release view ios-latest > /dev/null 2>&1; then
               gh release upload ios-latest build/Teera.ipa --clobber && exit 0
             else
-              gh release create ios-latest build/Teera.ipa --target "$GITHUB_SHA" --title "طيرة للآيفون" \
+              gh release create ios-latest build/Teera.ipa --title "طيرة للآيفون" \
                 --notes "طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios" --latest=false && exit 0
             fi
             echo "Refused (attempt $attempt); trying again shortly"; sleep $((attempt * 30))

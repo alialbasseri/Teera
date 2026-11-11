@@ -81,7 +81,7 @@ jobs:
             if gh release view "$tag" > /dev/null 2>&1; then
               gh release upload "$tag" "$msi" "$exe" --clobber && exit 0
             else
-              gh release create "$tag" "$msi" "$exe" --target "$GITHUB_SHA" --title "طيرة للويندوز $VERSION" --latest=false \
+              gh release create "$tag" "$msi" "$exe" --title "طيرة للويندوز $VERSION" --latest=false \
                 --notes "طيرة على الكمبيوتر (Windows 10/11). نزّل الملف وشغّله. إذا طلع \"Windows protected your PC\" دوس More info ← Run anyway." && exit 0
             fi
             echo "Refused (attempt $attempt); trying again shortly"; sleep $((attempt * 30))
