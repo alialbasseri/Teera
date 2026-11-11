@@ -20,6 +20,8 @@ kotlin {
         iosArm64()
         iosSimulatorArm64()
     }
+    // A quick check on Linux that the shared code builds for native too: -Pteera.native
+    if (project.hasProperty("teera.native")) linuxX64()
 
     sourceSets {
         commonMain {

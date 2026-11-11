@@ -8,8 +8,9 @@ The desktop app is the Android app's own code, run with Compose for Desktop on t
 - **What differs** is answered in one place per platform: `app/.../Platform.kt` on Android and
   `desktop/.../DesktopPlatform.kt` here (settings, fonts, faces, pictures, back button, version).
   The desktop's other own files: `Main.kt` (the window), `DesktopSound.kt` (javax.sound, WAV),
-  `DesktopPrefs.kt` (`%APPDATA%\Teera\settings.properties`), and stand-ins for voice chat and
-  Wi-Fi discovery (`DesktopVoice.kt`, `DesktopLan.kt`), which are not in version 1.
+  `DesktopPrefs.kt` (`%APPDATA%\Teera\settings.properties`), table talk through the computer's
+  mic and speakers (`DesktopVoice.kt`, same packets as the phone), and finding tables on the
+  Wi-Fi with JmDNS (`DesktopLan.kt`, the same DNS-SD service phones announce).
 - **Sounds** are WAV copies of `app/src/main/res/raw/*.ogg` (Java cannot play Ogg). After
   changing a sound on Android, convert it again:
   `ffmpeg -i app/src/main/res/raw/X.ogg -ac 1 -ar 44100 -c:a pcm_s16le desktop/src/main/resources/sounds/X.wav`

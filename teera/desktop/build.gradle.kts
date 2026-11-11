@@ -62,6 +62,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.slf4j:slf4j-nop:2.0.13")
+    // Finding tables on the Wi-Fi, the way phones announce them (DNS-SD).
+    implementation("org.jmdns:jmdns:3.5.9")
 
     testImplementation(kotlin("test"))
     testImplementation(compose.desktop.uiTestJUnit4)
@@ -77,8 +79,8 @@ tasks.test {
 }
 
 /** The Windows build number the server books this app under (see Hello.platform). */
-val windowsBuild = 1
-val windowsVersion = "1.0.0"
+val windowsBuild = 2
+val windowsVersion = "1.1.0"
 
 val writeAppInfo by tasks.registering {
     val out = layout.buildDirectory.dir("generated/appinfo")

@@ -77,3 +77,21 @@ jobs:
             teera/desktop/build/compose/binaries/main/msi/*.msi
             teera/desktop/build/compose/binaries/main/exe/*.exe
           make_latest: false
+
+      # The same installer under a fixed name and tag, so the game page's link
+      # (/windows → .../releases/download/windows-latest/Teera.msi) never changes.
+      - name: Name the installer for the game page
+        if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        shell: bash
+        run: cp desktop/build/compose/binaries/main/msi/*.msi desktop/build/Teera.msi
+
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        with:
+          tag_name: windows-latest
+          name: طيرة للويندوز (آخر نسخة)
+          body: |
+            آخر نسخة من طيرة للكمبيوتر (Windows 10/11). نزّل Teera.msi وشغّله.
+            إذا طلع "Windows protected your PC" دوس More info ← Run anyway.
+          files: teera/desktop/build/Teera.msi
+          make_latest: false

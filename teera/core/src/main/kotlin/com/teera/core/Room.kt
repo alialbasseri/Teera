@@ -11,7 +11,7 @@ class Room(
     val code: String,
     var hostId: String,
     rules: Rules = Rules.DEFAULT,
-    private val clock: () -> Long = System::currentTimeMillis,
+    private val clock: () -> Long = ::currentTimeMillis,
     /** Set by the server for its tables: every turn gets this long, whatever a phone asks for. */
     private val fixedTurnSeconds: Int? = null,
 ) {
@@ -553,7 +553,7 @@ class Room(
         val state = game ?: return Output.NOTHING
         if (state.phase != Phase.MATCH_OVER) return Output.NOTHING
         if (seatOf(playerId) == null && !watchers.containsKey(playerId)) return Output.NOTHING
-        members.values.removeIf { !it.connected }
+        members.values.removeAll { !it.connected }
         members.values.forEach { it.ready = false }
         if (members[hostId] == null) hostId = members.keys.firstOrNull() ?: watchers.keys.firstOrNull() ?: hostId
         standIns.clear()

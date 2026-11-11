@@ -107,6 +107,23 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel) {
         said = "انسخ لنك الغرفة. الصقه لجماعتك بالواتساب",
     )
 
+    // Table talk through the computer's microphone and speakers.
+    val micOn by viewModel.voice.micOn.collectAsState()
+    val talking by viewModel.voice.talking.collectAsState()
+    val hearing by viewModel.voice.hearing.collectAsState()
+    val speaking by viewModel.voice.speaking.collectAsState()
+    val talk = com.teera.app.ui.Talk(
+        micOn = micOn,
+        talking = talking,
+        hearing = hearing,
+        speaking = speaking,
+        onMic = { viewModel.setMic(!micOn) },
+        onHearing = { viewModel.setHearing(!hearing) },
+    ).takeUnless { state.offline }
+
+    // Tables on the Wi-Fi are only looked for while somebody could pick one.
+    LaunchedEffect(state.screen) { viewModel.lookForWifiTables(state.screen == Screen.Menu) }
+
     var effectsOn by remember { mutableStateOf(sound?.effectsOn ?: false) }
     var musicOn by remember { mutableStateOf(sound?.musicOn ?: false) }
 
@@ -267,7 +284,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel) {
                             if (state.friends.any { it.id !in seated }) inviting = true
                             else shareRoomCode(code, viewModel.linkFor(code))
                         },
-                        talk = null,
+                        talk = talk,
                         avatarFor = seatPicture,
                         onKick = if (state.offline) null else { id: String -> viewModel.kick(id) },
                         onSwap = if (state.offline) null else { seated: String, watcher: String -> viewModel.swap(seated, watcher) },
@@ -301,7 +318,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel) {
                             onEffects = { on -> sound?.effectsOn = on; effectsOn = on },
                             onMusic = { on -> sound?.musicOn = on; musicOn = on },
                         ),
-                        talk = null,
+                        talk = talk,
                         avatarFor = { seat, size -> seatPicture(view.seatInfo(seat), size) },
                         onRaiseAlert = viewModel::raiseAlert.takeUnless { state.offline || view.spectating }?.let { raise -> { raise() } },
                         chat = state.chat,

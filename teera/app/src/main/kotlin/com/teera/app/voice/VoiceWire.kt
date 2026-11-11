@@ -1,5 +1,6 @@
 package com.teera.app.voice
 
+import kotlin.jvm.Synchronized
 import kotlin.math.max
 import kotlin.math.sqrt
 
