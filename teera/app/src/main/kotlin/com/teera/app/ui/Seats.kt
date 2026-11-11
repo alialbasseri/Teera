@@ -205,10 +205,10 @@ fun TurnClock(view: PlayerView, size: Dp, stroke: Dp = 3.dp, content: @Composabl
     val left = view.turnMillisLeft ?: return
     val total = view.rules.turnSeconds * 1000L
     if (total <= 0) return
-    val received = remember(view) { android.os.SystemClock.elapsedRealtime() }
-    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    val received = remember(view) { com.teera.app.uptimeMillis() }
+    var now by remember { mutableLongStateOf(com.teera.app.uptimeMillis()) }
     LaunchedEffect(view) {
-        while (true) withFrameMillis { now = android.os.SystemClock.elapsedRealtime() }
+        while (true) withFrameMillis { now = com.teera.app.uptimeMillis() }
     }
     val remaining = (left - (now - received)).coerceIn(0, total)
     val fraction = remaining / total.toFloat()
@@ -238,10 +238,10 @@ fun TurnClock(view: PlayerView, size: Dp, stroke: Dp = 3.dp, content: @Composabl
 @Composable
 fun OwnTurnClock(view: PlayerView) {
     val left = view.turnMillisLeft ?: return
-    val received = remember(view) { android.os.SystemClock.elapsedRealtime() }
-    var now by remember { mutableLongStateOf(android.os.SystemClock.elapsedRealtime()) }
+    val received = remember(view) { com.teera.app.uptimeMillis() }
+    var now by remember { mutableLongStateOf(com.teera.app.uptimeMillis()) }
     LaunchedEffect(view) {
-        while (true) withFrameMillis { now = android.os.SystemClock.elapsedRealtime() }
+        while (true) withFrameMillis { now = com.teera.app.uptimeMillis() }
     }
     val seconds = ((left - (now - received)).coerceAtLeast(0) + 999) / 1000
     TurnClock(view, 36.dp) {

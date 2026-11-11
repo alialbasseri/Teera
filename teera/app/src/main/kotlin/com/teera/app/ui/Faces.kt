@@ -41,29 +41,27 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.teera.app.R
 import com.teera.app.ShownEmote
 import com.teera.app.ui.theme.Felt
 import com.teera.core.Emote
 import kotlinx.coroutines.launch
 
 /** The 3D picture for a face (Fluent Emoji, MIT); null for the soundboard's lines. */
-internal fun Emote.faceArt(): Int? = when (this) {
-    Emote.FACE_JOY -> R.drawable.face_joy
-    Emote.FACE_ROFL -> R.drawable.face_rofl
-    Emote.FACE_SMIRK -> R.drawable.face_smirk
-    Emote.FACE_COOL -> R.drawable.face_cool
-    Emote.FACE_THINK -> R.drawable.face_think
-    Emote.FACE_EYES -> R.drawable.face_eyes
-    Emote.FACE_SCREAM -> R.drawable.face_scream
-    Emote.FACE_CRY -> R.drawable.face_cry
-    Emote.FACE_STEAM -> R.drawable.face_steam
-    Emote.FACE_CLAP -> R.drawable.face_clap
-    Emote.FACE_MUSCLE -> R.drawable.face_muscle
-    Emote.FACE_FIRE -> R.drawable.face_fire
+internal fun Emote.faceArt(): String? = when (this) {
+    Emote.FACE_JOY -> "face_joy"
+    Emote.FACE_ROFL -> "face_rofl"
+    Emote.FACE_SMIRK -> "face_smirk"
+    Emote.FACE_COOL -> "face_cool"
+    Emote.FACE_THINK -> "face_think"
+    Emote.FACE_EYES -> "face_eyes"
+    Emote.FACE_SCREAM -> "face_scream"
+    Emote.FACE_CRY -> "face_cry"
+    Emote.FACE_STEAM -> "face_steam"
+    Emote.FACE_CLAP -> "face_clap"
+    Emote.FACE_MUSCLE -> "face_muscle"
+    Emote.FACE_FIRE -> "face_fire"
     else -> null
 }
 
@@ -110,7 +108,7 @@ internal fun FaceBurst(shown: ShownEmote, modifier: Modifier = Modifier, size: D
                 )
             }
             Image(
-                painterResource(art),
+                com.teera.app.facePainter(art),
                 contentDescription = null,
                 modifier = Modifier
                     .size(size)
@@ -140,7 +138,7 @@ internal fun FacesButton(open: Boolean, onToggle: () -> Unit) {
             .testTag("faces"),
         contentAlignment = Alignment.Center,
     ) {
-        Image(painterResource(R.drawable.face_joy), contentDescription = "وجوه", modifier = Modifier.size(26.dp))
+        Image(com.teera.app.facePainter("face_joy"), contentDescription = "وجوه", modifier = Modifier.size(26.dp))
     }
 }
 
@@ -167,7 +165,7 @@ internal fun FacesTray(onFace: (Emote) -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 Image(
-                    painterResource(face.faceArt()!!),
+                    com.teera.app.facePainter(face.faceArt()!!),
                     contentDescription = null,
                     modifier = Modifier.size(40.dp).graphicsLayer {
                         val s = if (pressed) 1.18f else 1f

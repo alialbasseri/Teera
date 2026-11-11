@@ -1,10 +1,5 @@
 package com.teera.app
 
-import android.app.Application
-import android.content.Context
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import com.teera.app.net.GameClient
 import com.teera.app.net.LanBeacon
 import com.teera.app.net.LanHost
@@ -171,7 +166,7 @@ internal fun gatherSteps(
 data class ShownEmote(val seat: Int, val emote: Emote, val id: Long)
 
 /** The internet server baked into this build, or empty when none has been set up. */
-val DEFAULT_SERVER: String = BuildConfig.SERVER_URL
+val DEFAULT_SERVER: String = AppInfo.SERVER_URL
 
 /**
  * Holds the connection and the last view the referee sent.
@@ -180,9 +175,7 @@ val DEFAULT_SERVER: String = BuildConfig.SERVER_URL
  * moves. Whether the referee is across the internet or inside this process is the only
  * thing [hostOnline], [join] and [playOffline] actually change.
  */
-class GameViewModel(app: Application) : AndroidViewModel(app) {
-
-    private val prefs = app.getSharedPreferences("dominoes", Context.MODE_PRIVATE)
+class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
 
     /** Stable across reinstalls of the process, so a reconnect finds its seat again. */
     private val playerId: String = prefs.getString(KEY_ID, null) ?: UUID.randomUUID().toString().also {
@@ -300,7 +293,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     private var announcedCode: String? = null
 
     init {
-        viewModelScope.launch {
+        scope.launch {
             beacon.tables.collect { found -> _state.update { it.copy(wifiTables = found) } }
         }
     }
@@ -310,7 +303,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** This phone becomes the referee; friends on the same Wi-Fi find it and join. */
     fun hostOnWifi() {
-        viewModelScope.launch {
+        scope.launch {
             val port = runCatching { withContext(Dispatchers.IO) { lanHost.start() } }.getOrElse {
                 _state.update { it.copy(notice = "ما قدرت أفتح الطاولة على هذا الجهاز") }
                 return@launch
@@ -322,7 +315,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun joinWifiTable(table: WifiTable) {
-        viewModelScope.launch {
+        scope.launch {
             val code = table.code ?: openRoomAt(table.host, table.port)
             if (code == null) {
                 _state.update { it.copy(notice = "الطاولة بدت أو انسدت") }
@@ -352,7 +345,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         beacon.stopAnnouncing()
         announcedCode = null
         if (lanHost.isRunning) {
-            viewModelScope.launch(Dispatchers.IO) {
+            scope.launch(Dispatchers.IO) {
                 // Give the goodbye a moment to reach the other phones before the referee goes.
                 delay(400)
                 lanHost.stop()
@@ -364,7 +357,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     /** A table against bots, refereed in this process. */
     fun playOffline(difficulty: Difficulty = Difficulty.NORMAL) {
         val rules = _state.value.draftRules
-        attach(LocalGameClient(viewModelScope, playerId, _state.value.playerName, rules, avatar = _state.value.avatar))
+        attach(LocalGameClient(scope, playerId, _state.value.playerName, rules, avatar = _state.value.avatar))
         _state.update { it.copy(offline = true, connecting = false) }
         for (seat in 1 until Pack.PLAYERS) {
             client?.send(ClientMessage.SetBot(seat, enabled = true, difficulty = difficulty))
@@ -376,7 +369,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         attach(
             WebSocketGameClient(
                 url = url,
-                scope = viewModelScope,
+                scope = scope,
                 playerId = playerId,
                 playerName = _state.value.playerName,
                 wakeFirst = internet,
@@ -395,14 +388,14 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         client = next
         onInternet = false
         _state.update { it.copy(room = null, view = null, chat = emptyList(), notice = null) }
-        pump = viewModelScope.launch {
+        pump = scope.launch {
             next.incoming.collect(::onMessage)
         }
         listening?.cancel()
-        listening = viewModelScope.launch(Dispatchers.Default) {
+        listening = scope.launch(Dispatchers.Default) {
             next.voice.collect(voice::receive)
         }
-        linkWatch = viewModelScope.launch {
+        linkWatch = scope.launch {
             next.link.collect { link ->
                 _state.update { it.copy(link = link) }
                 if (link == Link.UNREACHABLE) unreachable()
@@ -474,7 +467,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 muteBlocked()
             }
 
-            is ServerMessage.Avatar -> viewModelScope.launch(Dispatchers.Default) {
+            is ServerMessage.Avatar -> scope.launch(Dispatchers.Default) {
                 val picture = decodePhoto(message.photo) ?: return@launch
                 _state.update { it.copy(photos = it.photos + (message.playerId to picture)) }
             }
@@ -483,7 +476,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
                 _reactions.tryEmit(react(message.emote))
                 val shown = ShownEmote(message.seat, message.emote, ++emoteCounter)
                 _state.update { it.copy(emotes = (it.emotes + shown).takeLast(4)) }
-                viewModelScope.launch {
+                scope.launch {
                     delay(EMOTE_SHOWN_MS)
                     _state.update { s -> s.copy(emotes = s.emotes.filterNot { it.id == shown.id }) }
                 }
@@ -579,7 +572,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Shows the update window, unless this player already put this version off. */
     private fun offerUpdate(update: ServerMessage.UpdateAvailable) {
-        if (update.versionCode <= com.teera.app.BuildConfig.VERSION_CODE) return
+        if (update.versionCode <= AppInfo.VERSION_CODE) return
         val putOff = prefs.getInt(KEY_UPDATE_LATER, 0)
         if (!update.required && putOff >= update.versionCode) return
         _state.update { if (it.update == update) it else it.copy(update = update) }
@@ -668,7 +661,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(screen = Screen.Ranking, leaderboardLoading = true) }
         presence?.send(ClientMessage.AskLeaderboard)
         knownTournaments().forEach { presence?.send(ClientMessage.AskTournament(it)) }
-        viewModelScope.launch {
+        scope.launch {
             delay(RECORD_WAIT_MS)
             _state.update { if (it.leaderboardLoading) it.copy(leaderboardLoading = false) else it }
         }
@@ -682,7 +675,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (presence == null) startPresence()
         _state.update { it.copy(screen = Screen.Match, match = null, matchSeat = seat, matchLoading = true) }
         presence?.send(ClientMessage.AskMatch(matchId))
-        viewModelScope.launch {
+        scope.launch {
             delay(RECORD_WAIT_MS)
             _state.update { if (it.matchLoading) it.copy(matchLoading = false) else it }
         }
@@ -695,7 +688,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (presence == null) startPresence()
         _state.update { it.copy(screen = Screen.Live) }
         livePoll?.cancel()
-        livePoll = viewModelScope.launch {
+        livePoll = scope.launch {
             while (_state.value.screen == Screen.Live) {
                 presence?.send(ClientMessage.ListLiveGames)
                 delay(LIVE_POLL_MS)
@@ -793,19 +786,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         if (System.getProperty("teera.noPresence") == "true") return
         val link = WebSocketGameClient(
             url = _state.value.serverUrl,
-            scope = viewModelScope,
+            scope = scope,
             playerId = playerId,
             playerName = _state.value.playerName,
             wakeFirst = true,
             avatar = _state.value.avatar.takeIf { it != "photo" }.orEmpty(),
         )
         presence = link
-        presencePump = viewModelScope.launch { link.incoming.collect(::onPresence) }
+        presencePump = scope.launch { link.incoming.collect(::onPresence) }
         // Where to reach this phone with the app closed, for invitations and "your turn".
-        Push.token(getApplication()) { token -> presence?.send(ClientMessage.PushToken(token)) }
+        pushToken { token -> presence?.send(ClientMessage.PushToken(token)) }
         // The server keeps this player's choice about reminders; say it on every connection.
         link.send(ClientMessage.Reminders(_state.value.reminders))
-        onlinePoll = viewModelScope.launch {
+        onlinePoll = scope.launch {
             while (true) {
                 askWhoIsOnline()
                 presence?.send(ClientMessage.ListLiveGames)
@@ -922,29 +915,19 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A problem ("problem") or a suggestion ("idea") for the developer. */
-    fun sendFeedback(kind: String, text: String, image: android.graphics.Bitmap? = null) {
+    fun sendFeedback(kind: String, text: String, image: Picture? = null) {
         if (!_state.value.hasInternetServer) {
             _state.update { it.copy(notice = "يحتاج نت حتى يوصل") }
             return
         }
         if (presence == null) startPresence()
         val room = _state.value.room?.code
-        viewModelScope.launch {
+        scope.launch {
             // A picture goes small: a JPEG no wider than 720, so it travels in one message.
-            val picture = image?.let { withContext(Dispatchers.Default) { feedbackJpeg(it) } }
+            val picture = image?.let { withContext(Dispatchers.Default) { Pictures.jpegBase64(it, 720, 1280, 70) } }
             (presence ?: client)?.send(ClientMessage.Feedback(kind, text.trim(), roomCode = room, image = picture))
         }
     }
-
-    private fun feedbackJpeg(bitmap: android.graphics.Bitmap): String? = runCatching {
-        val scale = minOf(1f, 720f / bitmap.width, 1280f / bitmap.height)
-        val small = if (scale < 1f) {
-            android.graphics.Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
-        } else bitmap
-        val out = java.io.ByteArrayOutputStream()
-        small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 70, out)
-        android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
-    }.getOrNull()
 
     fun dismissAnnouncement() = _state.update { it.copy(announcement = null) }
 
@@ -1060,23 +1043,23 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
 
     // -- profile ---------------------------------------------------------------
 
-    private val photoFile = java.io.File(app.filesDir, "avatar.jpg")
+    private val photoFile = java.io.File(filesDir, "avatar.jpg")
 
     /** This player's photo as it goes over the wire, read once. */
     private var myPhotoBase64: String? = null
 
     init {
         // The table shows who has their microphone on: tell it whenever ours changes.
-        viewModelScope.launch {
+        scope.launch {
             voice.micOn.collect { on -> if (_state.value.room != null) client?.send(ClientMessage.MicState(on)) }
         }
         // Everybody starts with one of the drawn pictures, kept from then on.
         if (prefs.getString(KEY_AVATAR, null) == null) prefs.edit().putString(KEY_AVATAR, _state.value.avatar).apply()
         // A photo chosen on an earlier run.
         if (photoFile.exists()) {
-            viewModelScope.launch(Dispatchers.IO) {
+            scope.launch(Dispatchers.IO) {
                 val bytes = runCatching { photoFile.readBytes() }.getOrNull() ?: return@launch
-                myPhotoBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+                myPhotoBase64 = java.util.Base64.getEncoder().encodeToString(bytes)
                 decodePhoto(myPhotoBase64!!)?.let { picture ->
                     _state.update { it.copy(photos = it.photos + (playerId to picture)) }
                 }
@@ -1097,7 +1080,7 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
         _state.update { it.copy(recordLoading = true) }
         link.send(ClientMessage.MyRecord)
         // A sleeping server can take a while; stop the spinner rather than spin forever.
-        viewModelScope.launch {
+        scope.launch {
             delay(RECORD_WAIT_MS)
             _state.update { if (it.recordLoading) it.copy(recordLoading = false) else it }
         }
@@ -1115,29 +1098,17 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
      * Takes a photo from the gallery: squared off from the middle, shrunk to 160 pixels
      * and saved as a small JPEG, which is all a seat at the table needs.
      */
-    fun choosePhoto(uri: android.net.Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            val app = getApplication<Application>()
-            val bitmap = runCatching {
-                app.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
-            }.getOrNull()
-            if (bitmap == null) {
+    fun choosePhoto(source: PhotoSource) {
+        scope.launch(Dispatchers.IO) {
+            val bytes = Pictures.squareJpeg(platformApp, source, PHOTO_SIZE, 78)
+            val picture = bytes?.let(Pictures::decode)
+            if (bytes == null || picture == null) {
                 _state.update { it.copy(notice = "ما قدرت أفتح الصورة") }
                 return@launch
             }
-            val side = minOf(bitmap.width, bitmap.height)
-            val square = android.graphics.Bitmap.createBitmap(
-                bitmap, (bitmap.width - side) / 2, (bitmap.height - side) / 2, side, side,
-            )
-            val small = android.graphics.Bitmap.createScaledBitmap(square, PHOTO_SIZE, PHOTO_SIZE, true)
-            val bytes = java.io.ByteArrayOutputStream().use { out ->
-                small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 78, out)
-                out.toByteArray()
-            }
             photoFile.writeBytes(bytes)
-            myPhotoBase64 = android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            myPhotoBase64 = java.util.Base64.getEncoder().encodeToString(bytes)
             prefs.edit().putString(KEY_AVATAR, "photo").apply()
-            val picture = small.asImageBitmapCompat()
             _state.update { it.copy(avatar = "photo", photos = it.photos + (playerId to picture)) }
         }
     }
@@ -1213,8 +1184,6 @@ class GameViewModel(app: Application) : AndroidViewModel(app) {
     }
 }
 
-private fun android.graphics.Bitmap.asImageBitmapCompat() = asImageBitmap()
-
 /** wss://host/ws and a code → https://host/j/CODE; null for a table on the Wi-Fi. */
 fun roomLink(serverUrl: String, code: String): String? {
     if (!serverUrl.startsWith("wss://")) return null
@@ -1234,10 +1203,8 @@ fun codeFromLink(link: String?): String? {
 }
 
 /** A base64 JPEG from the wire, or null if it is not one. */
-private fun decodePhoto(base64: String): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
-    val bytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
-    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmapCompat()
-}.getOrNull()
+private fun decodePhoto(base64: String): androidx.compose.ui.graphics.ImageBitmap? =
+    runCatching { java.util.Base64.getMimeDecoder().decode(base64) }.getOrNull()?.let(Pictures::decode)
 
 /** The server writes its refusals in English for the logs; the table reads them in Arabic. */
 private fun ServerMessage.Failure.explain(): String = when (code) {

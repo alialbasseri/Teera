@@ -33,15 +33,15 @@ import androidx.compose.ui.unit.sp
  * (assets/licenses); the merged face is renamed, as that licence asks.
  */
 val Messiri = FontFamily(
-    Font(com.teera.app.R.font.el_messiri_medium, FontWeight.Normal),
-    Font(com.teera.app.R.font.el_messiri_medium, FontWeight.Medium),
-    Font(com.teera.app.R.font.el_messiri_bold, FontWeight.SemiBold),
-    Font(com.teera.app.R.font.el_messiri_bold, FontWeight.Bold),
+    com.teera.app.appFont("el_messiri_medium", FontWeight.Normal),
+    com.teera.app.appFont("el_messiri_medium", FontWeight.Medium),
+    com.teera.app.appFont("el_messiri_bold", FontWeight.SemiBold),
+    com.teera.app.appFont("el_messiri_bold", FontWeight.Bold),
 )
 
 val Ruqaa = FontFamily(
-    Font(com.teera.app.R.font.aref_ruqaa_regular, FontWeight.Normal),
-    Font(com.teera.app.R.font.aref_ruqaa_bold, FontWeight.Bold),
+    com.teera.app.appFont("aref_ruqaa_regular", FontWeight.Normal),
+    com.teera.app.appFont("aref_ruqaa_bold", FontWeight.Bold),
 )
 
 /** The felt on the table, picked on the profile. */

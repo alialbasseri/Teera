@@ -161,7 +161,7 @@ fun TableScreen(
     locked: Boolean = false,
     onKick: ((String) -> Unit)? = null,
     onSwap: ((seated: String, watcher: String) -> Unit)? = null,
-    onFeedback: ((kind: String, text: String, image: android.graphics.Bitmap?) -> Unit)? = null,
+    onFeedback: ((kind: String, text: String, image: com.teera.app.Picture?) -> Unit)? = null,
     onLock: ((Boolean) -> Unit)? = null,
     /** Blocking, kept on this phone: who is blocked, and blocking or unblocking somebody. */
     blocked: Set<String> = emptySet(),
@@ -236,7 +236,7 @@ fun TableScreen(
     }
 
     // The phone's back gesture is easy to make by accident: ask, as the menu's button does.
-    androidx.activity.compose.BackHandler(enabled = !over && !view.spectating) { confirmLeave = true }
+    com.teera.app.BackPress(enabled = !over && !view.spectating) { confirmLeave = true }
 
     // A stand-in plays somebody else's chair; they can hand it back.
     val standingIn = !view.spectating && view.seatInfo(view.yourSeat)?.standIn != null

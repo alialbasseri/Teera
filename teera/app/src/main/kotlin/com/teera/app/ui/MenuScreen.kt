@@ -84,7 +84,7 @@ fun MenuScreen(
     onRejoin: (String) -> Unit = onJoin,
     onFriends: () -> Unit = {},
     /** A problem or suggestion for the developer. */
-    onFeedback: ((kind: String, text: String, image: android.graphics.Bitmap?) -> Unit)? = null,
+    onFeedback: ((kind: String, text: String, image: com.teera.app.Picture?) -> Unit)? = null,
     /** How many of this player's people have the app open, for the link's count. */
     friendsOnline: Int = 0,
     /** The list of games being played that anyone may watch, and how many there are. */
@@ -276,7 +276,7 @@ fun MenuScreen(
                 Credits()
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "نسخة ${com.teera.app.BuildConfig.VERSION_NAME}",
+                        "نسخة ${com.teera.app.AppInfo.VERSION_NAME}",
                         style = MaterialTheme.typography.labelSmall,
                         color = Felt.Muted,
                     )

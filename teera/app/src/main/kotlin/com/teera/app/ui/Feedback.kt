@@ -23,7 +23,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,29 +34,13 @@ import com.teera.app.ui.theme.Felt
  * with a picture if it helps: the screen as it was when this opened, or one from the phone.
  */
 @Composable
-fun FeedbackDialog(onSend: (kind: String, text: String, image: android.graphics.Bitmap?) -> Unit, onClose: () -> Unit) {
+fun FeedbackDialog(onSend: (kind: String, text: String, image: com.teera.app.Picture?) -> Unit, onClose: () -> Unit) {
     var kind by remember { mutableStateOf("problem") }
     var text by remember { mutableStateOf("") }
     // The screen behind, taken now, before this window covers it.
-    val screenView = androidx.compose.ui.platform.LocalView.current
-    val screen: android.graphics.Bitmap? = remember {
-        runCatching {
-            val root = screenView.rootView
-            android.graphics.Bitmap.createBitmap(root.width, root.height, android.graphics.Bitmap.Config.ARGB_8888)
-                .also { root.draw(android.graphics.Canvas(it)) }
-        }.getOrNull()
-    }
-    var image by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
-            image = runCatching {
-                context.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it) }
-            }.getOrNull() ?: image
-        }
-    }
+    val screen = com.teera.app.rememberScreenshot()
+    var image by remember { mutableStateOf<com.teera.app.Picture?>(null) }
+    val pick = com.teera.app.rememberPicturePicker { picked -> image = picked }
     Dialog(onDismissRequest = onClose) {
         Plaque {
             Text("بلّغ أو اقترح", color = Felt.Brass, style = MaterialTheme.typography.headlineSmall)
@@ -103,7 +86,7 @@ fun FeedbackDialog(onSend: (kind: String, text: String, image: android.graphics.
             if (shown != null) {
                 Box(contentAlignment = Alignment.TopStart) {
                     androidx.compose.foundation.Image(
-                        shown.asImageBitmap(),
+                        com.teera.app.Pictures.show(shown),
                         contentDescription = "الصورة",
                         modifier = Modifier.heightIn(max = 140.dp).clip(RoundedCornerShape(10.dp))
                             .border(1.dp, Felt.Brass.copy(alpha = 0.6f), RoundedCornerShape(10.dp)),
@@ -125,13 +108,7 @@ fun FeedbackDialog(onSend: (kind: String, text: String, image: android.graphics.
                     if (screen != null) {
                         SmallChoice("📸 صورة الشاشة", Modifier.weight(1f).testTag("feedback-screen")) { image = screen }
                     }
-                    SmallChoice("🖼️ من الصور", Modifier.weight(1f).testTag("feedback-gallery")) {
-                        pick.launch(
-                            androidx.activity.result.PickVisualMediaRequest(
-                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly,
-                            ),
-                        )
-                    }
+                    SmallChoice("🖼️ من الصور", Modifier.weight(1f).testTag("feedback-gallery")) { pick() }
                 }
             }
             Text(

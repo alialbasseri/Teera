@@ -8,6 +8,7 @@
 FROM gradle:8.14.3-jdk21 AS build
 WORKDIR /src
 COPY . .
+ENV TEERA_SERVER_ONLY=1
 RUN gradle :server:installDist --no-daemon --console=plain
 
 FROM eclipse-temurin:21-jre
