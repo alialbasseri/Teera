@@ -46,6 +46,13 @@ jobs:
           path: ~/.konan
           key: konan-${{ runner.os }}-2.0.21
 
+      # Linking the whole game for iOS needs more than Gradle's default 2 GB. Set for this
+      # machine only (the server's own build keeps its settings).
+      - name: Give the Kotlin compiler room
+        run: |
+          mkdir -p "$GRADLE_USER_HOME"
+          echo "org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> "$GRADLE_USER_HOME/gradle.properties"
+
       # Kotlin first, on its own, so a compile error reads plainly here.
       - name: Compile the game for iOS
         working-directory: teera
