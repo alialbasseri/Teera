@@ -82,7 +82,7 @@ fun MatchScreen(match: MatchDetail?, loading: Boolean, mySeat: Int, onClose: () 
                 Side(team(1 - myTeam), match.scores.getOrElse(1 - myTeam) { 0 }, Modifier.weight(1f))
             }
             Text(
-                "${whenPlayed(match.startedAtEpochMs, System.currentTimeMillis())} · لـ ${match.target} · ${match.games.size} گيم · دوس على أي گيم تشوف خطواته",
+                "${whenPlayed(match.startedAtEpochMs, com.teera.app.nowMillis())} · لـ ${match.target} · ${match.games.size} گيم · دوس على أي گيم تشوف خطواته",
                 color = Felt.Muted,
                 style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,

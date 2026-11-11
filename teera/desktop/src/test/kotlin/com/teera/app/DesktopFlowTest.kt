@@ -148,10 +148,11 @@ class DesktopFlowTest {
         assertTrue(gamesFinished >= 2 || model.state.value.view?.phase == Phase.MATCH_OVER, "only $gamesFinished games finished")
         assertTrue(decisions >= 6, "only $decisions decisions came up")
 
-        // Esc is the phone's back button: from the table it asks before leaving.
-        model.leave()
-        pass(200)
-        assertTrue(has("العب ضد البوتات"), "leaving did not come back to the menu")
+        // Leaving goes back to the menu.
+        javax.swing.SwingUtilities.invokeAndWait { model.leave() }
+        repeat(30) { if (!has("العب ضد البوتات")) pass(100) }
+        shot("after-leave")
+        assertTrue(has("العب ضد البوتات"), "leaving did not come back to the menu: ${model.state.value.screen}")
         model.close()
     }
 

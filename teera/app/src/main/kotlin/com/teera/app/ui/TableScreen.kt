@@ -773,7 +773,7 @@ private fun GivenTile(view: PlayerView) {
         val start = from.anchor(size.width, size.height, rtl)
         val end = to.anchor(size.width, size.height, rtl)
         val t = travel.value
-        val arc = -size.height * 0.18f * sin(Math.PI * t).toFloat()
+        val arc = -size.height * 0.18f * sin(kotlin.math.PI * t).toFloat()
         val at = Offset(start.x + (end.x - start.x) * t, start.y + (end.y - start.y) * t + arc)
         val w = size.minDimension * 0.07f
         rotate(t * 200f, at) {
@@ -839,7 +839,7 @@ private fun GoldBurst(seed: Int) {
         val origin = Offset(size.width / 2f, size.height * 0.48f)
         val reach = size.minDimension * 0.62f
         flakes.forEach { (angle, speed, shade) ->
-            val radians = Math.toRadians(angle.toDouble())
+            val radians = angle.toDouble() * kotlin.math.PI / 180.0
             val distance = reach * speed * (1f - (1f - t) * (1f - t))
             val fall = size.height * 0.28f * t * t
             val at = Offset(
@@ -1427,10 +1427,10 @@ private fun AlertButton(onClick: () -> Unit) {
  */
 @Composable
 private fun AlertVotePanel(view: PlayerView, vote: com.teera.core.AlertVote, onVote: (Boolean) -> Unit, modifier: Modifier) {
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var now by remember { mutableStateOf(com.teera.app.nowMillis()) }
     LaunchedEffect(vote.deadlineEpochMs) {
         while (true) {
-            now = System.currentTimeMillis()
+            now = com.teera.app.nowMillis()
             delay(500)
         }
     }
@@ -1491,10 +1491,10 @@ private fun AlertVotePanel(view: PlayerView, vote: com.teera.core.AlertVote, onV
 /** Asking everyone at the table to play the match to another score. */
 @Composable
 private fun TargetVotePanel(view: PlayerView, vote: com.teera.core.TargetVote, onVote: (Boolean) -> Unit, modifier: Modifier) {
-    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    var now by remember { mutableStateOf(com.teera.app.nowMillis()) }
     LaunchedEffect(vote.deadlineEpochMs) {
         while (true) {
-            now = System.currentTimeMillis()
+            now = com.teera.app.nowMillis()
             delay(500)
         }
     }

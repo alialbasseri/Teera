@@ -57,6 +57,28 @@ object AppInfo {
     const val PLATFORM = "windows"
 }
 
+/** Milliseconds since 1970, by the wall clock. */
+fun nowMillis(): Long = System.currentTimeMillis()
+
+/** Where blocking work (files, sockets) runs. */
+val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher get() = kotlinx.coroutines.Dispatchers.IO
+
+/** Under test: no friends list, invitations or tutorial, nothing reaching the real server. */
+fun testMode(): Boolean = System.getProperty("teera.noPresence") == "true"
+
+/** [ms] on this device's calendar: year, day of the year, day of the month, month (1-12). */
+fun dateParts(ms: Long): IntArray = java.util.Calendar.getInstance().apply { timeInMillis = ms }.let {
+    intArrayOf(
+        it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.DAY_OF_YEAR),
+        it.get(java.util.Calendar.DAY_OF_MONTH), it.get(java.util.Calendar.MONTH) + 1,
+    )
+}
+
+/** A lock the shared code takes around state its callbacks share across threads. */
+class Lock
+
+inline fun <T> Lock.locked(block: () -> T): T = synchronized(this, block)
+
 fun uptimeMillis(): Long = System.nanoTime() / 1_000_000
 
 /** Esc does what the phone's back button does: the innermost screen that wants it, first. */
@@ -132,6 +154,13 @@ abstract class PlatformViewModel(app: PlatformApp) {
     protected val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     protected val prefs: DesktopPrefs = app.prefs
     protected val filesDir: File = app.dataDir
+
+    /** A file of the app's own, or null if there is none. */
+    protected fun readData(name: String): ByteArray? = runCatching { java.io.File(filesDir, name).readBytes() }.getOrNull()
+
+    protected fun writeData(name: String, bytes: ByteArray) {
+        java.io.File(filesDir, name).writeBytes(bytes)
+    }
     protected val platformApp: PlatformApp = app
 
     /** No push messages on a computer: the app is open or it is not. */

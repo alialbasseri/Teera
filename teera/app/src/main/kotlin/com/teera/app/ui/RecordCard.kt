@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import com.teera.app.ui.theme.Felt
 import com.teera.core.MatchSummary
 import com.teera.core.PlayerRecord
-import java.util.Calendar
 
 /**
  * "سجلّي": what the server's books say about this player — matches won and lost, games,
@@ -34,7 +33,7 @@ fun RecordCard(
     loading: Boolean,
     kept: Boolean,
     modifier: Modifier = Modifier,
-    now: Long = System.currentTimeMillis(),
+    now: Long = com.teera.app.nowMillis(),
     onOpenMatch: (String, Int) -> Unit = { _, _ -> },
     onRanking: () -> Unit = {},
 ) {
@@ -154,14 +153,13 @@ private fun number(value: Int) = "\u2066$value\u2069"
 
 /** "اليوم", "البارحة", or the date. */
 internal fun whenPlayed(at: Long, now: Long): String {
-    fun day(ms: Long) = Calendar.getInstance().apply { timeInMillis = ms }.let {
-        it.get(Calendar.YEAR) * 400 + it.get(Calendar.DAY_OF_YEAR)
-    }
-    val calendar = Calendar.getInstance().apply { timeInMillis = at }
+    // year, day of the year, day of the month, month: in this device's own time zone.
+    fun day(ms: Long) = com.teera.app.dateParts(ms).let { it[0] * 400 + it[1] }
+    val date = com.teera.app.dateParts(at)
     return when (day(now) - day(at)) {
         0 -> "اليوم"
         1 -> "البارحة"
-        else -> "${calendar.get(Calendar.DAY_OF_MONTH)}/${calendar.get(Calendar.MONTH) + 1}"
+        else -> "${date[2]}/${date[3]}"
     }
 }
 

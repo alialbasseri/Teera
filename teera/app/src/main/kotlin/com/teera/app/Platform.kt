@@ -34,6 +34,28 @@ object AppInfo {
     const val PLATFORM = "android"
 }
 
+/** Milliseconds since 1970, by the wall clock. */
+fun nowMillis(): Long = System.currentTimeMillis()
+
+/** Where blocking work (files, sockets) runs. */
+val ioDispatcher: kotlinx.coroutines.CoroutineDispatcher get() = kotlinx.coroutines.Dispatchers.IO
+
+/** Under test: no friends list, invitations or tutorial, nothing reaching the real server. */
+fun testMode(): Boolean = System.getProperty("teera.noPresence") == "true"
+
+/** [ms] on this device's calendar: year, day of the year, day of the month, month (1-12). */
+fun dateParts(ms: Long): IntArray = java.util.Calendar.getInstance().apply { timeInMillis = ms }.let {
+    intArrayOf(
+        it.get(java.util.Calendar.YEAR), it.get(java.util.Calendar.DAY_OF_YEAR),
+        it.get(java.util.Calendar.DAY_OF_MONTH), it.get(java.util.Calendar.MONTH) + 1,
+    )
+}
+
+/** A lock the shared code takes around state its callbacks share across threads. */
+class Lock
+
+inline fun <T> Lock.locked(block: () -> T): T = synchronized(this, block)
+
 /** A clock that only goes forward, for the turn rings. */
 fun uptimeMillis(): Long = android.os.SystemClock.elapsedRealtime()
 
@@ -111,6 +133,13 @@ abstract class PlatformViewModel(app: PlatformApp) : AndroidViewModel(app) {
     protected val scope: CoroutineScope get() = viewModelScope
     protected val prefs: android.content.SharedPreferences = app.getSharedPreferences("dominoes", Context.MODE_PRIVATE)
     protected val filesDir: java.io.File = app.filesDir
+
+    /** A file of the app's own, or null if there is none. */
+    protected fun readData(name: String): ByteArray? = runCatching { java.io.File(filesDir, name).readBytes() }.getOrNull()
+
+    protected fun writeData(name: String, bytes: ByteArray) {
+        java.io.File(filesDir, name).writeBytes(bytes)
+    }
     protected val platformApp: PlatformApp get() = getApplication()
     protected fun pushToken(onToken: (String) -> Unit) = Push.token(getApplication(), onToken)
 }

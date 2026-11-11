@@ -23,7 +23,6 @@ import com.teera.core.PlayerView
 import com.teera.core.RoomInfo
 import com.teera.core.Rules
 import com.teera.core.ServerMessage
-import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -178,7 +177,7 @@ val DEFAULT_SERVER: String = AppInfo.SERVER_URL
 class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
 
     /** Stable across reinstalls of the process, so a reconnect finds its seat again. */
-    private val playerId: String = prefs.getString(KEY_ID, null) ?: UUID.randomUUID().toString().also {
+    private val playerId: String = prefs.getString(KEY_ID, null) ?: randomId().also {
         prefs.edit().putString(KEY_ID, it).apply()
     }
 
@@ -188,13 +187,13 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
             playerName = prefs.getString(KEY_NAME, null) ?: "Player",
             serverUrl = prefs.getString(KEY_SERVER, null) ?: DEFAULT_SERVER,
             lastRoom = prefs.getString(KEY_LAST_ROOM, null),
-            avatar = prefs.getString(KEY_AVATAR, null) ?: "p:${(UUID.randomUUID().hashCode() and 0x7) }",
+            avatar = prefs.getString(KEY_AVATAR, null) ?: "p:${kotlin.random.Random.nextInt(8)}",
         ),
     )
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     // Read from the microphone's thread as well as the main one.
-    @Volatile
+    @kotlin.concurrent.Volatile
     private var client: GameClient? = null
     private var pump: Job? = null
     private var linkWatch: Job? = null
@@ -304,7 +303,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
     /** This phone becomes the referee; friends on the same Wi-Fi find it and join. */
     fun hostOnWifi() {
         scope.launch {
-            val port = runCatching { withContext(Dispatchers.IO) { lanHost.start() } }.getOrElse {
+            val port = runCatching { withContext(ioDispatcher) { lanHost.start() } }.getOrElse {
                 _state.update { it.copy(notice = "ما قدرت أفتح الطاولة على هذا الجهاز") }
                 return@launch
             }
@@ -345,7 +344,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
         beacon.stopAnnouncing()
         announcedCode = null
         if (lanHost.isRunning) {
-            scope.launch(Dispatchers.IO) {
+            scope.launch(ioDispatcher) {
                 // Give the goodbye a moment to reach the other phones before the referee goes.
                 delay(400)
                 lanHost.stop()
@@ -769,7 +768,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
         runCatching { com.teera.app.ui.theme.Looks.felt = com.teera.app.ui.theme.FeltStyle.valueOf(prefs.getString(KEY_FELT, null) ?: "GREEN") }
         runCatching { com.teera.app.ui.theme.Looks.bones = com.teera.app.ui.theme.BoneStyle.valueOf(prefs.getString(KEY_BONES, null) ?: "IVORY") }
         // Somebody new starts with the lesson (never in a test, which drives the menu itself).
-        if (!prefs.getBoolean(KEY_TUTORIAL_SEEN, false) && System.getProperty("teera.noPresence") != "true") {
+        if (!prefs.getBoolean(KEY_TUTORIAL_SEEN, false) && !testMode()) {
             _state.update { it.copy(screen = Screen.Tutorial) }
         }
     }
@@ -783,7 +782,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
 
     private fun startPresence() {
         if (presence != null || !_state.value.hasInternetServer) return
-        if (System.getProperty("teera.noPresence") == "true") return
+        if (testMode()) return
         val link = WebSocketGameClient(
             url = _state.value.serverUrl,
             scope = scope,
@@ -1043,7 +1042,6 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
 
     // -- profile ---------------------------------------------------------------
 
-    private val photoFile = java.io.File(filesDir, "avatar.jpg")
 
     /** This player's photo as it goes over the wire, read once. */
     private var myPhotoBase64: String? = null
@@ -1056,13 +1054,11 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
         // Everybody starts with one of the drawn pictures, kept from then on.
         if (prefs.getString(KEY_AVATAR, null) == null) prefs.edit().putString(KEY_AVATAR, _state.value.avatar).apply()
         // A photo chosen on an earlier run.
-        if (photoFile.exists()) {
-            scope.launch(Dispatchers.IO) {
-                val bytes = runCatching { photoFile.readBytes() }.getOrNull() ?: return@launch
-                myPhotoBase64 = java.util.Base64.getEncoder().encodeToString(bytes)
-                decodePhoto(myPhotoBase64!!)?.let { picture ->
-                    _state.update { it.copy(photos = it.photos + (playerId to picture)) }
-                }
+        scope.launch(ioDispatcher) {
+            val bytes = readData(PHOTO_FILE) ?: return@launch
+            myPhotoBase64 = base64(bytes)
+            decodePhoto(myPhotoBase64!!)?.let { picture ->
+                _state.update { it.copy(photos = it.photos + (playerId to picture)) }
             }
         }
     }
@@ -1074,7 +1070,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
 
     /** Asks the server's books for this player's record; the answer lands in [UiState.record]. */
     private fun askForRecord() {
-        if (!_state.value.hasInternetServer || System.getProperty("teera.noPresence") == "true") return
+        if (!_state.value.hasInternetServer || testMode()) return
         if (presence == null) startPresence()
         val link = presence ?: return
         _state.update { it.copy(recordLoading = true) }
@@ -1099,15 +1095,15 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
      * and saved as a small JPEG, which is all a seat at the table needs.
      */
     fun choosePhoto(source: PhotoSource) {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(ioDispatcher) {
             val bytes = Pictures.squareJpeg(platformApp, source, PHOTO_SIZE, 78)
             val picture = bytes?.let(Pictures::decode)
             if (bytes == null || picture == null) {
                 _state.update { it.copy(notice = "ما قدرت أفتح الصورة") }
                 return@launch
             }
-            photoFile.writeBytes(bytes)
-            myPhotoBase64 = java.util.Base64.getEncoder().encodeToString(bytes)
+            writeData(PHOTO_FILE, bytes)
+            myPhotoBase64 = base64(bytes)
             prefs.edit().putString(KEY_AVATAR, "photo").apply()
             _state.update { it.copy(avatar = "photo", photos = it.photos + (playerId to picture)) }
         }
@@ -1181,6 +1177,7 @@ class GameViewModel(app: PlatformApp) : PlatformViewModel(app) {
         const val KEY_BONES = "boneStyle"
         const val KEY_UPDATE_LATER = "updateLater"
         const val PHOTO_SIZE = 160
+        const val PHOTO_FILE = "avatar.jpg"
     }
 }
 
@@ -1204,7 +1201,7 @@ fun codeFromLink(link: String?): String? {
 
 /** A base64 JPEG from the wire, or null if it is not one. */
 private fun decodePhoto(base64: String): androidx.compose.ui.graphics.ImageBitmap? =
-    runCatching { java.util.Base64.getMimeDecoder().decode(base64) }.getOrNull()?.let(Pictures::decode)
+    unbase64(base64)?.let(Pictures::decode)
 
 /** The server writes its refusals in English for the logs; the table reads them in Arabic. */
 private fun ServerMessage.Failure.explain(): String = when (code) {

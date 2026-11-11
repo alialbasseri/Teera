@@ -160,7 +160,7 @@ private fun DrawScope.crescent() {
     val star = Path()
     for (i in 0 until 10) {
         val r = if (i % 2 == 0) 9f else 3.8f
-        val a = Math.toRadians(-90.0 + i * 36.0)
+        val a = (-90.0 + i * 36.0) * kotlin.math.PI / 180.0
         val p = Offset(70f + r * kotlin.math.cos(a).toFloat(), 48f + r * kotlin.math.sin(a).toFloat())
         if (i == 0) star.moveTo(p.x, p.y) else star.lineTo(p.x, p.y)
     }

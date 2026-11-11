@@ -1,13 +1,11 @@
 package com.teera.app.net
 
+import com.teera.app.locked
 import com.teera.core.ClientMessage
 import com.teera.core.ErrorCode
 import com.teera.core.Protocol
 import com.teera.core.ServerMessage
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
@@ -19,14 +17,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import okio.ByteString
-import okio.ByteString.Companion.toByteString
 
 /**
  * Talks to the room server.
@@ -44,7 +34,6 @@ class WebSocketGameClient(
     private val scope: CoroutineScope,
     private val playerId: String,
     private val playerName: String,
-    private val http: OkHttpClient = defaultHttpClient(),
     private val wakeFirst: Boolean = false,
     private val wakeTimeoutMillis: Long = WAKE_TIMEOUT_MS,
     /** This player's picture, as [com.teera.core.Seat.avatar] carries it. */
@@ -71,7 +60,10 @@ class WebSocketGameClient(
     private val _link = MutableStateFlow(if (wakeFirst) Link.WAKING else Link.CONNECTING)
     override val link: StateFlow<Link> = _link.asStateFlow()
 
-    private var socket: WebSocket? = null
+    /** Guards the fields below: the line calls back on its own threads. */
+    private val lock = com.teera.app.Lock()
+
+    private var socket: Line? = null
     private var closed = false
     private var attempt = 0
     private var everUp = false
@@ -88,40 +80,31 @@ class WebSocketGameClient(
     private val keepAlive: Job
 
     /** Knocks on the server's health page until it answers, which is what wakes it. */
-    private suspend fun wake(): Boolean = withContext(Dispatchers.IO) {
+    private suspend fun wake(): Boolean {
         val health = healthUrlFor(url)
-        val knock = http.newBuilder()
-            .readTimeout(45, TimeUnit.SECONDS)
-            .callTimeout(50, TimeUnit.SECONDS)
-            .build()
-        val deadline = System.currentTimeMillis() + wakeTimeoutMillis
-        while (!closed && System.currentTimeMillis() < deadline) {
-            try {
-                knock.newCall(Request.Builder().url(health).build()).execute().use { response ->
-                    if (response.isSuccessful) return@withContext true
-                }
-            } catch (e: IOException) {
-                // Not up yet, or no signal: knock again in a moment.
-            } catch (e: IllegalArgumentException) {
-                return@withContext false // not an address at all
+        val deadline = com.teera.app.nowMillis() + wakeTimeoutMillis
+        while (!closed && com.teera.app.nowMillis() < deadline) {
+            // Not up yet, or no signal (false): knock again in a moment.
+            when (knock(health)) {
+                true -> return true
+                null -> return false // not an address at all
+                false -> Unit
             }
             delay(2_000)
         }
-        false
+        return false
     }
 
-    private fun open() = synchronized(this) {
-        if (closed) return@synchronized
+    private fun open() = lock.locked {
+        if (closed) return@locked
         if (_link.value != Link.LOST) _link.value = Link.CONNECTING
-        val request = try {
-            Request.Builder().url(url).build()
-        } catch (e: IllegalArgumentException) {
+        val fresh = openLine(url, listener)
+        if (fresh == null) {
             giveUp()
-            return@synchronized
+            return@locked
         }
-        val fresh = http.newWebSocket(request, listener)
-        // OkHttp queues anything sent before the socket opens, in order. The hello has to
-        // be first in that queue: the server refuses everything until it has one.
+        // The line queues anything sent before it opens, in order. The hello has to be
+        // first in that queue: the server refuses everything until it has one.
         fresh.send(encode(ClientMessage.Hello(playerName, playerId, avatar = avatar, photo = photo, appVersion = com.teera.app.AppInfo.VERSION_CODE, platform = com.teera.app.AppInfo.PLATFORM)))
         roomRequest?.let { fresh.send(encode(it)) }
         pending.forEach { fresh.send(it) }
@@ -129,19 +112,19 @@ class WebSocketGameClient(
         socket = fresh
     }
 
-    private val listener = object : WebSocketListener() {
+    private val listener = object : LineListener {
 
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            synchronized(this@WebSocketGameClient) { if (webSocket === socket) attempt = 0 }
+        override fun onOpen(line: Line) {
+            lock.locked { if (line === socket) attempt = 0 }
         }
 
-        override fun onMessage(webSocket: WebSocket, text: String) {
+        override fun onText(line: Line, text: String) {
             val message = try {
                 Protocol.decodeServer(text)
             } catch (e: Exception) {
                 return
             }
-            synchronized(this@WebSocketGameClient) {
+            lock.locked {
                 when (message) {
                     is ServerMessage.Welcome -> {
                         everUp = true
@@ -165,17 +148,15 @@ class WebSocketGameClient(
             events.tryEmit(message)
         }
 
-        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            voiceIn.tryEmit(bytes.toByteArray())
+        override fun onBytes(line: Line, bytes: ByteArray) {
+            voiceIn.tryEmit(bytes)
         }
 
-        override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-            webSocket.close(1000, null)
+        override fun onClosing(line: Line) {
+            line.close(1000, null)
         }
 
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) = dropped(webSocket)
-
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) = dropped(webSocket)
+        override fun onDown(line: Line) = dropped(line)
     }
 
     // After the listener: init runs top to bottom, and open() hands the listener over.
@@ -196,16 +177,16 @@ class WebSocketGameClient(
         keepAlive = scope.launch {
             while (isActive) {
                 delay(KEEP_ALIVE_MS)
-                synchronized(this@WebSocketGameClient) {
+                lock.locked {
                     if (_link.value == Link.UP) socket?.send(encode(ClientMessage.Ping))
                 }
             }
         }
     }
 
-    private fun dropped(webSocket: WebSocket) = synchronized(this) {
+    private fun dropped(line: Line) = lock.locked {
         // A socket we already replaced (or closed on purpose) has nothing more to say.
-        if (webSocket !== socket || closed) return@synchronized
+        if (line !== socket || closed) return@locked
         socket = null
         if (everUp) _link.value = Link.LOST
         retry()
@@ -228,7 +209,7 @@ class WebSocketGameClient(
         _link.value = Link.UNREACHABLE
     }
 
-    override fun send(message: ClientMessage) = synchronized(this) {
+    override fun send(message: ClientMessage) = lock.locked {
         when (message) {
             is ClientMessage.CreateRoom, is ClientMessage.JoinRoom, is ClientMessage.PlayTournamentMatch -> roomRequest = message
             ClientMessage.LeaveRoom -> roomRequest = null
@@ -245,16 +226,16 @@ class WebSocketGameClient(
         Unit
     }
 
-    override fun sendVoice(packet: ByteArray) = synchronized(this) {
-        val current = socket ?: return@synchronized
+    override fun sendVoice(packet: ByteArray) = lock.locked {
+        val current = socket ?: return@locked
         // A line that cannot keep up would only deliver speech late; skip rather than queue.
-        if (_link.value == Link.UP && current.queueSize() < MAX_VOICE_BACKLOG) {
-            current.send(packet.toByteString())
+        if (_link.value == Link.UP && current.queued < MAX_VOICE_BACKLOG) {
+            current.send(packet)
         }
         Unit
     }
 
-    override fun close() = synchronized(this) {
+    override fun close() = lock.locked {
         closed = true
         keepAlive.cancel()
         socket?.close(1000, "bye")
@@ -274,11 +255,5 @@ class WebSocketGameClient(
             .replaceFirst("ws://", "http://")
             .removeSuffix("/")
             .removeSuffix("/ws") + "/health"
-
-        fun defaultHttpClient(): OkHttpClient = OkHttpClient.Builder()
-            .pingInterval(20, TimeUnit.SECONDS)
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(0, TimeUnit.MILLISECONDS)
-            .build()
     }
 }
