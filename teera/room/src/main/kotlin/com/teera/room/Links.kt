@@ -177,12 +177,14 @@ const val WINDOWS_URL =
     "https://github.com/alialbasseri/Teera/releases/download/windows-v1.0.0/Teera-1.0.0.msi"
 
 /**
- * Where /windows sends people: the .msi of the newest windows-v<version> release on GitHub,
- * looked up at most every ten minutes, so a new build is offered without touching the server
- * and a release that is missing or being replaced never leaves the link pointing at nothing.
+ * Where /windows sends people: the .msi of the Windows version the code says is current
+ * (windowsVersion in teera/desktop/build.gradle.kts, read like [VERSION_URL]), once its
+ * release exists on GitHub. Checked at most every ten minutes, so a new build is offered
+ * without touching the server, and the link never points at a release that is not there.
  */
 object WindowsDownload {
-    private const val RELEASES = "https://api.github.com/repos/alialbasseri/Teera/releases?per_page=30"
+    private const val BUILD_FILE =
+        "https://raw.githubusercontent.com/alialbasseri/johnny-five/claude/android-domino-multiplayer-0drvhg/teera/desktop/build.gradle.kts"
     private const val EVERY_MS = 10 * 60_000L
 
     @Volatile private var cached: String = WINDOWS_URL
@@ -191,20 +193,36 @@ object WindowsDownload {
     fun url(now: Long = System.currentTimeMillis()): String {
         if (now - checkedAt > EVERY_MS) {
             checkedAt = now
-            newest()?.let { cached = it }
+            current()?.let { cached = it }
         }
         return cached
     }
 
-    /** The newest version's .msi, or null if GitHub did not answer. */
-    private fun newest(): String? = runCatching {
-        val connection = java.net.URI(RELEASES).toURL().openConnection() as java.net.HttpURLConnection
+    /** The current version's installer, if its release is up; null otherwise. */
+    private fun current(): String? = runCatching {
+        val version = versionIn(fetch(BUILD_FILE)) ?: return null
+        val url = msiFor(version)
+        val probe = java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection
+        probe.instanceFollowRedirects = false
+        probe.requestMethod = "HEAD"
+        probe.connectTimeout = 4_000
+        probe.readTimeout = 4_000
+        // GitHub answers a file that exists with a redirect to its storage.
+        url.takeIf { probe.responseCode in 200..399 }
+    }.getOrNull()
+
+    private fun fetch(url: String): String {
+        val connection = java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection
         connection.connectTimeout = 4_000
         connection.readTimeout = 4_000
-        connection.setRequestProperty("Accept", "application/vnd.github+json")
-        val body = connection.inputStream.use { it.readBytes().decodeToString() }
-        newestMsi(body)
-    }.getOrNull()
+        return connection.inputStream.use { it.readBytes().decodeToString() }
+    }
+
+    fun msiFor(version: String) = "https://github.com/alialbasseri/Teera/releases/download/windows-v$version/Teera-$version.msi"
+
+    /** windowsVersion = "1.1.0" in the desktop build file. */
+    fun versionIn(buildFile: String): String? =
+        Regex("""val\s+windowsVersion\s*=\s*"([0-9.]+)"""").find(buildFile)?.groupValues?.get(1)
 
     /** From GitHub's list of releases: the .msi of the highest windows-v<version>. */
     fun newestMsi(releasesJson: String): String? {

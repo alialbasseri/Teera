@@ -144,9 +144,7 @@ jobs:
             -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build/sim \
             ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO | tail -5
           APP=build/sim/Build/Products/Release-iphonesimulator/Teera.app
-          echo "--- $APP"; ls "$APP"; plutil -p "$APP/Info.plist" | head -20
-          # The simulator wants a bundle signed at least ad hoc.
-          codesign --force --sign - --timestamp=none "$APP"
+          echo "--- $APP"; ls "$APP"; plutil -extract CFBundleIdentifier raw "$APP/Info.plist"
           xcrun simctl install "$UDID" "$APP"
           xcrun simctl launch --console-pty "$UDID" com.teera.ios > app-log.txt 2>&1 &
           sleep 40

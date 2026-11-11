@@ -675,6 +675,11 @@ class RoomLinkTest {
         ]"""
         assertEquals("https://x/windows-v1.1.0/Teera-1.1.0.msi", com.teera.room.WindowsDownload.newestMsi(releases))
         assertEquals(null, com.teera.room.WindowsDownload.newestMsi("[]"))
+        assertEquals("1.1.0", com.teera.room.WindowsDownload.versionIn("val windowsBuild = 2\nval windowsVersion = \"1.1.0\"\n"))
+        assertEquals(
+            "https://github.com/alialbasseri/Teera/releases/download/windows-v1.1.0/Teera-1.1.0.msi",
+            com.teera.room.WindowsDownload.msiFor("1.1.0"),
+        )
     }
 
     @Test
