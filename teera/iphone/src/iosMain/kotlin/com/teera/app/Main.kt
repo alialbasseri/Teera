@@ -59,6 +59,8 @@ fun MainViewController(): UIViewController = ComposeUIViewController {
 @Suppress("unused")
 fun appInBackground(background: Boolean) {
     model.setForeground(!background)
+    // Out of sight, the mic closes: nobody at the table should overhear the room.
+    if (background) model.pauseVoice()
     if (background) sound.stopMusic() else if (model.state.value.screen == Screen.Table) sound.startMusic()
 }
 
@@ -67,6 +69,9 @@ fun appInBackground(background: Boolean) {
 fun openLink(link: String) {
     codeFromLink(link)?.let(model::openLink)
 }
+
+/** Runs [block] on the main thread (answers from iOS can come on any). */
+fun onMain(block: () -> Unit) = platform.darwin.dispatch_async(platform.darwin.dispatch_get_main_queue()) { block() }
 
 /** The iPhone's share sheet with [text] in it. */
 fun share(text: String) {
@@ -93,6 +98,31 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel) {
         },
         said = "انسخ لنك الغرفة. الصقه لجماعتك بالواتساب",
     )
+
+    // Table talk: the microphone is asked for the first time it is switched on, and only then.
+    val micOn by viewModel.voice.micOn.collectAsState()
+    val talking by viewModel.voice.talking.collectAsState()
+    val hearing by viewModel.voice.hearing.collectAsState()
+    val speaking by viewModel.voice.speaking.collectAsState()
+    val talk = com.teera.app.ui.Talk(
+        micOn = micOn,
+        talking = talking,
+        hearing = hearing,
+        speaking = speaking,
+        onMic = {
+            when {
+                micOn -> viewModel.setMic(false)
+                viewModel.voice.allowed -> viewModel.setMic(true)
+                else -> viewModel.voice.askForMic { granted ->
+                    onMain { if (granted) viewModel.setMic(true) else viewModel.micRefused() }
+                }
+            }
+        },
+        onHearing = { viewModel.setHearing(!hearing) },
+    ).takeUnless { state.offline }
+
+    // Tables on the Wi-Fi others host: joined by address (an iPhone does not look for them).
+    LaunchedEffect(state.screen) { viewModel.lookForWifiTables(state.screen == Screen.Menu) }
 
     var effectsOn by remember { mutableStateOf(sound?.effectsOn ?: false) }
     var musicOn by remember { mutableStateOf(sound?.musicOn ?: false) }
@@ -254,7 +284,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel) {
                             if (state.friends.any { it.id !in seated }) inviting = true
                             else shareRoomCode(code, viewModel.linkFor(code))
                         },
-                        talk = null,
+                        talk = talk,
                         avatarFor = seatPicture,
                         onKick = if (state.offline) null else { id: String -> viewModel.kick(id) },
                         onSwap = if (state.offline) null else { seated: String, watcher: String -> viewModel.swap(seated, watcher) },
@@ -288,7 +318,7 @@ fun TeeraApp(sound: SoundEngine?, viewModel: GameViewModel) {
                             onEffects = { on -> sound?.effectsOn = on; effectsOn = on },
                             onMusic = { on -> sound?.musicOn = on; musicOn = on },
                         ),
-                        talk = null,
+                        talk = talk,
                         avatarFor = { seat, size -> seatPicture(view.seatInfo(seat), size) },
                         onRaiseAlert = viewModel::raiseAlert.takeUnless { state.offline || view.spectating }?.let { raise -> { raise() } },
                         chat = state.chat,

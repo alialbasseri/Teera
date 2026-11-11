@@ -33,6 +33,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>حتى تحچي ويا جماعتك على الطاولة. المايك يشتغل بس لما تشغّله أنت.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>حتى تختار صورتك باللعبة أو ترفق صورة بالبلاغ.</string>
 	<key>LSRequiresIPhoneOS</key>
