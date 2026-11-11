@@ -1,0 +1,89 @@
+name: Build Windows App
+
+# Teera for Windows: the desktop module (teera/desktop), which compiles the Android app's
+# own screens and view model with Compose for Desktop. Builds the installers on a real
+# Windows machine and publishes them as a release, so the download link never changes
+# shape: https://github.com/<owner>/<repo>/releases/download/windows-v<version>/Teera-<version>.msi
+
+on:
+  push:
+    paths:
+      - 'teera/desktop/**'
+      - 'teera/app/src/main/kotlin/**'
+      - 'teera/core/**'
+      - 'teera/*.kts'
+      - '.github/workflows/windows-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Teera for Windows
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: teera
+    env:
+      # The Android app is not part of this build.
+      ANDROID_HOME: ''
+      ANDROID_SDK_ROOT: ''
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Test the rules and the Windows screens
+        run: ./gradlew.bat :core:test :desktop:test --no-daemon --console=plain
+
+      - name: Build the installers
+        run: ./gradlew.bat :desktop:packageMsi :desktop:packageExe --no-daemon --console=plain
+
+      - name: Find the version
+        id: version
+        shell: bash
+        run: |
+          msi=$(ls desktop/build/compose/binaries/main/msi/*.msi | head -1)
+          version=$(basename "$msi" .msi | sed 's/^Teera-//')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Built $msi (version $version)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Teera-Windows
+          path: |
+            teera/desktop/build/compose/binaries/main/msi/*.msi
+            teera/desktop/build/compose/binaries/main/exe/*.exe
+          if-no-files-found: error
+
+      # Each version has its release, windows-v<version>; the game page's /windows finds the
+      # newest one by itself. Never deleted first: a refused create must not leave the link
+      # with nothing behind it. A rebuild of the same version replaces its files.
+      - name: Publish the release
+        if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          msi=$(ls desktop/build/compose/binaries/main/msi/*.msi | head -1)
+          exe=$(ls desktop/build/compose/binaries/main/exe/*.exe | head -1)
+          tag="windows-v$VERSION"
+          # GitHub now and then refuses the token for a moment: try a few times.
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$tag" > /dev/null 2>&1; then
+              gh release upload "$tag" "$msi" "$exe" --clobber && exit 0
+            else
+              gh release create "$tag" "$msi" "$exe" --title "طيرة للويندوز $VERSION" --latest=false \
+                --notes "طيرة على الكمبيوتر (Windows 10/11). نزّل الملف وشغّله. إذا طلع \"Windows protected your PC\" دوس More info ← Run anyway." && exit 0
+            fi
+            echo "Refused (attempt $attempt); trying again shortly"; sleep $((attempt * 30))
+          done
+          exit 1

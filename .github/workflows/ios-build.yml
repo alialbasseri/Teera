@@ -1,0 +1,137 @@
+name: Build iOS App
+
+permissions:
+  contents: write
+
+on:
+  push:
+    paths:
+      - 'ios/**'
+      - 'teera/iphone/**'
+      - 'teera/app/src/main/kotlin/**'
+      - 'teera/core/**'
+      - 'teera/*.kts'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build Teera iOS App
+    runs-on: macos-latest
+    timeout-minutes: 110
+    env:
+      # The Android app is not part of this build.
+      ANDROID_HOME: ''
+      ANDROID_SDK_ROOT: ''
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Print Xcode Version
+        run: xcodebuild -version
+
+      # The game is Kotlin shared with Android and Windows (teera/iphone); Xcode's
+      # "Build TeeraKit" phase runs Gradle to compile it for iOS.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Cache Kotlin/Native
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-2.0.21
+
+      # Linking the whole game for iOS needs more than Gradle's default 2 GB. Set for this
+      # machine only (the server's own build keeps its settings).
+      - name: Give the Kotlin compiler room
+        run: |
+          mkdir -p "$GRADLE_USER_HOME"
+          echo "org.gradle.jvmargs=-Xmx5g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8" >> "$GRADLE_USER_HOME/gradle.properties"
+
+      # Kotlin first, on its own, so a compile error reads plainly here.
+      - name: Compile the game for iOS
+        working-directory: teera
+        run: ./gradlew :iphone:compileKotlinIosArm64 --no-daemon --console=plain
+
+      - name: Build iOS Application (Release)
+        run: |
+          xcodebuild clean build \
+            -project ios/Teera.xcodeproj \
+            -scheme Teera \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package Payload into Unsigned IPA
+        run: |
+          APP_PATH=$(find build/DerivedData -name "Teera.app" -type d | head -n 1)
+          echo "Found app at: $APP_PATH"
+          mkdir -p build/ipa/Payload
+          cp -R "$APP_PATH" build/ipa/Payload/
+          cd build/ipa
+          zip -r ../Teera-unsigned.ipa Payload
+          cd ../..
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Teera-iOS-IPA
+          path: build/Teera-unsigned.ipa
+          retention-days: 14
+
+      # A fixed tag, so the address the game page points at never changes:
+      # .../releases/download/ios-latest/Teera.ipa. Sideloadly signs it with the player's Apple ID.
+      - name: Publish for the game page (/ios.ipa)
+        if: github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp build/Teera-unsigned.ipa build/Teera.ipa
+          # Replace the file in place; never delete the release first.
+          # GitHub now and then refuses the token for a moment: try a few times.
+          for attempt in 1 2 3 4 5; do
+            if gh release view ios-latest > /dev/null 2>&1; then
+              gh release upload ios-latest build/Teera.ipa --clobber && exit 0
+            else
+              gh release create ios-latest build/Teera.ipa --title "طيرة للآيفون" \
+                --notes "طيرة على الآيفون، بدون App Store. طريقة التنصيب: https://teera-xfvr.onrender.com/ios" --latest=false && exit 0
+            fi
+            echo "Refused (attempt $attempt); trying again shortly"; sleep $((attempt * 30))
+          done
+          exit 1
+
+      # Then the app on an iPhone simulator, on this same Mac (a second job waits for a Mac
+      # of its own that GitHub does not always give): its picture goes on the ios-latest
+      # release (simulator.png), and the job fails if the app does not stay open.
+      - name: Build for the simulator, open it, take a picture
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "import sys,json; d=json.load(sys.stdin)['devices']; print([x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')][-1])")
+          echo "Simulator $UDID"
+          xcrun simctl boot "$UDID"
+          xcodebuild build -project ios/Teera.xcodeproj -scheme Teera -configuration Release \
+            -sdk iphonesimulator -destination "id=$UDID" -derivedDataPath build/sim \
+            ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO | tail -5
+          APP=build/sim/Build/Products/Release-iphonesimulator/Teera.app
+          echo "--- $APP"; ls "$APP"; plutil -extract CFBundleIdentifier raw "$APP/Info.plist"
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch --console-pty "$UDID" com.teera.ios > app-log.txt 2>&1 &
+          sleep 40
+          xcrun simctl io "$UDID" screenshot simulator.png
+          echo "--- app output ---"; tail -40 app-log.txt || true
+          if ! xcrun simctl spawn "$UDID" launchctl list | grep -q com.teera.ios; then
+            echo "The app is not running any more"; exit 1
+          fi
+      - name: Attach the picture to the release
+        if: always() && github.ref == 'refs/heads/claude/android-domino-multiplayer-0drvhg'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f simulator.png ] && gh release upload ios-latest simulator.png --clobber || true

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose paints everything; this only keeps the window from flashing white. -->
+    <style name="Theme.Dominoes" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/felt</item>
+        <item name="android:statusBarColor">@color/felt</item>
+        <item name="android:navigationBarColor">@color/felt</item>
+    </style>
+</resources>

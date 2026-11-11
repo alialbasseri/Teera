@@ -1,0 +1,14 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.cxx/
+*.apk
+# The build friends download (see room/Links.kt APK_URL).
+!downloads/teera.apk
+.kotlin/
+
+# Pictures made for the group chat
+teera-update-*.png

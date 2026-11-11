@@ -1,0 +1,21 @@
+# Render Blueprint for the Teera room server (the game lives in teera/).
+# Render → New → Blueprint → pick this repository; or follow teera/DEPLOY.md by hand.
+services:
+  - type: web
+    name: teera
+    runtime: docker
+    plan: free
+    branch: claude/android-domino-multiplayer-0drvhg
+    dockerfilePath: ./teera/Dockerfile
+    dockerContext: ./teera
+    healthCheckPath: /health
+    autoDeploy: true
+    # Only the server's own code restarts it; changes to the phone app do not.
+    buildFilter:
+      paths:
+        - teera/core/**
+        - teera/room/**
+        - teera/server/**
+        - teera/Dockerfile
+        - teera/*.kts
+        - teera/gradle/**

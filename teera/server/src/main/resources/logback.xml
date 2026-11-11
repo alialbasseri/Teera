@@ -1,0 +1,11 @@
+<!-- One line per event, and only what matters: a free host's log viewer is small. -->
+<configuration>
+    <appender name="OUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss} %-5level %logger{20} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="OUT"/>
+    </root>
+</configuration>
